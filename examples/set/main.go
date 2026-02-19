@@ -15,6 +15,6 @@ func main() {
 	// Example: set bytes with ttl
 	ctx := context.Background()
 	store := cache.NewMemoryStore(ctx)
-	repo := cache.NewRepository(store)
+	repo := cache.NewCache(store)
 	_ = repo.Set(ctx, "token", []byte("abc"), time.Minute)
 }

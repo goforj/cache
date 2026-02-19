@@ -13,6 +13,6 @@ func main() {
 
 	// Example: flush all keys
 	ctx := context.Background()
-	repo := cache.NewRepository(cache.NewMemoryStore(ctx))
+	repo := cache.NewCache(cache.NewMemoryStore(ctx))
 	_ = repo.Flush(ctx)
 }

@@ -21,8 +21,8 @@ func main() {
 
 	// Example: memoize a backing store
 	ctx := context.Background()
-	base := cache.NewStore(ctx, cache.StoreConfig{Driver: cache.DriverMemory})
+	base := cache.NewMemoryStore(ctx)
 	memoStore := cache.NewMemoStore(base)
-	repo := cache.NewRepository(memoStore)
-	_ = repo
+	c := cache.NewCache(memoStore)
+	_ = c
 }

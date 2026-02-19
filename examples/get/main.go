@@ -14,9 +14,9 @@ func main() {
 	// Example: get bytes
 	ctx := context.Background()
 	store := cache.NewMemoryStore(ctx)
-	repo := cache.NewRepository(store)
-	_ = repo.Set(ctx, "user:42", []byte("Ada"), 0)
-	value, ok, _ := repo.Get(ctx, "user:42")
+	cache := cache.NewCache(store)
+	_ = cache.Set(ctx, "user:42", []byte("Ada"), 0)
+	value, ok, _ := cache.Get(ctx, "user:42")
 	_ = value
 	_ = ok
 }

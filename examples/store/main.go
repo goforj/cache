@@ -14,9 +14,7 @@ func main() {
 
 	// Example: access store
 	ctx := context.Background()
-	store := cache.NewMemoryStore(ctx)
-	repo := cache.NewRepository(store)
-
-	underlying := repo.Store()
-	_ = underlying
+	cacheRepo := cache.NewCache(cache.NewMemoryStore(ctx))
+	store := cacheRepo.Store()
+	_ = store
 }

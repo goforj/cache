@@ -14,8 +14,8 @@ func main() {
 
 	// Example: add once
 	ctx := context.Background()
-	store := cache.NewMemoryStore(ctx)
-	repo := cache.NewRepository(store)
-	created, _ := repo.Add(ctx, "boot:seeded", []byte("1"), time.Hour)
+	s := cache.NewMemoryStore(ctx)
+	c := cache.NewCache(s)
+	created, _ := c.Add(ctx, "boot:seeded", []byte("1"), time.Hour)
 	_ = created
 }

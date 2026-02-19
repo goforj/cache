@@ -21,6 +21,7 @@ func main() {
 	_ = store
 
 	// Example: redis store (options)
+	ctx = context.Background()
 	client := redis.NewClient(&redis.Options{Addr: "127.0.0.1:6379"})
 	store = cache.NewStoreWith(ctx, cache.DriverRedis,
 		cache.WithRedisClient(client),

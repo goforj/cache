@@ -13,6 +13,6 @@ func main() {
 
 	// Example: delete many keys
 	ctx := context.Background()
-	repo := cache.NewRepository(cache.NewMemoryStore(ctx))
+	repo := cache.NewCache(cache.NewMemoryStore(ctx))
 	_ = repo.DeleteMany(ctx, "a", "b")
 }

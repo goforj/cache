@@ -13,9 +13,11 @@ func main() {
 	// SetJSON encodes value as JSON and writes it to key.
 
 	// Example: set JSON
-	type Profile struct { Name string `json:"name"` }
+	type Profile struct {
+		Name string `json:"name"`
+	}
 	ctx := context.Background()
 	store := cache.NewMemoryStore(ctx)
-	repo := cache.NewRepository(store)
+	repo := cache.NewCache(store)
 	_ = cache.SetJSON(ctx, repo, "profile:42", Profile{Name: "Ada"}, time.Minute)
 }

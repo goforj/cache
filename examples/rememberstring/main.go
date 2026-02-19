@@ -15,7 +15,7 @@ func main() {
 	// Example: remember string
 	ctx := context.Background()
 	store := cache.NewMemoryStore(ctx)
-	repo := cache.NewRepository(store)
+	repo := cache.NewCache(store)
 	value, err := repo.RememberString(ctx, "settings:mode", time.Minute, func(context.Context) (string, error) {
 		return "on", nil
 	})

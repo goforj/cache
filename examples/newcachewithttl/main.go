@@ -10,11 +10,12 @@ import (
 )
 
 func main() {
-	// SetString writes a string value to key.
+	// NewCacheWithTTL lets callers override the default TTL applied when ttl <= 0.
 
-	// Example: set string
+	// Example: cache with custom default TTL
 	ctx := context.Background()
 	store := cache.NewMemoryStore(ctx)
-	repo := cache.NewCache(store)
-	_ = repo.SetString(ctx, "user:42:name", "Ada", time.Minute)
+	c := cache.NewCacheWithTTL(store, 2*time.Minute)
+	_ = ctx
+	_ = c
 }

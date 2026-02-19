@@ -14,7 +14,7 @@ func main() {
 	// Example: get string
 	ctx := context.Background()
 	store := cache.NewMemoryStore(ctx)
-	repo := cache.NewRepository(store)
+	repo := cache.NewCache(store)
 	_ = repo.SetString(ctx, "user:42:name", "Ada", 0)
 	name, ok, _ := repo.GetString(ctx, "user:42:name")
 	_ = name

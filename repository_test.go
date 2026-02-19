@@ -11,8 +11,8 @@ type testPayload struct {
 	Name string `json:"name"`
 }
 
-func TestRepositoryRememberCachesValue(t *testing.T) {
-	repo := NewRepository(newMemoryStore(0, 0))
+func TestCacheRememberCachesValue(t *testing.T) {
+	repo := NewCache(newMemoryStore(0, 0))
 	ctx := context.Background()
 
 	calls := 0
@@ -38,8 +38,8 @@ func TestRepositoryRememberCachesValue(t *testing.T) {
 	}
 }
 
-func TestRepositoryRememberJSON(t *testing.T) {
-	repo := NewRepository(newMemoryStore(0, 0))
+func TestCacheRememberJSON(t *testing.T) {
+	repo := NewCache(newMemoryStore(0, 0))
 	ctx := context.Background()
 
 	calls := 0
@@ -69,8 +69,8 @@ func TestRepositoryRememberJSON(t *testing.T) {
 	}
 }
 
-func TestRepositoryGetSetJSON(t *testing.T) {
-	repo := NewRepository(newMemoryStore(0, 0))
+func TestCacheGetSetJSON(t *testing.T) {
+	repo := NewCache(newMemoryStore(0, 0))
 	ctx := context.Background()
 
 	if err := SetJSON(ctx, repo, "u", testPayload{Name: "alex"}, time.Minute); err != nil {
@@ -85,8 +85,8 @@ func TestRepositoryGetSetJSON(t *testing.T) {
 	}
 }
 
-func TestRepositoryAddIncrementDecrementAndPull(t *testing.T) {
-	repo := NewRepository(newMemoryStore(0, 0))
+func TestCacheAddIncrementDecrementAndPull(t *testing.T) {
+	repo := NewCache(newMemoryStore(0, 0))
 	ctx := context.Background()
 
 	created, err := repo.Add(ctx, "add", []byte("x"), time.Minute)
@@ -138,8 +138,8 @@ func TestRepositoryAddIncrementDecrementAndPull(t *testing.T) {
 	}
 }
 
-func TestRepositoryDeleteManyFlushAndErrors(t *testing.T) {
-	repo := NewRepository(newMemoryStore(0, 0))
+func TestCacheDeleteManyFlushAndErrors(t *testing.T) {
+	repo := NewCache(newMemoryStore(0, 0))
 	ctx := context.Background()
 
 	if err := repo.SetString(ctx, "a", "1", time.Minute); err != nil {
