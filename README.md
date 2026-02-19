@@ -63,7 +63,7 @@ func main() {
     profile, err := cache.Remember[Profile](c, "user:42:profile", time.Minute, func() (Profile, error) {
         return Profile{Name: "Ada"}, nil
     })
-    _ = profile
+    fmt.Println(profile.Name) // Ada
 
     // Switch to Redis (dependency injection, no code changes below).
     client := redis.NewClient(&redis.Options{Addr: "127.0.0.1:6379"})
