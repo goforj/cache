@@ -58,11 +58,9 @@ func RenderBenchmarks() {
 func runBenchmarks(ctx context.Context) map[string][]benchRow {
 	drivers := []string{"memory", "file", "redis", "memcached", "dynamodb", "sql_postgres", "sql_mysql", "sql_sqlite"}
 	ops := map[string]func(context.Context, *cache.Cache){
-		"Set": doSet,
-		"Get": doGet,
-		"Add": doAdd,
-		"Inc": doInc,
-		"Dec": doDec,
+		"Set":    doSet,
+		"Get":    doGet,
+		"Delete": doDelete,
 	}
 
 	results := make(map[string][]benchRow)
@@ -101,16 +99,8 @@ func doGet(ctx context.Context, c *cache.Cache) {
 	_, _, _ = c.Get("bench:key")
 }
 
-func doAdd(ctx context.Context, c *cache.Cache) {
-	_, _ = c.Add("bench:add", []byte("1"), time.Minute)
-}
-
-func doInc(ctx context.Context, c *cache.Cache) {
-	_, _ = c.Increment("bench:counter", 1, time.Minute)
-}
-
-func doDec(ctx context.Context, c *cache.Cache) {
-	_, _ = c.Decrement("bench:counter", 1, time.Minute)
+func doDelete(ctx context.Context, c *cache.Cache) {
+	_ = c.Delete("bench:key")
 }
 
 func renderTable(byOp map[string][]benchRow) string {
@@ -118,7 +108,7 @@ func renderTable(byOp map[string][]benchRow) string {
 		return ""
 	}
 
-	ops := []string{"Set", "Get", "Add", "Inc", "Dec"}
+	ops := []string{"Set", "Get", "Delete"}
 
 	// Build lookup op -> driver -> row
 	lookup := make(map[string]map[string]benchRow)
@@ -133,8 +123,6 @@ func renderTable(byOp map[string][]benchRow) string {
 
 	var buf bytes.Buffer
 	buf.WriteString(benchStart + "\n\n")
-	buf.WriteString("| Driver | Op | N | ns/op | B/op | allocs/op |\n")
-	buf.WriteString("|:------|:--:|---:|-----:|-----:|---------:|\n")
 	for _, op := range ops {
 		driverRows := lookup[op]
 		if len(driverRows) == 0 {
@@ -145,12 +133,16 @@ func renderTable(byOp map[string][]benchRow) string {
 			drivers = append(drivers, d)
 		}
 		sort.Strings(drivers)
+		buf.WriteString(fmt.Sprintf("### %s\n\n", op))
+		buf.WriteString("| Driver | N | ns/op | B/op | allocs/op |\n")
+		buf.WriteString("|:------|---:|-----:|-----:|---------:|\n")
 		for _, d := range drivers {
 			row := driverRows[d]
-			buf.WriteString(fmt.Sprintf("| %s | %s | %d | %.0f | %.0f | %.0f |\n", d, op, row.Ops, row.NsOp, row.BytesOp, row.AllocsOp))
+			buf.WriteString(fmt.Sprintf("| %s | %d | %.0f | %.0f | %.0f |\n", d, row.Ops, row.NsOp, row.BytesOp, row.AllocsOp))
 		}
+		buf.WriteString("\n")
 	}
-	buf.WriteString("\n" + benchEnd + "\n")
+	buf.WriteString(benchEnd + "\n")
 	return buf.String()
 }
 

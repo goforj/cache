@@ -157,48 +157,44 @@ go test ./docs/bench -tags benchrender
 
 <!-- bench:embed:start -->
 
-| Driver | Op | N | ns/op | B/op | allocs/op |
-|:------|:--:|---:|-----:|-----:|---------:|
-| dynamodb | Set | 5342 | 226809 | 30084 | 372 |
-| file | Set | 9742 | 133499 | 1497 | 18 |
-| memcached | Set | 2696 | 420930 | 7819 | 64 |
-| memory | Set | 12045133 | 99 | 26 | 3 |
-| redis | Set | 17662 | 73292 | 272 | 10 |
-| sql_mysql | Set | 772 | 1398433 | 980 | 24 |
-| sql_postgres | Set | 1910 | 630903 | 737 | 24 |
-| sql_sqlite | Set | 93495 | 11838 | 1463 | 36 |
-| dynamodb | Get | 5766 | 182085 | 29829 | 363 |
-| file | Get | 774938 | 1543 | 576 | 6 |
-| memcached | Get | 2827 | 414996 | 7832 | 62 |
-| memory | Get | 34089657 | 35 | 0 | 0 |
-| redis | Get | 16910 | 71242 | 200 | 7 |
-| sql_mysql | Get | 7123 | 173205 | 872 | 26 |
-| sql_postgres | Get | 13285 | 88729 | 1024 | 28 |
-| sql_sqlite | Get | 157500 | 7368 | 1465 | 40 |
-| dynamodb | Add | 5316 | 197766 | 34358 | 421 |
-| file | Add | 104233 | 11517 | 1608 | 17 |
-| memcached | Add | 2649 | 410950 | 7820 | 64 |
-| memory | Add | 7550070 | 159 | 90 | 6 |
-| redis | Add | 16326 | 71138 | 272 | 9 |
-| sql_mysql | Add | 8077 | 150572 | 824 | 25 |
-| sql_postgres | Add | 10305 | 117337 | 1521 | 41 |
-| sql_sqlite | Add | 139365 | 8293 | 1969 | 57 |
-| dynamodb | Inc | 2632 | 434139 | 61940 | 768 |
-| file | Inc | 8740 | 146710 | 3120 | 34 |
-| memcached | Inc | 2666 | 416699 | 7844 | 63 |
-| memory | Inc | 7591230 | 160 | 40 | 3 |
-| redis | Inc | 8253 | 145469 | 408 | 13 |
-| sql_mysql | Inc | 644 | 1701145 | 2531 | 66 |
-| sql_postgres | Inc | 1366 | 886120 | 2548 | 75 |
-| sql_sqlite | Inc | 5295 | 226287 | 4589 | 110 |
-| dynamodb | Dec | 2541 | 426180 | 62240 | 768 |
-| file | Dec | 8721 | 145832 | 3121 | 34 |
-| memcached | Dec | 2817 | 425154 | 7840 | 63 |
-| memory | Dec | 7628676 | 160 | 40 | 3 |
-| redis | Dec | 8287 | 143876 | 416 | 14 |
-| sql_mysql | Dec | 582 | 1757227 | 2534 | 66 |
-| sql_postgres | Dec | 1614 | 758517 | 2550 | 75 |
-| sql_sqlite | Dec | 6259 | 190386 | 4579 | 109 |
+### Set
+
+| Driver | N | ns/op | B/op | allocs/op |
+|:------|---:|-----:|-----:|---------:|
+| dynamodb | 2512 | 449876 | 29868 | 372 |
+| file | 9112 | 131865 | 1497 | 18 |
+| memcached | 2692 | 417446 | 7819 | 64 |
+| memory | 12139999 | 94 | 26 | 3 |
+| redis | 16408 | 73982 | 272 | 10 |
+| sql_mysql | 860 | 1494412 | 980 | 24 |
+| sql_postgres | 1054 | 2845304 | 739 | 24 |
+| sql_sqlite | 94630 | 11759 | 1463 | 36 |
+
+### Get
+
+| Driver | N | ns/op | B/op | allocs/op |
+|:------|---:|-----:|-----:|---------:|
+| dynamodb | 5661 | 185366 | 29819 | 363 |
+| file | 728103 | 1566 | 576 | 6 |
+| memcached | 2770 | 426913 | 7841 | 62 |
+| memory | 33221594 | 36 | 0 | 0 |
+| redis | 17300 | 70706 | 200 | 7 |
+| sql_mysql | 7320 | 173548 | 872 | 26 |
+| sql_postgres | 11616 | 90006 | 1024 | 28 |
+| sql_sqlite | 150517 | 7529 | 1465 | 40 |
+
+### Delete
+
+| Driver | N | ns/op | B/op | allocs/op |
+|:------|---:|-----:|-----:|---------:|
+| dynamodb | 5632 | 205296 | 30775 | 379 |
+| file | 495534 | 2342 | 736 | 7 |
+| memcached | 2679 | 410554 | 7824 | 62 |
+| memory | 31418409 | 38 | 0 | 0 |
+| redis | 16746 | 71320 | 200 | 8 |
+| sql_mysql | 8094 | 146640 | 352 | 15 |
+| sql_postgres | 12217 | 86500 | 304 | 11 |
+| sql_sqlite | 154840 | 7562 | 1056 | 25 |
 
 <!-- bench:embed:end -->
 
