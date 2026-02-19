@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"testing"
 	"time"
 
 	"github.com/docker/go-connections/nat"
@@ -27,9 +28,12 @@ const (
 )
 
 type benchRow struct {
-	Driver string
-	Op     string
-	NsOp   float64
+	Driver   string
+	Op       string
+	NsOp     float64
+	BytesOp  float64
+	AllocsOp float64
+	Ops      int64
 }
 
 // RenderBenchmarks is invoked by `go test -tags benchrender ./docs/bench` via TestRenderBenchmarks.
@@ -72,22 +76,21 @@ func runBenchmarks(ctx context.Context) map[string][]benchRow {
 			if cleanup != nil {
 				defer cleanup()
 			}
-			ns := benchOp(ctx, c, fn)
-			results[opName] = append(results[opName], benchRow{Driver: d, Op: opName, NsOp: ns})
+			ns, bytesOp, allocsOp, ops := benchOp(ctx, c, fn)
+			results[opName] = append(results[opName], benchRow{Driver: d, Op: opName, NsOp: ns, BytesOp: bytesOp, AllocsOp: allocsOp, Ops: ops})
 		}
 	}
 	return results
 }
 
-func benchOp(ctx context.Context, c *cache.Cache, fn func(context.Context, *cache.Cache)) float64 {
-	const N = 1000
-	// warmup
-	fn(ctx, c)
-	start := time.Now()
-	for i := 0; i < N; i++ {
-		fn(ctx, c)
-	}
-	return float64(time.Since(start).Nanoseconds()) / float64(N)
+func benchOp(ctx context.Context, c *cache.Cache, fn func(context.Context, *cache.Cache)) (nsPerOp, bytesPerOp, allocsPerOp float64, ops int64) {
+	// Use testing.Benchmark to gather ns/op and allocation metrics.
+	res := testing.Benchmark(func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			fn(ctx, c)
+		}
+	})
+	return float64(res.NsPerOp()), float64(res.AllocedBytesPerOp()), float64(res.AllocsPerOp()), int64(res.N)
 }
 
 func doSet(ctx context.Context, c *cache.Cache) {
@@ -115,46 +118,37 @@ func renderTable(byOp map[string][]benchRow) string {
 		return ""
 	}
 
-	// Collect all drivers present in any op.
-	driverSet := map[string]struct{}{}
-	for _, rows := range byOp {
-		for _, r := range rows {
-			driverSet[r.Driver] = struct{}{}
-		}
-	}
-	var drivers []string
-	for d := range driverSet {
-		drivers = append(drivers, d)
-	}
-	sort.Strings(drivers)
-
 	ops := []string{"Set", "Get", "Add", "Inc", "Dec"}
 
-	// Build lookup op -> driver -> ns/op
-	lookup := make(map[string]map[string]float64)
+	// Build lookup op -> driver -> row
+	lookup := make(map[string]map[string]benchRow)
 	for op, rows := range byOp {
 		for _, r := range rows {
 			if lookup[op] == nil {
-				lookup[op] = make(map[string]float64)
+				lookup[op] = make(map[string]benchRow)
 			}
-			lookup[op][r.Driver] = r.NsOp
+			lookup[op][r.Driver] = r
 		}
 	}
 
 	var buf bytes.Buffer
 	buf.WriteString(benchStart + "\n\n")
-	buf.WriteString("| Driver | Set (ns/op) | Get | Add | Inc | Dec |\n")
-	buf.WriteString("|:------|------------:|----:|----:|----:|----:|\n")
-	for _, d := range drivers {
-		buf.WriteString(fmt.Sprintf("| %s", d))
-		for _, op := range ops {
-			if val, ok := lookup[op][d]; ok {
-				buf.WriteString(fmt.Sprintf(" | %.0f", val))
-			} else {
-				buf.WriteString(" | -")
-			}
+	buf.WriteString("| Driver | Op | N | ns/op | B/op | allocs/op |\n")
+	buf.WriteString("|:------|:--:|---:|-----:|-----:|---------:|\n")
+	for _, op := range ops {
+		driverRows := lookup[op]
+		if len(driverRows) == 0 {
+			continue
 		}
-		buf.WriteString(" |\n")
+		var drivers []string
+		for d := range driverRows {
+			drivers = append(drivers, d)
+		}
+		sort.Strings(drivers)
+		for _, d := range drivers {
+			row := driverRows[d]
+			buf.WriteString(fmt.Sprintf("| %s | %s | %d | %.0f | %.0f | %.0f |\n", d, op, row.Ops, row.NsOp, row.BytesOp, row.AllocsOp))
+		}
 	}
 	buf.WriteString("\n" + benchEnd + "\n")
 	return buf.String()
