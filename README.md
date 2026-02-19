@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-    cache gives your services one cache API with memory and redis drivers.
+    cache gives your services one cache API with multiple backend options. Swap drivers without refactoring.
 </p>
 
 <p align="center">
