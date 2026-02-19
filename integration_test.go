@@ -9,7 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/docker/go-connections/nat"
+	"net"
+
 	testcontainers "github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 )
@@ -97,5 +98,5 @@ func startRedisContainer(ctx context.Context) (testcontainers.Container, string,
 		_ = container.Terminate(ctx)
 		return nil, "", err
 	}
-	return container, nat.JoinHostPort(host, port.Port()), nil
+	return container, net.JoinHostPort(host, port.Port()), nil
 }
