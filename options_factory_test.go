@@ -71,4 +71,9 @@ func TestFactoryHelpers(t *testing.T) {
 	if memStore.Driver() != DriverMemcached {
 		t.Fatalf("expected memcached driver")
 	}
+
+	null := NewNullStore(ctx)
+	if null.Driver() != DriverNull {
+		t.Fatalf("expected null driver")
+	}
 }

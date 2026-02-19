@@ -54,11 +54,13 @@ func (s *memcachedStore) Get(ctx context.Context, key string) ([]byte, bool, err
 		return nil, false, nil
 	}
 
-	var respKey string
-	var bytesLen int
-	_, err = fmt.Sscanf(line, "VALUE %s %*d %d\r\n", &respKey, &bytesLen)
+	fields := strings.Fields(strings.TrimSpace(line))
+	if len(fields) < 4 || fields[0] != "VALUE" {
+		return nil, false, fmt.Errorf("unexpected response: %s", strings.TrimSpace(line))
+	}
+	bytesLen, err := strconv.Atoi(fields[3])
 	if err != nil {
-		return nil, false, fmt.Errorf("parse response: %w", err)
+		return nil, false, fmt.Errorf("parse length: %w", err)
 	}
 	value := make([]byte, bytesLen)
 	if _, err := reader.Read(value); err != nil {

@@ -4,8 +4,9 @@ package cache
 type Driver string
 
 const (
-	DriverMemory Driver = "memory"
-	DriverRedis  Driver = "redis"
-	DriverFile   Driver = "file"
+	DriverNull      Driver = "null"
+	DriverFile      Driver = "file"
+	DriverMemory    Driver = "memory"
 	DriverMemcached Driver = "memcached"
+	DriverRedis     Driver = "redis"
 )

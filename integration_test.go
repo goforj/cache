@@ -23,7 +23,7 @@ var integrationRedis struct {
 // integrationBackends define how to start infrastructure per driver.
 // Add new drivers here with a testcontainers-backed start function.
 var integrationBackends = map[string]func(context.Context) (testcontainers.Container, string, error){
-	"redis": startRedisContainer,
+	"redis":     startRedisContainer,
 	"memcached": startMemcachedContainer,
 }
 
@@ -71,9 +71,12 @@ func TestMain(m *testing.M) {
 // INTEGRATION_DRIVER may be "all" (default) or a comma-separated list such as "redis,memory".
 func selectedIntegrationDrivers() map[string]bool {
 	selected := map[string]bool{
-		"memory": true,
-		"redis":  true,
-		"file":   true,
+		"null":      false, // no-op store; skip integration
+		"file":      true,
+		"memory":    true,
+		"memcached": true,
+		"redis":     true,
+		// null is intentionally excluded from integration because it is a no-op store.
 	}
 	value := strings.TrimSpace(strings.ToLower(os.Getenv("INTEGRATION_DRIVER")))
 	if value == "" || value == "all" {

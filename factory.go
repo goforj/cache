@@ -16,12 +16,16 @@ import "context"
 func NewStore(_ context.Context, cfg StoreConfig) Store {
 	cfg = cfg.withDefaults()
 	switch cfg.Driver {
-	case DriverRedis:
-		return newRedisStore(cfg.RedisClient, cfg.DefaultTTL, cfg.Prefix)
-	case DriverMemcached:
-		return newMemcachedStore(cfg.MemcachedAddresses, cfg.DefaultTTL, cfg.Prefix)
+	case DriverNull:
+		return newNullStore()
 	case DriverFile:
 		return newFileStore(cfg.FileDir, cfg.DefaultTTL)
+	case DriverMemory:
+		return newMemoryStore(cfg.DefaultTTL, cfg.MemoryCleanupInterval)
+	case DriverMemcached:
+		return newMemcachedStore(cfg.MemcachedAddresses, cfg.DefaultTTL, cfg.Prefix)
+	case DriverRedis:
+		return newRedisStore(cfg.RedisClient, cfg.DefaultTTL, cfg.Prefix)
 	default:
 		return newMemoryStore(cfg.DefaultTTL, cfg.MemoryCleanupInterval)
 	}
@@ -101,4 +105,16 @@ func NewFileStore(ctx context.Context, dir string, opts ...StoreOption) Store {
 //	fmt.Println(store.Driver()) // memcached
 func NewMemcachedStore(ctx context.Context, addrs []string, opts ...StoreOption) Store {
 	return NewStoreWith(ctx, DriverMemcached, append([]StoreOption{WithMemcachedAddresses(addrs...)}, opts...)...)
+}
+
+// NewNullStore is a no-op store useful for tests where caching should be disabled.
+// @group Constructors
+//
+// Example: null helper
+//
+//	ctx := context.Background()
+//	store := cache.NewNullStore(ctx)
+//	fmt.Println(store.Driver()) // null
+func NewNullStore(ctx context.Context, opts ...StoreOption) Store {
+	return NewStoreWith(ctx, DriverNull, opts...)
 }

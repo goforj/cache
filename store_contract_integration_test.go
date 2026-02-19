@@ -32,6 +32,8 @@ func runStoreContractSuite(t *testing.T, store Store) {
 	t.Helper()
 	ctx := context.Background()
 
+	ttl, wait := contractTTL(store.Driver())
+
 	// Set/Get returns clone and round-trips.
 	if err := store.Set(ctx, "alpha", []byte("value"), 500*time.Millisecond); err != nil {
 		t.Fatalf("set failed: %v", err)
@@ -47,10 +49,10 @@ func runStoreContractSuite(t *testing.T, store Store) {
 	}
 
 	// TTL expiry.
-	if err := store.Set(ctx, "ttl", []byte("v"), 50*time.Millisecond); err != nil {
+	if err := store.Set(ctx, "ttl", []byte("v"), ttl); err != nil {
 		t.Fatalf("set ttl failed: %v", err)
 	}
-	time.Sleep(80 * time.Millisecond)
+	time.Sleep(wait)
 	if _, ok, err := store.Get(ctx, "ttl"); err != nil || ok {
 		t.Fatalf("expected ttl key expired; ok=%v err=%v", ok, err)
 	}
@@ -107,6 +109,15 @@ func runStoreContractSuite(t *testing.T, store Store) {
 	}
 	if _, ok, err := store.Get(ctx, "flush"); err != nil || ok {
 		t.Fatalf("expected flush to clear key; ok=%v err=%v", ok, err)
+	}
+}
+
+func contractTTL(driver Driver) (ttl time.Duration, wait time.Duration) {
+	switch driver {
+	case DriverMemcached:
+		return time.Second, 1500 * time.Millisecond
+	default:
+		return 50 * time.Millisecond, 80 * time.Millisecond
 	}
 }
 
@@ -174,9 +185,9 @@ func integrationFixtures(t *testing.T) []storeFactory {
 			name: "memcached",
 			new: func(t *testing.T) (Store, func()) {
 				store := NewStore(context.Background(), StoreConfig{
-					Driver:              DriverMemcached,
-					DefaultTTL:          2 * time.Second,
-					Prefix:              "itest",
+					Driver:             DriverMemcached,
+					DefaultTTL:         2 * time.Second,
+					Prefix:             "itest",
 					MemcachedAddresses: []string{addr},
 				})
 				return store, func() {}
