@@ -86,23 +86,23 @@ StoreConfig keeps configuration explicit:
 Cache wraps a Store with ergonomic helpers (context-free by default, `*Ctx` variants when you need a context). Store stays context-first because drivers perform I/O and should honor deadlines/cancellation; Cache gives you the convenience layer on top:
 
 ```go
-Get(key string) ([]byte, bool, error) // returns raw bytes for key when present.
-GetString(key string) (string, bool, error) // returns string for key when present.
-Set(key string, value []byte, ttl time.Duration) error // writes bytes to key with TTL.
-SetString(key string, value string, ttl time.Duration) error // writes string to key with TTL.
-Add(key string, value []byte, ttl time.Duration) (bool, error) // writes value only when key is absent.
-Increment(key string, delta int64, ttl time.Duration) (int64, error) // increments numeric value and returns the result.
-Decrement(key string, delta int64, ttl time.Duration) (int64, error) // decrements numeric value and returns the result.
-Pull(key string) ([]byte, bool, error) // returns value and removes it.
-Delete(key string) error // removes a single key.
-DeleteMany(keys ...string) error // removes multiple keys.
-Flush() error // clears all keys for this store scope.
-Remember(key string, ttl time.Duration, fn func() ([]byte, error)) ([]byte, error) // returns value or computes/stores it when missing.
-RememberString(key string, ttl time.Duration, fn func() (string, error)) (string, error) // string helper for Remember.
-RememberJSON[T any](cache *Cache, key string, ttl time.Duration, fn func() (T, error)) (T, error) // JSON helper for Remember.
-GetJSON[T any](cache *Cache, key string) (T, bool, error) // decodes JSON into T when key exists.
-SetJSON[T any](cache *Cache, key string, value T, ttl time.Duration) error // writes JSON-encoded value to key with TTL.
-// ctx-aware variants mirror the same names: GetCtx, SetCtx, RememberCtx, RememberStringCtx, RememberJSONCtx, etc.
+Get(key string) ([]byte, bool, error)                               // raw bytes for key.
+GetString(key string) (string, bool, error)                         // string for key.
+Set(key string, value []byte, ttl time.Duration) error              // write bytes with TTL.
+SetString(key string, value string, ttl time.Duration) error        // write string with TTL.
+Add(key string, value []byte, ttl time.Duration) (bool, error)      // write only if missing.
+Increment(key string, delta int64, ttl time.Duration) (int64, error)   // bump counter up.
+Decrement(key string, delta int64, ttl time.Duration) (int64, error)   // bump counter down.
+Pull(key string) ([]byte, bool, error)                              // get then delete.
+Delete(key string) error                                            // remove one key.
+DeleteMany(keys ...string) error                                    // remove many keys.
+Flush() error                                                       // clear all keys in this store.
+Remember(key string, ttl time.Duration, fn func() ([]byte, error)) ([]byte, error) // lazy bytes.
+RememberString(key string, ttl time.Duration, fn func() (string, error)) (string, error) // lazy string.
+RememberJSON[T any](cache *Cache, key string, ttl time.Duration, fn func() (T, error)) (T, error) // lazy JSON.
+GetJSON[T any](cache *Cache, key string) (T, bool, error)           // decode JSON.
+SetJSON[T any](cache *Cache, key string, value T, ttl time.Duration) error // encode JSON.
+// ctx-aware twins: GetCtx, SetCtx, RememberCtx, RememberStringCtx, RememberJSONCtx, etc.
 ```
 
 To observe cache operations (hits, misses, errors, latency), attach an Observer:
