@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"github.com/goforj/cache"
 	"time"
 )
@@ -17,7 +18,6 @@ func main() {
 		Name string `json:"name"`
 	}
 	ctx := context.Background()
-	store := cache.NewMemoryStore(ctx)
-	repo := cache.NewCache(store)
-	_ = cache.SetJSON(ctx, repo, "profile:42", Profile{Name: "Ada"}, time.Minute)
+	c := cache.NewCache(cache.NewMemoryStore(ctx))
+	fmt.Println(cache.SetJSON(ctx, c, "profile:42", Profile{Name: "Ada"}, time.Minute) == nil) // true
 }

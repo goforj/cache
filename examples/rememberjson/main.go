@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"github.com/goforj/cache"
 	"time"
 )
@@ -17,11 +18,9 @@ func main() {
 		Enabled bool `json:"enabled"`
 	}
 	ctx := context.Background()
-	store := cache.NewMemoryStore(ctx)
-	repo := cache.NewCache(store)
-	settings, err := cache.RememberJSON[Settings](ctx, repo, "settings:alerts", time.Minute, func(context.Context) (Settings, error) {
+	c := cache.NewCache(cache.NewMemoryStore(ctx))
+	settings, err := cache.RememberJSON[Settings](ctx, c, "settings:alerts", time.Minute, func(context.Context) (Settings, error) {
 		return Settings{Enabled: true}, nil
 	})
-	_ = settings
-	_ = err
+	fmt.Println(err == nil, settings.Enabled) // true true
 }

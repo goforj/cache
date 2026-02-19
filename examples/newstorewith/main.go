@@ -17,16 +17,15 @@ func main() {
 
 	// Example: memory store (options)
 	ctx := context.Background()
-	store := cache.NewStoreWith(ctx, cache.DriverMemory)
-	_ = store
+	memoryStore := cache.NewStoreWith(ctx, cache.DriverMemory)
+	_ = memoryStore
 
 	// Example: redis store (options)
-	ctx = context.Background()
 	client := redis.NewClient(&redis.Options{Addr: "127.0.0.1:6379"})
-	store = cache.NewStoreWith(ctx, cache.DriverRedis,
+	redisStore := cache.NewStoreWith(ctx, cache.DriverRedis,
 		cache.WithRedisClient(client),
 		cache.WithPrefix("app"),
 		cache.WithDefaultTTL(5*time.Minute),
 	)
-	_ = store
+	_ = redisStore
 }

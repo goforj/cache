@@ -5,7 +5,9 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"github.com/goforj/cache"
+	"time"
 )
 
 func main() {
@@ -13,6 +15,7 @@ func main() {
 
 	// Example: delete key
 	ctx := context.Background()
-	repo := cache.NewCache(cache.NewMemoryStore(ctx))
-	_ = repo.Delete(ctx, "a")
+	c := cache.NewCache(cache.NewMemoryStore(ctx))
+	_ = c.Set(ctx, "a", []byte("1"), time.Minute)
+	fmt.Println(c.Delete(ctx, "a") == nil) // true
 }

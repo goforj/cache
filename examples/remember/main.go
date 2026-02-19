@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"github.com/goforj/cache"
 	"time"
 )
@@ -14,11 +15,9 @@ func main() {
 
 	// Example: remember bytes
 	ctx := context.Background()
-	store := cache.NewMemoryStore(ctx)
-	c := cache.NewCache(store)
+	c := cache.NewCache(cache.NewMemoryStore(ctx))
 	data, err := c.Remember(ctx, "dashboard:summary", time.Minute, func(context.Context) ([]byte, error) {
 		return []byte("payload"), nil
 	})
-	_ = data
-	_ = err
+	fmt.Println(err == nil, string(data)) // true payload
 }

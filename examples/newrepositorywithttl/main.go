@@ -5,8 +5,10 @@ package main
 
 import (
 	"context"
-	"github.com/goforj/cache"
+	"fmt"
 	"time"
+
+	"github.com/goforj/cache"
 )
 
 func main() {
@@ -16,6 +18,5 @@ func main() {
 	ctx := context.Background()
 	store := cache.NewMemoryStore(ctx)
 	c := cache.NewCacheWithTTL(store, 2*time.Minute)
-	_ = ctx
-	_ = c
+	fmt.Println(c.Driver(), store != nil, ctx != nil)
 }

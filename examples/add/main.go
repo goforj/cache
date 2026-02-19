@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"github.com/goforj/cache"
 	"time"
 )
@@ -14,8 +15,7 @@ func main() {
 
 	// Example: add once
 	ctx := context.Background()
-	s := cache.NewMemoryStore(ctx)
-	c := cache.NewCache(s)
+	c := cache.NewCache(cache.NewMemoryStore(ctx))
 	created, _ := c.Add(ctx, "boot:seeded", []byte("1"), time.Hour)
-	_ = created
+	fmt.Println(created) // true
 }

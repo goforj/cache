@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"github.com/goforj/cache"
 	"time"
 )
@@ -14,7 +15,6 @@ func main() {
 
 	// Example: set bytes with ttl
 	ctx := context.Background()
-	store := cache.NewMemoryStore(ctx)
-	repo := cache.NewCache(store)
-	_ = repo.Set(ctx, "token", []byte("abc"), time.Minute)
+	c := cache.NewCache(cache.NewMemoryStore(ctx))
+	fmt.Println(c.Set(ctx, "token", []byte("abc"), time.Minute) == nil) // true
 }

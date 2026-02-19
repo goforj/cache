@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"github.com/goforj/cache"
 )
 
@@ -13,6 +14,6 @@ func main() {
 
 	// Example: delete many keys
 	ctx := context.Background()
-	repo := cache.NewCache(cache.NewMemoryStore(ctx))
-	_ = repo.DeleteMany(ctx, "a", "b")
+	c := cache.NewCache(cache.NewMemoryStore(ctx))
+	fmt.Println(c.DeleteMany(ctx, "a", "b") == nil) // true
 }

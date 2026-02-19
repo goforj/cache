@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"github.com/goforj/cache"
 )
 
@@ -16,10 +17,8 @@ func main() {
 		Name string `json:"name"`
 	}
 	ctx := context.Background()
-	store := cache.NewMemoryStore(ctx)
-	c := cache.NewCache(store)
+	c := cache.NewCache(cache.NewMemoryStore(ctx))
 	_ = cache.SetJSON(ctx, c, "profile:42", Profile{Name: "Ada"}, 0)
 	profile, ok, _ := cache.GetJSON[Profile](ctx, c, "profile:42")
-	_ = profile
-	_ = ok
+	fmt.Println(ok, profile.Name) // true Ada
 }

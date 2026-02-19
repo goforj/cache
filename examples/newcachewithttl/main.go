@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"github.com/goforj/cache"
 	"time"
 )
@@ -14,8 +15,7 @@ func main() {
 
 	// Example: cache with custom default TTL
 	ctx := context.Background()
-	store := cache.NewMemoryStore(ctx)
-	c := cache.NewCacheWithTTL(store, 2*time.Minute)
-	_ = ctx
-	_ = c
+	s := cache.NewMemoryStore(ctx)
+	c := cache.NewCacheWithTTL(s, 2*time.Minute)
+	fmt.Println(c.Driver(), c != nil) // DriverMemory true
 }

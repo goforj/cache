@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"github.com/goforj/cache"
 	"time"
 )
@@ -14,7 +15,6 @@ func main() {
 
 	// Example: set string
 	ctx := context.Background()
-	store := cache.NewMemoryStore(ctx)
-	repo := cache.NewCache(store)
-	_ = repo.SetString(ctx, "user:42:name", "Ada", time.Minute)
+	c := cache.NewCache(cache.NewMemoryStore(ctx))
+	fmt.Println(c.SetString(ctx, "user:42:name", "Ada", time.Minute) == nil) // true
 }

@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"github.com/goforj/cache"
 	"time"
 )
@@ -14,8 +15,7 @@ func main() {
 
 	// Example: increment counter
 	ctx := context.Background()
-	store := cache.NewMemoryStore(ctx)
-	repo := cache.NewCache(store)
-	value, _ := repo.Increment(ctx, "rate:login:42", 1, time.Minute)
-	_ = value
+	c := cache.NewCache(cache.NewMemoryStore(ctx))
+	val, _ := c.Increment(ctx, "rate:login:42", 1, time.Minute)
+	fmt.Println(val) // 1
 }

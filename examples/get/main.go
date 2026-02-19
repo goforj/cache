@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"github.com/goforj/cache"
 )
 
@@ -13,10 +14,9 @@ func main() {
 
 	// Example: get bytes
 	ctx := context.Background()
-	store := cache.NewMemoryStore(ctx)
-	cache := cache.NewCache(store)
-	_ = cache.Set(ctx, "user:42", []byte("Ada"), 0)
-	value, ok, _ := cache.Get(ctx, "user:42")
-	_ = value
-	_ = ok
+	s := cache.NewMemoryStore(ctx)
+	c := cache.NewCache(s)
+	_ = c.Set(ctx, "user:42", []byte("Ada"), 0)
+	value, ok, _ := c.Get(ctx, "user:42")
+	fmt.Println(ok, string(value)) // true Ada
 }
