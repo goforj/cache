@@ -91,5 +91,8 @@ func (c StoreConfig) withDefaults() StoreConfig {
 	if c.SQLTable == "" {
 		c.SQLTable = "cache_entries"
 	}
+	if c.Compression == "" {
+		c.Compression = CompressionNone
+	}
 	return c
 }

@@ -24,6 +24,9 @@ func TestStoreConfigWithDefaults(t *testing.T) {
 	if cfg.FileDir == "" {
 		t.Fatalf("expected default file dir set")
 	}
+	if cfg.Compression != CompressionNone {
+		t.Fatalf("expected default compression none")
+	}
 }
 
 func TestStoreOptionsMutateConfig(t *testing.T) {
