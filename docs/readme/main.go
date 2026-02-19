@@ -385,8 +385,17 @@ func renderAPI(funcs []*FuncDoc) string {
 				}
 
 				buf.WriteString("```go\n")
-				buf.WriteString(strings.TrimSpace(ex.Code))
-				buf.WriteString("\n```\n\n")
+				for _, line := range strings.Split(ex.Code, "\n") {
+					trimmed := strings.TrimSpace(line)
+					if trimmed == "" {
+						continue
+					}
+					if strings.HasPrefix(trimmed, "_ =") {
+						continue
+					}
+					buf.WriteString(line + "\n")
+				}
+				buf.WriteString("```\n\n")
 			}
 		}
 	}

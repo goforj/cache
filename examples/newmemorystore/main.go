@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"github.com/goforj/cache"
 )
 
@@ -14,5 +15,5 @@ func main() {
 	// Example: memory helper
 	ctx := context.Background()
 	store := cache.NewMemoryStore(ctx)
-	_ = store
+	fmt.Println(store.Driver()) // memory
 }

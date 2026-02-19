@@ -12,7 +12,7 @@ import "context"
 //	store := cache.NewStore(ctx, cache.StoreConfig{
 //		Driver: cache.DriverMemory,
 //	})
-//	_ = store
+//	fmt.Println(store.Driver()) // memory
 func NewStore(_ context.Context, cfg StoreConfig) Store {
 	cfg = cfg.withDefaults()
 	switch cfg.Driver {
@@ -31,17 +31,17 @@ func NewStore(_ context.Context, cfg StoreConfig) Store {
 //
 //	ctx := context.Background()
 //	store := cache.NewStoreWith(ctx, cache.DriverMemory)
-//	_ = store
+//	fmt.Println(store.Driver()) // memory
 //
 // Example: redis store (options)
 //
-//	ctx := context.Background()
-//	store := cache.NewStoreWith(ctx, cache.DriverRedis,
+//	redisClient := redis.NewClient(&redis.Options{Addr: "127.0.0.1:6379"})
+//	store = cache.NewStoreWith(ctx, cache.DriverRedis,
 //		cache.WithRedisClient(redisClient),
 //		cache.WithPrefix("app"),
 //		cache.WithDefaultTTL(5*time.Minute),
 //	)
-//	_ = store
+//	fmt.Println(store.Driver()) // redis
 func NewStoreWith(ctx context.Context, driver Driver, opts ...StoreOption) Store {
 	cfg := StoreConfig{Driver: driver}
 	for _, opt := range opts {
@@ -57,7 +57,7 @@ func NewStoreWith(ctx context.Context, driver Driver, opts ...StoreOption) Store
 //
 //	ctx := context.Background()
 //	store := cache.NewMemoryStore(ctx)
-//	_ = store
+//	fmt.Println(store.Driver()) // memory
 func NewMemoryStore(ctx context.Context, opts ...StoreOption) Store {
 	return NewStoreWith(ctx, DriverMemory, opts...)
 }
@@ -68,8 +68,9 @@ func NewMemoryStore(ctx context.Context, opts ...StoreOption) Store {
 // Example: redis helper
 //
 //	ctx := context.Background()
+//	redisClient := redis.NewClient(&redis.Options{Addr: "127.0.0.1:6379"})
 //	store := cache.NewRedisStore(ctx, redisClient, cache.WithPrefix("app"))
-//	_ = store
+//	fmt.Println(store.Driver()) // redis
 func NewRedisStore(ctx context.Context, client RedisClient, opts ...StoreOption) Store {
 	return NewStoreWith(ctx, DriverRedis, append([]StoreOption{WithRedisClient(client)}, opts...)...)
 }

@@ -26,10 +26,10 @@ type memoEntry struct {
 // Example: memoize a backing store
 //
 //	ctx := context.Background()
-//	base := cache.NewStore(ctx, cache.StoreConfig{Driver: cache.DriverMemory})
-//	memoStore := cache.NewMemoStore(base)
-//	repo := cache.NewRepository(memoStore)
-//	_ = repo
+//	base := cache.NewMemoryStore(ctx)
+//	memo := cache.NewMemoStore(base)
+//	c := cache.NewCache(memo)
+//	fmt.Println(c.Driver()) // memory
 func NewMemoStore(store Store) Store {
 	return &memoStore{
 		store: store,

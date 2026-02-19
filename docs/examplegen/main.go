@@ -400,7 +400,10 @@ func writeMain(base string, fd *FuncDoc, importPath string) error {
 		if strings.Contains(ex.Code, "syscall.") {
 			imports["syscall"] = true
 		}
-		if strings.Contains(ex.Code, "redis.") {
+		if strings.Contains(ex.Code, "redis.") ||
+			strings.Contains(ex.Code, "WithRedisClient") ||
+			strings.Contains(ex.Code, "redisClient") ||
+			strings.Contains(ex.Code, "RedisClient") {
 			imports["github.com/redis/go-redis/v9"] = true
 		}
 		if strings.Contains(ex.Code, "time.") {

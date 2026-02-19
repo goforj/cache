@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"github.com/goforj/cache"
 )
 
@@ -17,5 +18,5 @@ func main() {
 	store := cache.NewStore(ctx, cache.StoreConfig{
 		Driver: cache.DriverMemory,
 	})
-	_ = store
+	fmt.Println(store.Driver()) // memory
 }

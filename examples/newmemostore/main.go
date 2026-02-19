@@ -5,12 +5,13 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"github.com/goforj/cache"
 )
 
 func main() {
 	// NewMemoStore decorates store with per-process read memoization.
-	//
+	// 
 	// Behavior:
 	//   - First Get hits the backing store, clones the value, and memoizes it in-process.
 	//   - Subsequent Get for the same key returns the memoized clone (no backend call).
@@ -22,7 +23,7 @@ func main() {
 	// Example: memoize a backing store
 	ctx := context.Background()
 	base := cache.NewMemoryStore(ctx)
-	memoStore := cache.NewMemoStore(base)
-	c := cache.NewCache(memoStore)
-	_ = c
+	memo := cache.NewMemoStore(base)
+	c := cache.NewCache(memo)
+	fmt.Println(c.Driver()) // memory
 }

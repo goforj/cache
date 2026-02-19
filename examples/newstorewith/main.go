@@ -5,10 +5,10 @@ package main
 
 import (
 	"context"
-	"time"
-
+	"fmt"
 	"github.com/goforj/cache"
 	"github.com/redis/go-redis/v9"
+	"time"
 )
 
 func main() {
@@ -17,15 +17,15 @@ func main() {
 
 	// Example: memory store (options)
 	ctx := context.Background()
-	memoryStore := cache.NewStoreWith(ctx, cache.DriverMemory)
-	_ = memoryStore
+	store := cache.NewStoreWith(ctx, cache.DriverMemory)
+	fmt.Println(store.Driver()) // memory
 
 	// Example: redis store (options)
-	client := redis.NewClient(&redis.Options{Addr: "127.0.0.1:6379"})
-	redisStore := cache.NewStoreWith(ctx, cache.DriverRedis,
-		cache.WithRedisClient(client),
+	redisClient := redis.NewClient(&redis.Options{Addr: "127.0.0.1:6379"})
+	store = cache.NewStoreWith(ctx, cache.DriverRedis,
+		cache.WithRedisClient(redisClient),
 		cache.WithPrefix("app"),
 		cache.WithDefaultTTL(5*time.Minute),
 	)
-	_ = redisStore
+	fmt.Println(store.Driver()) // redis
 }
