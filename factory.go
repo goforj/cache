@@ -42,7 +42,12 @@ func NewStore(ctx context.Context, cfg StoreConfig) Store {
 	default:
 		store = newMemoryStore(cfg.DefaultTTL, cfg.MemoryCleanupInterval)
 	}
-	return newShapingStore(store, cfg.Compression, cfg.MaxValueBytes)
+	store = newShapingStore(store, cfg.Compression, cfg.MaxValueBytes)
+	encStore, err := newEncryptingStore(store, cfg.EncryptionKey)
+	if err != nil {
+		return &errorStore{driver: cfg.Driver, err: err}
+	}
+	return encStore
 }
 
 // NewStoreWith builds a store using a driver and a set of functional options.

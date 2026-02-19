@@ -58,6 +58,9 @@ type StoreConfig struct {
 	Compression CompressionCodec
 	// MaxValueBytes enforces a maximum value size (post-compression) when > 0.
 	MaxValueBytes int
+
+	// EncryptionKey enables at-rest encryption when provided (16/24/32 bytes AES key).
+	EncryptionKey []byte
 }
 
 func (c StoreConfig) withDefaults() StoreConfig {

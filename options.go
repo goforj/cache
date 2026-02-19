@@ -208,3 +208,19 @@ func WithMaxValueBytes(limit int) StoreOption {
 		return cfg
 	}
 }
+
+// WithEncryptionKey enables at-rest encryption using the provided AES key (16/24/32 bytes).
+// @group Options
+//
+// Example: encrypt values
+//
+//	ctx := context.Background()
+//	key := []byte("01234567890123456789012345678901")
+//	store := cache.NewStoreWith(ctx, cache.DriverFile, cache.WithEncryptionKey(key))
+//	fmt.Println(store.Driver()) // file
+func WithEncryptionKey(key []byte) StoreOption {
+	return func(cfg StoreConfig) StoreConfig {
+		cfg.EncryptionKey = key
+		return cfg
+	}
+}
