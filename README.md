@@ -83,7 +83,7 @@ StoreConfig keeps configuration explicit:
 
 ## Cache helpers
 
-Cache wraps a Store with ergonomic helpers (context-free by default, `*Ctx` variants when you need a context):
+Cache wraps a Store with ergonomic helpers (context-free by default, `*Ctx` variants when you need a context). Store stays context-first because drivers perform I/O and should honor deadlines/cancellation; Cache gives you the convenience layer on top:
 
 ```go
 Get(key string) ([]byte, bool, error) // returns raw bytes for key when present.

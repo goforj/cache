@@ -224,7 +224,10 @@ func startMySQLContainer(ctx context.Context) (testcontainers.Container, string,
 		Image:        "mysql:8",
 		Env:          map[string]string{"MYSQL_ROOT_PASSWORD": "pass", "MYSQL_DATABASE": "app", "MYSQL_USER": "user", "MYSQL_PASSWORD": "pass"},
 		ExposedPorts: []string{"3306/tcp"},
-		WaitingFor:   wait.ForListeningPort("3306/tcp").WithStartupTimeout(90 * time.Second),
+		WaitingFor: wait.ForAll(
+			wait.ForListeningPort("3306/tcp").WithStartupTimeout(90*time.Second),
+			wait.ForLog("ready for connections").WithOccurrence(2).WithStartupTimeout(90*time.Second),
+		),
 	}
 	container, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
 		ContainerRequest: req,

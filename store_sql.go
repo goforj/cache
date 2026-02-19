@@ -86,7 +86,7 @@ func (s *sqlStore) Get(ctx context.Context, key string) ([]byte, bool, error) {
 	var v []byte
 	var exp int64
 	err := s.db.QueryRowContext(ctx,
-		fmt.Sprintf("SELECT v, ea FROM %s WHERE k = ?", s.table),
+		fmt.Sprintf("SELECT v, ea FROM %s WHERE k = %s", s.table, s.ph(1)),
 		s.cacheKey(key),
 	).Scan(&v, &exp)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -117,7 +117,7 @@ func (s *sqlStore) Add(ctx context.Context, key string, value []byte, ttl time.D
 		ttl = s.defaultTTL
 	}
 	exp := time.Now().Add(ttl).UnixMilli()
-	q := fmt.Sprintf("INSERT INTO %s (k, v, ea) VALUES (?, ?, ?)", s.table)
+	q := fmt.Sprintf("INSERT INTO %s (k, v, ea) VALUES (%s, %s, %s)", s.table, s.ph(1), s.ph(2), s.ph(3))
 	_, err := s.db.ExecContext(ctx, q, s.cacheKey(key), value, exp)
 	if err != nil {
 		if isDuplicateErr(err, s.driverName) {
@@ -140,7 +140,7 @@ func (s *sqlStore) Increment(ctx context.Context, key string, delta int64, ttl t
 
 	var v []byte
 	var exp int64
-	selectSQL := fmt.Sprintf("SELECT v, ea FROM %s WHERE k = ?", s.table)
+	selectSQL := fmt.Sprintf("SELECT v, ea FROM %s WHERE k = %s", s.table, s.ph(1))
 	if s.driverName == "postgres" || s.driverName == "pgx" || s.driverName == "mysql" {
 		selectSQL += " FOR UPDATE"
 	}
@@ -178,7 +178,7 @@ func (s *sqlStore) Decrement(ctx context.Context, key string, delta int64, ttl t
 }
 
 func (s *sqlStore) Delete(ctx context.Context, key string) error {
-	_, err := s.db.ExecContext(ctx, fmt.Sprintf("DELETE FROM %s WHERE k = ?", s.table), s.cacheKey(key))
+	_, err := s.db.ExecContext(ctx, fmt.Sprintf("DELETE FROM %s WHERE k = %s", s.table, s.ph(1)), s.cacheKey(key))
 	return err
 }
 
@@ -186,13 +186,15 @@ func (s *sqlStore) DeleteMany(ctx context.Context, keys ...string) error {
 	if len(keys) == 0 {
 		return nil
 	}
-	placeholders := strings.Repeat("?,", len(keys))
-	placeholders = strings.TrimSuffix(placeholders, ",")
+	placeholders := make([]string, 0, len(keys))
+	for i := range keys {
+		placeholders = append(placeholders, s.ph(i+1))
+	}
 	args := make([]any, 0, len(keys))
 	for _, k := range keys {
 		args = append(args, s.cacheKey(k))
 	}
-	_, err := s.db.ExecContext(ctx, fmt.Sprintf("DELETE FROM %s WHERE k IN (%s)", s.table, placeholders), args...)
+	_, err := s.db.ExecContext(ctx, fmt.Sprintf("DELETE FROM %s WHERE k IN (%s)", s.table, strings.Join(placeholders, ",")), args...)
 	return err
 }
 
@@ -209,14 +211,23 @@ func (s *sqlStore) cacheKey(key string) string {
 }
 
 func (s *sqlStore) upsertSQL() string {
+	// Placeholders must be positional for postgres/pgx.
+	p1, p2, p3, p4, p5 := s.ph(1), s.ph(2), s.ph(3), s.ph(4), s.ph(5)
 	switch s.driverName {
 	case "postgres", "pgx":
-		return fmt.Sprintf("INSERT INTO %s (k, v, ea) VALUES (?, ?, ?) ON CONFLICT (k) DO UPDATE SET v = ?, ea = ?", s.table)
+		return fmt.Sprintf("INSERT INTO %s (k, v, ea) VALUES (%s, %s, %s) ON CONFLICT (k) DO UPDATE SET v = %s, ea = %s", s.table, p1, p2, p3, p4, p5)
 	case "mysql":
-		return fmt.Sprintf("INSERT INTO %s (k, v, ea) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE v = ?, ea = ?", s.table)
+		return fmt.Sprintf("INSERT INTO %s (k, v, ea) VALUES (%s, %s, %s) ON DUPLICATE KEY UPDATE v = %s, ea = %s", s.table, p1, p2, p3, p4, p5)
 	default: // sqlite
-		return fmt.Sprintf("INSERT INTO %s (k, v, ea) VALUES (?, ?, ?) ON CONFLICT(k) DO UPDATE SET v = ?, ea = ?", s.table)
+		return fmt.Sprintf("INSERT INTO %s (k, v, ea) VALUES (%s, %s, %s) ON CONFLICT(k) DO UPDATE SET v = %s, ea = %s", s.table, p1, p2, p3, p4, p5)
 	}
+}
+
+func (s *sqlStore) ph(i int) string {
+	if s.driverName == "postgres" || s.driverName == "pgx" {
+		return fmt.Sprintf("$%d", i)
+	}
+	return "?"
 }
 
 func isDuplicateErr(err error, driver string) bool {
