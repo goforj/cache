@@ -15,5 +15,5 @@ func main() {
 	// Example: delete many keys
 	ctx := context.Background()
 	c := cache.NewCache(cache.NewMemoryStore(ctx))
-	fmt.Println(c.DeleteMany(ctx, "a", "b") == nil) // true
+	fmt.Println(c.DeleteMany("a", "b") == nil) // true
 }

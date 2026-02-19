@@ -17,5 +17,5 @@ func main() {
 	ctx := context.Background()
 	s := cache.NewMemoryStore(ctx)
 	c := cache.NewCacheWithTTL(s, 2*time.Minute)
-	fmt.Println(c.Driver(), c != nil) // DriverMemory true
+	fmt.Println(c.Driver(), c != nil) // memory true
 }

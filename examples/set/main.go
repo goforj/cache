@@ -16,5 +16,5 @@ func main() {
 	// Example: set bytes with ttl
 	ctx := context.Background()
 	c := cache.NewCache(cache.NewMemoryStore(ctx))
-	fmt.Println(c.Set(ctx, "token", []byte("abc"), time.Minute) == nil) // true
+	fmt.Println(c.Set("token", []byte("abc"), time.Minute) == nil) // true
 }

@@ -54,26 +54,19 @@ import (
 func main() {
     ctx := context.Background()
 
-    store := cache.NewStoreWith(ctx, cache.DriverMemory,
-        cache.WithDefaultTTL(5*time.Minute),
-        cache.WithMemoryCleanupInterval(10*time.Minute),
-    )
-    repo := cache.NewCache(store)
+    store := cache.NewMemoryStore(ctx, cache.WithDefaultTTL(5*time.Minute))
+    c := cache.NewCache(store)
 
     // Remember pattern.
-    profile, err := repo.Remember(ctx, "user:42:profile", time.Minute, func(context.Context) ([]byte, error) {
+    profile, err := c.Remember("user:42:profile", time.Minute, func() ([]byte, error) {
         return []byte(`{"name":"ada"}`), nil
     })
     _ = profile
 
     // Switch to Redis (dependency injection, no code changes below).
     client := redis.NewClient(&redis.Options{Addr: "127.0.0.1:6379"})
-    store = cache.NewStoreWith(ctx, cache.DriverRedis,
-        cache.WithRedisClient(client),
-        cache.WithPrefix("app"),
-        cache.WithDefaultTTL(5*time.Minute),
-    )
-    repo = cache.NewCache(store)
+    store = cache.NewRedisStore(ctx, client, cache.WithPrefix("app"), cache.WithDefaultTTL(5*time.Minute))
+    c = cache.NewCache(store)
 }
 ```
 
@@ -81,35 +74,35 @@ func main() {
 
 StoreConfig keeps configuration explicit:
 
-- Driver: DriverMemory (default) or DriverRedis
+- Driver: explicit backend (null, file, memory, memcached, redis, dynamodb, sql)
 - DefaultTTL: fallback TTL when a call provides ttl <= 0
 - MemoryCleanupInterval: sweep interval for memory driver
 - Prefix: key prefix for shared backends
-- RedisClient: required when using the Redis driver
+- RedisClient / MemcachedAddresses / DynamoClient / SQLDriverName+DSN: driver-specific inputs
+- Compression / MaxValueBytes / EncryptionKey: shaping and security controls
 
 ## Cache helpers
 
-Cache wraps a Store with ergonomic helpers:
+Cache wraps a Store with ergonomic helpers (context-free by default, `*Ctx` variants when you need a context):
 
 ```go
-type CacheHelpers interface {
-	Remember(ctx context.Context, key string, ttl time.Duration, fn func(context.Context) ([]byte, error)) ([]byte, error)                  // returns value or computes/stores it when missing.
-	RememberString(ctx context.Context, key string, ttl time.Duration, fn func(context.Context) (string, error)) (string, error)            // returns string value or computes/stores it when missing.
-	RememberJSON[T any](ctx context.Context, cache *Cache, key string, ttl time.Duration, fn func(context.Context) (T, error)) (T, error)   // returns JSON value or computes/stores it when missing.
-	Get(ctx context.Context, key string) ([]byte, bool, error)                                                                              // returns raw bytes for key when present.
-	GetString(ctx context.Context, key string) (string, bool, error)                                                                        // returns string for key when present.
-	GetJSON[T any](ctx context.Context, cache *Cache, key string) (T, bool, error)                                                          // decodes JSON into T when key exists.
-	Set(ctx context.Context, key string, value []byte, ttl time.Duration) error                                                             // writes bytes to key with TTL.
-	SetString(ctx context.Context, key string, value string, ttl time.Duration) error                                                       // writes string to key with TTL.
-	SetJSON[T any](ctx context.Context, cache *Cache, key string, value T, ttl time.Duration) error                                         // writes JSON-encoded value to key with TTL.
-	Add(ctx context.Context, key string, value []byte, ttl time.Duration) (bool, error)                                                     // writes value only when key is not present.
-	Increment(ctx context.Context, key string, delta int64, ttl time.Duration) (int64, error)                                               // increments numeric value and returns the result.
-	Decrement(ctx context.Context, key string, delta int64, ttl time.Duration) (int64, error)                                               // decrements numeric value and returns the result.
-	Pull(ctx context.Context, key string) ([]byte, bool, error)                                                                             // returns value and removes it.
-	Delete(ctx context.Context, key string) error                                                                                           // removes a single key.
-	DeleteMany(ctx context.Context, keys ...string) error                                                                                   // removes multiple keys.
-	Flush(ctx context.Context) error                                                                                                        // clears all keys for this store scope.
-}
+Get(key string) ([]byte, bool, error) // returns raw bytes for key when present.
+GetString(key string) (string, bool, error) // returns string for key when present.
+Set(key string, value []byte, ttl time.Duration) error // writes bytes to key with TTL.
+SetString(key string, value string, ttl time.Duration) error // writes string to key with TTL.
+Add(key string, value []byte, ttl time.Duration) (bool, error) // writes value only when key is absent.
+Increment(key string, delta int64, ttl time.Duration) (int64, error) // increments numeric value and returns the result.
+Decrement(key string, delta int64, ttl time.Duration) (int64, error) // decrements numeric value and returns the result.
+Pull(key string) ([]byte, bool, error) // returns value and removes it.
+Delete(key string) error // removes a single key.
+DeleteMany(keys ...string) error // removes multiple keys.
+Flush() error // clears all keys for this store scope.
+Remember(key string, ttl time.Duration, fn func() ([]byte, error)) ([]byte, error) // returns value or computes/stores it when missing.
+RememberString(key string, ttl time.Duration, fn func() (string, error)) (string, error) // string helper for Remember.
+RememberJSON[T any](cache *Cache, key string, ttl time.Duration, fn func() (T, error)) (T, error) // JSON helper for Remember.
+GetJSON[T any](cache *Cache, key string) (T, bool, error) // decodes JSON into T when key exists.
+SetJSON[T any](cache *Cache, key string, value T, ttl time.Duration) error // writes JSON-encoded value to key with TTL.
+// ctx-aware variants mirror the same names: GetCtx, SetCtx, RememberCtx, RememberStringCtx, RememberJSONCtx, etc.
 ```
 
 To observe cache operations (hits, misses, errors, latency), attach an Observer:
@@ -126,8 +119,8 @@ c := cache.NewCache(store).WithObserver(obs)
 Example:
 
 ```go
-settings, err := cache.RememberJSON[Settings](ctx, repo, "settings:alerts", 10*time.Minute, func(context.Context) (Settings, error) {
-    return fetchSettings(ctx)
+settings, err := cache.RememberJSON[Settings](c, "settings:alerts", 10*time.Minute, func() (Settings, error) {
+    return fetchSettings(context.Background())
 })
 ```
 
@@ -167,7 +160,7 @@ The API section below is autogenerated; do not edit between the markers.
 | **Constructors** | [NewDynamoStore](#newdynamostore) [NewFileStore](#newfilestore) [NewMemcachedStore](#newmemcachedstore) [NewMemoryStore](#newmemorystore) [NewNullStore](#newnullstore) [NewRedisStore](#newredisstore) [NewSQLStore](#newsqlstore) [NewStore](#newstore) [NewStoreWith](#newstorewith) |
 | **Memoization** | [NewMemoStore](#newmemostore) |
 | **Options** | [WithCompression](#withcompression) [WithDefaultTTL](#withdefaultttl) [WithDynamoClient](#withdynamoclient) [WithDynamoEndpoint](#withdynamoendpoint) [WithDynamoRegion](#withdynamoregion) [WithDynamoTable](#withdynamotable) [WithEncryptionKey](#withencryptionkey) [WithFileDir](#withfiledir) [WithMaxValueBytes](#withmaxvaluebytes) [WithMemcachedAddresses](#withmemcachedaddresses) [WithMemoryCleanupInterval](#withmemorycleanupinterval) [WithPrefix](#withprefix) [WithRedisClient](#withredisclient) [WithSQL](#withsql) |
-| **Other** | [WithObserver](#withobserver) |
+| **Other** | [GetJSONCtx](#getjsonctx) [SetJSONCtx](#setjsonctx) [WithObserver](#withobserver) |
 
 
 ## Cache
@@ -179,7 +172,7 @@ Add writes value only when key is not already present.
 ```go
 ctx := context.Background()
 c := cache.NewCache(cache.NewMemoryStore(ctx))
-created, _ := c.Add(ctx, "boot:seeded", []byte("1"), time.Hour)
+created, _ := c.Add("boot:seeded", []byte("1"), time.Hour)
 fmt.Println(created) // true
 ```
 
@@ -190,7 +183,7 @@ Decrement decrements a numeric value and returns the result.
 ```go
 ctx := context.Background()
 c := cache.NewCache(cache.NewMemoryStore(ctx))
-val, _ := c.Decrement(ctx, "rate:login:42", 1, time.Minute)
+val, _ := c.Decrement("rate:login:42", 1, time.Minute)
 fmt.Println(val) // -1
 ```
 
@@ -201,7 +194,7 @@ Delete removes a single key.
 ```go
 ctx := context.Background()
 c := cache.NewCache(cache.NewMemoryStore(ctx))
-fmt.Println(c.Delete(ctx, "a") == nil) // true
+fmt.Println(c.Delete("a") == nil) // true
 ```
 
 ### <a id="deletemany"></a>DeleteMany
@@ -211,7 +204,7 @@ DeleteMany removes multiple keys.
 ```go
 ctx := context.Background()
 c := cache.NewCache(cache.NewMemoryStore(ctx))
-fmt.Println(c.DeleteMany(ctx, "a", "b") == nil) // true
+fmt.Println(c.DeleteMany("a", "b") == nil) // true
 ```
 
 ### <a id="driver"></a>Driver
@@ -225,7 +218,7 @@ Flush clears all keys for this store scope.
 ```go
 ctx := context.Background()
 c := cache.NewCache(cache.NewMemoryStore(ctx))
-fmt.Println(c.Flush(ctx) == nil) // true
+fmt.Println(c.Flush() == nil) // true
 ```
 
 ### <a id="get"></a>Get
@@ -236,7 +229,7 @@ Get returns raw bytes for key when present.
 ctx := context.Background()
 s := cache.NewMemoryStore(ctx)
 c := cache.NewCache(s)
-value, ok, _ := c.Get(ctx, "user:42")
+value, ok, _ := c.Get("user:42")
 fmt.Println(ok, string(value)) // true Ada
 ```
 
@@ -247,7 +240,7 @@ GetString returns a UTF-8 string value for key when present.
 ```go
 ctx := context.Background()
 c := cache.NewCache(cache.NewMemoryStore(ctx))
-name, ok, _ := c.GetString(ctx, "user:42:name")
+name, ok, _ := c.GetString("user:42:name")
 fmt.Println(ok, name) // true Ada
 ```
 
@@ -258,7 +251,7 @@ Increment increments a numeric value and returns the result.
 ```go
 ctx := context.Background()
 c := cache.NewCache(cache.NewMemoryStore(ctx))
-val, _ := c.Increment(ctx, "rate:login:42", 1, time.Minute)
+val, _ := c.Increment("rate:login:42", 1, time.Minute)
 fmt.Println(val) // 1
 ```
 
@@ -270,7 +263,7 @@ NewCache creates a cache facade bound to a concrete store.
 ctx := context.Background()
 s := cache.NewMemoryStore(ctx)
 c := cache.NewCache(s)
-fmt.Println(c.Driver()) // DriverMemory
+fmt.Println(c.Driver()) // memory
 ```
 
 ### <a id="newcachewithttl"></a>NewCacheWithTTL
@@ -281,7 +274,7 @@ NewCacheWithTTL lets callers override the default TTL applied when ttl <= 0.
 ctx := context.Background()
 s := cache.NewMemoryStore(ctx)
 c := cache.NewCacheWithTTL(s, 2*time.Minute)
-fmt.Println(c.Driver(), c != nil) // DriverMemory true
+fmt.Println(c.Driver(), c != nil) // memory true
 ```
 
 ### <a id="pull"></a>Pull
@@ -291,7 +284,7 @@ Pull returns value and removes it from cache.
 ```go
 ctx := context.Background()
 c := cache.NewCache(cache.NewMemoryStore(ctx))
-body, ok, _ := c.Pull(ctx, "reset:token:42")
+body, ok, _ := c.Pull("reset:token:42")
 fmt.Println(ok, string(body)) // true abc
 ```
 
@@ -302,7 +295,7 @@ Remember returns key value or computes/stores it when missing.
 ```go
 ctx := context.Background()
 c := cache.NewCache(cache.NewMemoryStore(ctx))
-data, err := c.Remember(ctx, "dashboard:summary", time.Minute, func(context.Context) ([]byte, error) {
+data, err := c.Remember("dashboard:summary", time.Minute, func() ([]byte, error) {
 	return []byte("payload"), nil
 })
 fmt.Println(err == nil, string(data)) // true payload
@@ -315,7 +308,7 @@ RememberString returns key value or computes/stores it when missing.
 ```go
 ctx := context.Background()
 c := cache.NewCache(cache.NewMemoryStore(ctx))
-val, err := c.RememberString(ctx, "settings:mode", time.Minute, func(context.Context) (string, error) {
+val, err := c.RememberString("settings:mode", time.Minute, func() (string, error) {
 	return "on", nil
 })
 fmt.Println(err == nil, val) // true on
@@ -328,7 +321,7 @@ Set writes raw bytes to key.
 ```go
 ctx := context.Background()
 c := cache.NewCache(cache.NewMemoryStore(ctx))
-fmt.Println(c.Set(ctx, "token", []byte("abc"), time.Minute) == nil) // true
+fmt.Println(c.Set("token", []byte("abc"), time.Minute) == nil) // true
 ```
 
 ### <a id="setstring"></a>SetString
@@ -338,7 +331,7 @@ SetString writes a string value to key.
 ```go
 ctx := context.Background()
 c := cache.NewCache(cache.NewMemoryStore(ctx))
-fmt.Println(c.SetString(ctx, "user:42:name", "Ada", time.Minute) == nil) // true
+fmt.Println(c.SetString("user:42:name", "Ada", time.Minute) == nil) // true
 ```
 
 ### <a id="store"></a>Store
@@ -348,22 +341,14 @@ Store returns the underlying store implementation.
 ```go
 ctx := context.Background()
 c := cache.NewCache(cache.NewMemoryStore(ctx))
-fmt.Println(c.Store().Driver()) // DriverMemory
+fmt.Println(c.Store().Driver()) // memory
 ```
 
 ## Cache JSON
 
 ### <a id="getjson"></a>GetJSON
 
-GetJSON decodes a JSON value into T when key exists.
-
-```go
-type Profile struct { Name string `json:"name"` }
-ctx := context.Background()
-c := cache.NewCache(cache.NewMemoryStore(ctx))
-profile, ok, _ := cache.GetJSON[Profile](ctx, c, "profile:42")
-fmt.Println(ok, profile.Name) // true Ada
-```
+GetJSON decodes a JSON value into T when key exists, using background context.
 
 ### <a id="rememberjson"></a>RememberJSON
 
@@ -373,7 +358,7 @@ RememberJSON returns key value or computes/stores JSON when missing.
 type Settings struct { Enabled bool `json:"enabled"` }
 ctx := context.Background()
 c := cache.NewCache(cache.NewMemoryStore(ctx))
-settings, err := cache.RememberJSON[Settings](ctx, c, "settings:alerts", time.Minute, func(context.Context) (Settings, error) {
+settings, err := cache.RememberJSON[Settings](c, "settings:alerts", time.Minute, func() (Settings, error) {
 	return Settings{Enabled: true}, nil
 })
 fmt.Println(err == nil, settings.Enabled) // true true
@@ -381,14 +366,7 @@ fmt.Println(err == nil, settings.Enabled) // true true
 
 ### <a id="setjson"></a>SetJSON
 
-SetJSON encodes value as JSON and writes it to key.
-
-```go
-type Profile struct { Name string `json:"name"` }
-ctx := context.Background()
-c := cache.NewCache(cache.NewMemoryStore(ctx))
-fmt.Println(cache.SetJSON(ctx, c, "profile:42", Profile{Name: "Ada"}, time.Minute) == nil) // true
-```
+SetJSON encodes value as JSON and writes it to key using background context.
 
 ## Constructors
 
@@ -690,6 +668,14 @@ fmt.Println(store.Driver()) // sql
 ```
 
 ## Other
+
+### <a id="getjsonctx"></a>GetJSONCtx
+
+GetJSONCtx is the context-aware variant of GetJSON.
+
+### <a id="setjsonctx"></a>SetJSONCtx
+
+SetJSONCtx is the context-aware variant of SetJSON.
 
 ### <a id="withobserver"></a>WithObserver
 

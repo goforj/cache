@@ -17,7 +17,7 @@ func main() {
 	type Settings struct { Enabled bool `json:"enabled"` }
 	ctx := context.Background()
 	c := cache.NewCache(cache.NewMemoryStore(ctx))
-	settings, err := cache.RememberJSON[Settings](ctx, c, "settings:alerts", time.Minute, func(context.Context) (Settings, error) {
+	settings, err := cache.RememberJSON[Settings](c, "settings:alerts", time.Minute, func() (Settings, error) {
 		return Settings{Enabled: true}, nil
 	})
 	fmt.Println(err == nil, settings.Enabled) // true true

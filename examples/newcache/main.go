@@ -16,5 +16,5 @@ func main() {
 	ctx := context.Background()
 	s := cache.NewMemoryStore(ctx)
 	c := cache.NewCache(s)
-	fmt.Println(c.Driver()) // DriverMemory
+	fmt.Println(c.Driver()) // memory
 }

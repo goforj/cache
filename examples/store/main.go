@@ -15,5 +15,5 @@ func main() {
 	// Example: access store
 	ctx := context.Background()
 	c := cache.NewCache(cache.NewMemoryStore(ctx))
-	fmt.Println(c.Store().Driver()) // DriverMemory
+	fmt.Println(c.Store().Driver()) // memory
 }

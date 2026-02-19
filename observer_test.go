@@ -20,17 +20,16 @@ func (o *observerSpy) OnCacheOp(_ context.Context, op string, key string, hit bo
 }
 
 func TestWithObserverHooks(t *testing.T) {
-	ctx := context.Background()
 	obs := &observerSpy{}
 	c := NewCache(newMemoryStore(0, 0)).WithObserver(obs)
 
-	if err := c.SetString(ctx, "k", "v", time.Minute); err != nil {
+	if err := c.SetString("k", "v", time.Minute); err != nil {
 		t.Fatalf("set failed: %v", err)
 	}
-	if _, ok, err := c.GetString(ctx, "k"); err != nil || !ok {
+	if _, ok, err := c.GetString("k"); err != nil || !ok {
 		t.Fatalf("get failed: %v ok=%v", err, ok)
 	}
-	if err := c.Delete(ctx, "k"); err != nil {
+	if err := c.Delete("k"); err != nil {
 		t.Fatalf("delete failed: %v", err)
 	}
 

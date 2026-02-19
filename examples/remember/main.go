@@ -16,7 +16,7 @@ func main() {
 	// Example: remember bytes
 	ctx := context.Background()
 	c := cache.NewCache(cache.NewMemoryStore(ctx))
-	data, err := c.Remember(ctx, "dashboard:summary", time.Minute, func(context.Context) ([]byte, error) {
+	data, err := c.Remember("dashboard:summary", time.Minute, func() ([]byte, error) {
 		return []byte("payload"), nil
 	})
 	fmt.Println(err == nil, string(data)) // true payload

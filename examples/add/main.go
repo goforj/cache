@@ -16,6 +16,6 @@ func main() {
 	// Example: add once
 	ctx := context.Background()
 	c := cache.NewCache(cache.NewMemoryStore(ctx))
-	created, _ := c.Add(ctx, "boot:seeded", []byte("1"), time.Hour)
+	created, _ := c.Add("boot:seeded", []byte("1"), time.Hour)
 	fmt.Println(created) // true
 }

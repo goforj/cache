@@ -16,7 +16,7 @@ func main() {
 	// Example: pull and delete
 	ctx := context.Background()
 	c := cache.NewCache(cache.NewMemoryStore(ctx))
-	_ = c.SetString(ctx, "reset:token:42", "abc", time.Minute)
-	body, ok, _ := c.Pull(ctx, "reset:token:42")
+	_ = c.SetString("reset:token:42", "abc", time.Minute)
+	body, ok, _ := c.Pull("reset:token:42")
 	fmt.Println(ok, string(body)) // true abc
 }

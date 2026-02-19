@@ -22,7 +22,7 @@ type Cache struct {
 //	ctx := context.Background()
 //	s := cache.NewMemoryStore(ctx)
 //	c := cache.NewCache(s)
-//	fmt.Println(c.Driver()) // DriverMemory
+//	fmt.Println(c.Driver()) // memory
 func NewCache(store Store) *Cache {
 	return NewCacheWithTTL(store, defaultCacheTTL)
 }
@@ -35,7 +35,7 @@ func NewCache(store Store) *Cache {
 //	ctx := context.Background()
 //	s := cache.NewMemoryStore(ctx)
 //	c := cache.NewCacheWithTTL(s, 2*time.Minute)
-//	fmt.Println(c.Driver(), c != nil) // DriverMemory true
+//	fmt.Println(c.Driver(), c != nil) // memory true
 func NewCacheWithTTL(store Store, defaultTTL time.Duration) *Cache {
 	if defaultTTL <= 0 {
 		defaultTTL = defaultCacheTTL
@@ -59,7 +59,7 @@ func (c *Cache) WithObserver(o Observer) *Cache {
 //
 //	ctx := context.Background()
 //	c := cache.NewCache(cache.NewMemoryStore(ctx))
-//	fmt.Println(c.Store().Driver()) // DriverMemory
+//	fmt.Println(c.Store().Driver()) // memory
 func (c *Cache) Store() Store {
 	return c.store
 }
@@ -78,10 +78,14 @@ func (c *Cache) Driver() Driver {
 //	ctx := context.Background()
 //	s := cache.NewMemoryStore(ctx)
 //	c := cache.NewCache(s)
-//	_ = c.Set(ctx, "user:42", []byte("Ada"), 0)
-//	value, ok, _ := c.Get(ctx, "user:42")
+//	_ = c.Set("user:42", []byte("Ada"), 0)
+//	value, ok, _ := c.Get("user:42")
 //	fmt.Println(ok, string(value)) // true Ada
-func (c *Cache) Get(ctx context.Context, key string) ([]byte, bool, error) {
+func (c *Cache) Get(key string) ([]byte, bool, error) {
+	return c.GetCtx(context.Background(), key)
+}
+
+func (c *Cache) GetCtx(ctx context.Context, key string) ([]byte, bool, error) {
 	start := time.Now()
 	body, ok, err := c.store.Get(ctx, key)
 	c.observe(ctx, "get", key, ok, err, start)
@@ -95,12 +99,16 @@ func (c *Cache) Get(ctx context.Context, key string) ([]byte, bool, error) {
 //
 //	ctx := context.Background()
 //	c := cache.NewCache(cache.NewMemoryStore(ctx))
-//	_ = c.SetString(ctx, "user:42:name", "Ada", 0)
-//	name, ok, _ := c.GetString(ctx, "user:42:name")
+//	_ = c.SetString("user:42:name", "Ada", 0)
+//	name, ok, _ := c.GetString("user:42:name")
 //	fmt.Println(ok, name) // true Ada
-func (c *Cache) GetString(ctx context.Context, key string) (string, bool, error) {
+func (c *Cache) GetString(key string) (string, bool, error) {
+	return c.GetStringCtx(context.Background(), key)
+}
+
+func (c *Cache) GetStringCtx(ctx context.Context, key string) (string, bool, error) {
 	start := time.Now()
-	body, ok, err := c.Get(ctx, key)
+	body, ok, err := c.GetCtx(ctx, key)
 	if err != nil || !ok {
 		c.observe(ctx, "get_string", key, ok, err, start)
 		return "", ok, err
@@ -110,21 +118,17 @@ func (c *Cache) GetString(ctx context.Context, key string) (string, bool, error)
 	return val, true, nil
 }
 
-// GetJSON decodes a JSON value into T when key exists.
+// GetJSON decodes a JSON value into T when key exists, using background context.
 // @group Cache JSON
-//
-// Example: get JSON
-//
-//	type Profile struct { Name string `json:"name"` }
-//	ctx := context.Background()
-//	c := cache.NewCache(cache.NewMemoryStore(ctx))
-//	_ = cache.SetJSON(ctx, c, "profile:42", Profile{Name: "Ada"}, 0)
-//	profile, ok, _ := cache.GetJSON[Profile](ctx, c, "profile:42")
-//	fmt.Println(ok, profile.Name) // true Ada
-func GetJSON[T any](ctx context.Context, cache *Cache, key string) (T, bool, error) {
+func GetJSON[T any](cache *Cache, key string) (T, bool, error) {
+	return GetJSONCtx[T](context.Background(), cache, key)
+}
+
+// GetJSONCtx is the context-aware variant of GetJSON.
+func GetJSONCtx[T any](ctx context.Context, cache *Cache, key string) (T, bool, error) {
 	var zero T
 	start := time.Now()
-	body, ok, err := cache.Get(ctx, key)
+	body, ok, err := cache.GetCtx(ctx, key)
 	if err != nil || !ok {
 		cache.observe(ctx, "get_json", key, ok, err, start)
 		return zero, ok, err
@@ -145,8 +149,12 @@ func GetJSON[T any](ctx context.Context, cache *Cache, key string) (T, bool, err
 //
 //	ctx := context.Background()
 //	c := cache.NewCache(cache.NewMemoryStore(ctx))
-//	fmt.Println(c.Set(ctx, "token", []byte("abc"), time.Minute) == nil) // true
-func (c *Cache) Set(ctx context.Context, key string, value []byte, ttl time.Duration) error {
+//	fmt.Println(c.Set("token", []byte("abc"), time.Minute) == nil) // true
+func (c *Cache) Set(key string, value []byte, ttl time.Duration) error {
+	return c.SetCtx(context.Background(), key, value, ttl)
+}
+
+func (c *Cache) SetCtx(ctx context.Context, key string, value []byte, ttl time.Duration) error {
 	start := time.Now()
 	err := c.store.Set(ctx, key, value, c.resolveTTL(ttl))
 	c.observe(ctx, "set", key, false, err, start)
@@ -160,31 +168,33 @@ func (c *Cache) Set(ctx context.Context, key string, value []byte, ttl time.Dura
 //
 //	ctx := context.Background()
 //	c := cache.NewCache(cache.NewMemoryStore(ctx))
-//	fmt.Println(c.SetString(ctx, "user:42:name", "Ada", time.Minute) == nil) // true
-func (c *Cache) SetString(ctx context.Context, key string, value string, ttl time.Duration) error {
+//	fmt.Println(c.SetString("user:42:name", "Ada", time.Minute) == nil) // true
+func (c *Cache) SetString(key string, value string, ttl time.Duration) error {
+	return c.SetStringCtx(context.Background(), key, value, ttl)
+}
+
+func (c *Cache) SetStringCtx(ctx context.Context, key string, value string, ttl time.Duration) error {
 	start := time.Now()
-	err := c.Set(ctx, key, []byte(value), ttl)
+	err := c.SetCtx(ctx, key, []byte(value), ttl)
 	c.observe(ctx, "set_string", key, false, err, start)
 	return err
 }
 
-// SetJSON encodes value as JSON and writes it to key.
+// SetJSON encodes value as JSON and writes it to key using background context.
 // @group Cache JSON
-//
-// Example: set JSON
-//
-//	type Profile struct { Name string `json:"name"` }
-//	ctx := context.Background()
-//	c := cache.NewCache(cache.NewMemoryStore(ctx))
-//	fmt.Println(cache.SetJSON(ctx, c, "profile:42", Profile{Name: "Ada"}, time.Minute) == nil) // true
-func SetJSON[T any](ctx context.Context, cache *Cache, key string, value T, ttl time.Duration) error {
+func SetJSON[T any](cache *Cache, key string, value T, ttl time.Duration) error {
+	return SetJSONCtx[T](context.Background(), cache, key, value, ttl)
+}
+
+// SetJSONCtx is the context-aware variant of SetJSON.
+func SetJSONCtx[T any](ctx context.Context, cache *Cache, key string, value T, ttl time.Duration) error {
 	start := time.Now()
 	body, err := json.Marshal(value)
 	if err != nil {
 		cache.observe(ctx, "set_json", key, false, err, start)
 		return err
 	}
-	err = cache.Set(ctx, key, body, ttl)
+	err = cache.SetCtx(ctx, key, body, ttl)
 	cache.observe(ctx, "set_json", key, false, err, start)
 	return err
 }
@@ -196,9 +206,13 @@ func SetJSON[T any](ctx context.Context, cache *Cache, key string, value T, ttl 
 //
 //	ctx := context.Background()
 //	c := cache.NewCache(cache.NewMemoryStore(ctx))
-//	created, _ := c.Add(ctx, "boot:seeded", []byte("1"), time.Hour)
+//	created, _ := c.Add("boot:seeded", []byte("1"), time.Hour)
 //	fmt.Println(created) // true
-func (c *Cache) Add(ctx context.Context, key string, value []byte, ttl time.Duration) (bool, error) {
+func (c *Cache) Add(key string, value []byte, ttl time.Duration) (bool, error) {
+	return c.AddCtx(context.Background(), key, value, ttl)
+}
+
+func (c *Cache) AddCtx(ctx context.Context, key string, value []byte, ttl time.Duration) (bool, error) {
 	start := time.Now()
 	created, err := c.store.Add(ctx, key, value, c.resolveTTL(ttl))
 	c.observe(ctx, "add", key, created, err, start)
@@ -212,9 +226,13 @@ func (c *Cache) Add(ctx context.Context, key string, value []byte, ttl time.Dura
 //
 //	ctx := context.Background()
 //	c := cache.NewCache(cache.NewMemoryStore(ctx))
-//	val, _ := c.Increment(ctx, "rate:login:42", 1, time.Minute)
+//	val, _ := c.Increment("rate:login:42", 1, time.Minute)
 //	fmt.Println(val) // 1
-func (c *Cache) Increment(ctx context.Context, key string, delta int64, ttl time.Duration) (int64, error) {
+func (c *Cache) Increment(key string, delta int64, ttl time.Duration) (int64, error) {
+	return c.IncrementCtx(context.Background(), key, delta, ttl)
+}
+
+func (c *Cache) IncrementCtx(ctx context.Context, key string, delta int64, ttl time.Duration) (int64, error) {
 	start := time.Now()
 	val, err := c.store.Increment(ctx, key, delta, c.resolveTTL(ttl))
 	c.observe(ctx, "increment", key, err == nil, err, start)
@@ -228,9 +246,13 @@ func (c *Cache) Increment(ctx context.Context, key string, delta int64, ttl time
 //
 //	ctx := context.Background()
 //	c := cache.NewCache(cache.NewMemoryStore(ctx))
-//	val, _ := c.Decrement(ctx, "rate:login:42", 1, time.Minute)
+//	val, _ := c.Decrement("rate:login:42", 1, time.Minute)
 //	fmt.Println(val) // -1
-func (c *Cache) Decrement(ctx context.Context, key string, delta int64, ttl time.Duration) (int64, error) {
+func (c *Cache) Decrement(key string, delta int64, ttl time.Duration) (int64, error) {
+	return c.DecrementCtx(context.Background(), key, delta, ttl)
+}
+
+func (c *Cache) DecrementCtx(ctx context.Context, key string, delta int64, ttl time.Duration) (int64, error) {
 	start := time.Now()
 	val, err := c.store.Decrement(ctx, key, delta, c.resolveTTL(ttl))
 	c.observe(ctx, "decrement", key, err == nil, err, start)
@@ -244,17 +266,21 @@ func (c *Cache) Decrement(ctx context.Context, key string, delta int64, ttl time
 //
 //	ctx := context.Background()
 //	c := cache.NewCache(cache.NewMemoryStore(ctx))
-//	_ = c.SetString(ctx, "reset:token:42", "abc", time.Minute)
-//	body, ok, _ := c.Pull(ctx, "reset:token:42")
+//	_ = c.SetString("reset:token:42", "abc", time.Minute)
+//	body, ok, _ := c.Pull("reset:token:42")
 //	fmt.Println(ok, string(body)) // true abc
-func (c *Cache) Pull(ctx context.Context, key string) ([]byte, bool, error) {
+func (c *Cache) Pull(key string) ([]byte, bool, error) {
+	return c.PullCtx(context.Background(), key)
+}
+
+func (c *Cache) PullCtx(ctx context.Context, key string) ([]byte, bool, error) {
 	start := time.Now()
-	body, ok, err := c.Get(ctx, key)
+	body, ok, err := c.GetCtx(ctx, key)
 	if err != nil || !ok {
 		c.observe(ctx, "pull", key, ok, err, start)
 		return nil, ok, err
 	}
-	if err := c.Delete(ctx, key); err != nil {
+	if err := c.DeleteCtx(ctx, key); err != nil {
 		c.observe(ctx, "pull", key, false, err, start)
 		return nil, false, err
 	}
@@ -269,9 +295,13 @@ func (c *Cache) Pull(ctx context.Context, key string) ([]byte, bool, error) {
 //
 //	ctx := context.Background()
 //	c := cache.NewCache(cache.NewMemoryStore(ctx))
-//	_ = c.Set(ctx, "a", []byte("1"), time.Minute)
-//	fmt.Println(c.Delete(ctx, "a") == nil) // true
-func (c *Cache) Delete(ctx context.Context, key string) error {
+//	_ = c.Set("a", []byte("1"), time.Minute)
+//	fmt.Println(c.Delete("a") == nil) // true
+func (c *Cache) Delete(key string) error {
+	return c.DeleteCtx(context.Background(), key)
+}
+
+func (c *Cache) DeleteCtx(ctx context.Context, key string) error {
 	start := time.Now()
 	err := c.store.Delete(ctx, key)
 	c.observe(ctx, "delete", key, err == nil, err, start)
@@ -285,8 +315,12 @@ func (c *Cache) Delete(ctx context.Context, key string) error {
 //
 //	ctx := context.Background()
 //	c := cache.NewCache(cache.NewMemoryStore(ctx))
-//	fmt.Println(c.DeleteMany(ctx, "a", "b") == nil) // true
-func (c *Cache) DeleteMany(ctx context.Context, keys ...string) error {
+//	fmt.Println(c.DeleteMany("a", "b") == nil) // true
+func (c *Cache) DeleteMany(keys ...string) error {
+	return c.DeleteManyCtx(context.Background(), keys...)
+}
+
+func (c *Cache) DeleteManyCtx(ctx context.Context, keys ...string) error {
 	start := time.Now()
 	err := c.store.DeleteMany(ctx, keys...)
 	for _, key := range keys {
@@ -302,9 +336,13 @@ func (c *Cache) DeleteMany(ctx context.Context, keys ...string) error {
 //
 //	ctx := context.Background()
 //	c := cache.NewCache(cache.NewMemoryStore(ctx))
-//	_ = c.Set(ctx, "a", []byte("1"), time.Minute)
-//	fmt.Println(c.Flush(ctx) == nil) // true
-func (c *Cache) Flush(ctx context.Context) error {
+//	_ = c.Set("a", []byte("1"), time.Minute)
+//	fmt.Println(c.Flush() == nil) // true
+func (c *Cache) Flush() error {
+	return c.FlushCtx(context.Background())
+}
+
+func (c *Cache) FlushCtx(ctx context.Context) error {
 	start := time.Now()
 	err := c.store.Flush(ctx)
 	c.observe(ctx, "flush", "", err == nil, err, start)
@@ -318,13 +356,22 @@ func (c *Cache) Flush(ctx context.Context) error {
 //
 //	ctx := context.Background()
 //	c := cache.NewCache(cache.NewMemoryStore(ctx))
-//	data, err := c.Remember(ctx, "dashboard:summary", time.Minute, func(context.Context) ([]byte, error) {
+//	data, err := c.Remember("dashboard:summary", time.Minute, func() ([]byte, error) {
 //		return []byte("payload"), nil
 //	})
 //	fmt.Println(err == nil, string(data)) // true payload
-func (c *Cache) Remember(ctx context.Context, key string, ttl time.Duration, fn func(context.Context) ([]byte, error)) ([]byte, error) {
+func (c *Cache) Remember(key string, ttl time.Duration, fn func() ([]byte, error)) ([]byte, error) {
+	return c.RememberCtx(context.Background(), key, ttl, func(ctx context.Context) ([]byte, error) {
+		if fn == nil {
+			return nil, errors.New("cache remember requires a callback")
+		}
+		return fn()
+	})
+}
+
+func (c *Cache) RememberCtx(ctx context.Context, key string, ttl time.Duration, fn func(context.Context) ([]byte, error)) ([]byte, error) {
 	start := time.Now()
-	body, ok, err := c.Get(ctx, key)
+	body, ok, err := c.GetCtx(ctx, key)
 	if err != nil {
 		c.observe(ctx, "remember", key, ok, err, start)
 		return nil, err
@@ -334,15 +381,16 @@ func (c *Cache) Remember(ctx context.Context, key string, ttl time.Duration, fn 
 		return body, nil
 	}
 	if fn == nil {
-		c.observe(ctx, "remember", key, false, errors.New("cache remember requires a callback"), start)
-		return nil, errors.New("cache remember requires a callback")
+		err := errors.New("cache remember requires a callback")
+		c.observe(ctx, "remember", key, false, err, start)
+		return nil, err
 	}
 	body, err = fn(ctx)
 	if err != nil {
 		c.observe(ctx, "remember", key, false, err, start)
 		return nil, err
 	}
-	if err := c.Set(ctx, key, body, ttl); err != nil {
+	if err := c.SetCtx(ctx, key, body, ttl); err != nil {
 		c.observe(ctx, "remember", key, false, err, start)
 		return nil, err
 	}
@@ -357,13 +405,22 @@ func (c *Cache) Remember(ctx context.Context, key string, ttl time.Duration, fn 
 //
 //	ctx := context.Background()
 //	c := cache.NewCache(cache.NewMemoryStore(ctx))
-//	val, err := c.RememberString(ctx, "settings:mode", time.Minute, func(context.Context) (string, error) {
+//	val, err := c.RememberString("settings:mode", time.Minute, func() (string, error) {
 //		return "on", nil
 //	})
 //	fmt.Println(err == nil, val) // true on
-func (c *Cache) RememberString(ctx context.Context, key string, ttl time.Duration, fn func(context.Context) (string, error)) (string, error) {
+func (c *Cache) RememberString(key string, ttl time.Duration, fn func() (string, error)) (string, error) {
+	return c.RememberStringCtx(context.Background(), key, ttl, func(context.Context) (string, error) {
+		if fn == nil {
+			return "", errors.New("cache remember string requires a callback")
+		}
+		return fn()
+	})
+}
+
+func (c *Cache) RememberStringCtx(ctx context.Context, key string, ttl time.Duration, fn func(context.Context) (string, error)) (string, error) {
 	start := time.Now()
-	value, err := c.Remember(ctx, key, ttl, func(ctx context.Context) ([]byte, error) {
+	value, err := c.RememberCtx(ctx, key, ttl, func(ctx context.Context) ([]byte, error) {
 		if fn == nil {
 			c.observe(ctx, "remember_string", key, false, errors.New("cache remember string requires a callback"), start)
 			return nil, errors.New("cache remember string requires a callback")
@@ -392,13 +449,23 @@ func (c *Cache) RememberString(ctx context.Context, key string, ttl time.Duratio
 //	type Settings struct { Enabled bool `json:"enabled"` }
 //	ctx := context.Background()
 //	c := cache.NewCache(cache.NewMemoryStore(ctx))
-//	settings, err := cache.RememberJSON[Settings](ctx, c, "settings:alerts", time.Minute, func(context.Context) (Settings, error) {
+//	settings, err := cache.RememberJSON[Settings](c, "settings:alerts", time.Minute, func() (Settings, error) {
 //		return Settings{Enabled: true}, nil
 //	})
 //	fmt.Println(err == nil, settings.Enabled) // true true
-func RememberJSON[T any](ctx context.Context, cache *Cache, key string, ttl time.Duration, fn func(context.Context) (T, error)) (T, error) {
+func RememberJSON[T any](cache *Cache, key string, ttl time.Duration, fn func() (T, error)) (T, error) {
+	return RememberJSONCtx(context.Background(), cache, key, ttl, func(ctx context.Context) (T, error) {
+		if fn == nil {
+			var zero T
+			return zero, errors.New("cache remember json requires a callback")
+		}
+		return fn()
+	})
+}
+
+func RememberJSONCtx[T any](ctx context.Context, cache *Cache, key string, ttl time.Duration, fn func(context.Context) (T, error)) (T, error) {
 	var zero T
-	out, ok, err := GetJSON[T](ctx, cache, key)
+	out, ok, err := GetJSONCtx[T](ctx, cache, key)
 	if err != nil {
 		return zero, err
 	}
@@ -412,7 +479,7 @@ func RememberJSON[T any](ctx context.Context, cache *Cache, key string, ttl time
 	if err != nil {
 		return zero, err
 	}
-	if err := SetJSON(ctx, cache, key, value, ttl); err != nil {
+	if err := SetJSONCtx(ctx, cache, key, value, ttl); err != nil {
 		return zero, err
 	}
 	return value, nil

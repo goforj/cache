@@ -16,6 +16,6 @@ func main() {
 	// Example: decrement counter
 	ctx := context.Background()
 	c := cache.NewCache(cache.NewMemoryStore(ctx))
-	val, _ := c.Decrement(ctx, "rate:login:42", 1, time.Minute)
+	val, _ := c.Decrement("rate:login:42", 1, time.Minute)
 	fmt.Println(val) // -1
 }

@@ -16,7 +16,7 @@ func main() {
 	// Example: remember string
 	ctx := context.Background()
 	c := cache.NewCache(cache.NewMemoryStore(ctx))
-	val, err := c.RememberString(ctx, "settings:mode", time.Minute, func(context.Context) (string, error) {
+	val, err := c.RememberString("settings:mode", time.Minute, func() (string, error) {
 		return "on", nil
 	})
 	fmt.Println(err == nil, val) // true on

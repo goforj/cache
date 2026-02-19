@@ -16,5 +16,5 @@ func main() {
 	// Example: set string
 	ctx := context.Background()
 	c := cache.NewCache(cache.NewMemoryStore(ctx))
-	fmt.Println(c.SetString(ctx, "user:42:name", "Ada", time.Minute) == nil) // true
+	fmt.Println(c.SetString("user:42:name", "Ada", time.Minute) == nil) // true
 }

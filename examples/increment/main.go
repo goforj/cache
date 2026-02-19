@@ -16,6 +16,6 @@ func main() {
 	// Example: increment counter
 	ctx := context.Background()
 	c := cache.NewCache(cache.NewMemoryStore(ctx))
-	val, _ := c.Increment(ctx, "rate:login:42", 1, time.Minute)
+	val, _ := c.Increment("rate:login:42", 1, time.Minute)
 	fmt.Println(val) // 1
 }
