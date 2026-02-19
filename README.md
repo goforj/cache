@@ -92,22 +92,24 @@ StoreConfig keeps configuration explicit:
 Cache wraps a Store with ergonomic helpers:
 
 ```go
-Remember(ctx context.Context, key string, ttl time.Duration, fn func(context.Context) ([]byte, error)) ([]byte, error)                     // returns value or computes/stores it when missing.
-RememberString(ctx context.Context, key string, ttl time.Duration, fn func(context.Context) (string, error)) (string, error)             // returns string value or computes/stores it when missing.
-RememberJSON[T any](ctx context.Context, cache *Cache, key string, ttl time.Duration, fn func(context.Context) (T, error)) (T, error)    // returns JSON value or computes/stores it when missing.
-Get(ctx context.Context, key string) ([]byte, bool, error)                                                                               // returns raw bytes for key when present.
-GetString(ctx context.Context, key string) (string, bool, error)                                                                         // returns string for key when present.
-GetJSON[T any](ctx context.Context, cache *Cache, key string) (T, bool, error)                                                           // decodes JSON into T when key exists.
-Set(ctx context.Context, key string, value []byte, ttl time.Duration) error                                                              // writes bytes to key with TTL.
-SetString(ctx context.Context, key string, value string, ttl time.Duration) error                                                        // writes string to key with TTL.
-SetJSON[T any](ctx context.Context, cache *Cache, key string, value T, ttl time.Duration) error                                          // writes JSON-encoded value to key with TTL.
-Add(ctx context.Context, key string, value []byte, ttl time.Duration) (bool, error)                                                      // writes value only when key is not present.
-Increment(ctx context.Context, key string, delta int64, ttl time.Duration) (int64, error)                                                // increments numeric value and returns the result.
-Decrement(ctx context.Context, key string, delta int64, ttl time.Duration) (int64, error)                                                // decrements numeric value and returns the result.
-Pull(ctx context.Context, key string) ([]byte, bool, error)                                                                              // returns value and removes it.
-Delete(ctx context.Context, key string) error                                                                                            // removes a single key.
-DeleteMany(ctx context.Context, keys ...string) error                                                                                    // removes multiple keys.
-Flush(ctx context.Context) error                                                                                                         // clears all keys for this store scope.
+type CacheHelpers interface {
+	Remember(ctx context.Context, key string, ttl time.Duration, fn func(context.Context) ([]byte, error)) ([]byte, error)                  // returns value or computes/stores it when missing.
+	RememberString(ctx context.Context, key string, ttl time.Duration, fn func(context.Context) (string, error)) (string, error)            // returns string value or computes/stores it when missing.
+	RememberJSON[T any](ctx context.Context, cache *Cache, key string, ttl time.Duration, fn func(context.Context) (T, error)) (T, error)   // returns JSON value or computes/stores it when missing.
+	Get(ctx context.Context, key string) ([]byte, bool, error)                                                                              // returns raw bytes for key when present.
+	GetString(ctx context.Context, key string) (string, bool, error)                                                                        // returns string for key when present.
+	GetJSON[T any](ctx context.Context, cache *Cache, key string) (T, bool, error)                                                          // decodes JSON into T when key exists.
+	Set(ctx context.Context, key string, value []byte, ttl time.Duration) error                                                             // writes bytes to key with TTL.
+	SetString(ctx context.Context, key string, value string, ttl time.Duration) error                                                       // writes string to key with TTL.
+	SetJSON[T any](ctx context.Context, cache *Cache, key string, value T, ttl time.Duration) error                                         // writes JSON-encoded value to key with TTL.
+	Add(ctx context.Context, key string, value []byte, ttl time.Duration) (bool, error)                                                     // writes value only when key is not present.
+	Increment(ctx context.Context, key string, delta int64, ttl time.Duration) (int64, error)                                               // increments numeric value and returns the result.
+	Decrement(ctx context.Context, key string, delta int64, ttl time.Duration) (int64, error)                                               // decrements numeric value and returns the result.
+	Pull(ctx context.Context, key string) ([]byte, bool, error)                                                                             // returns value and removes it.
+	Delete(ctx context.Context, key string) error                                                                                           // removes a single key.
+	DeleteMany(ctx context.Context, keys ...string) error                                                                                   // removes multiple keys.
+	Flush(ctx context.Context) error                                                                                                        // clears all keys for this store scope.
+}
 ```
 
 Example:
