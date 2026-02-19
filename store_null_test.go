@@ -31,4 +31,12 @@ func TestNullStoreNoOps(t *testing.T) {
 	if err := store.Flush(ctx); err != nil {
 		t.Fatalf("flush should be nil")
 	}
+
+	if val, err := store.Decrement(ctx, "k", 1, time.Minute); err != nil || val != 0 {
+		t.Fatalf("decrement should no-op, val=%d err=%v", val, err)
+	}
+
+	if err := store.DeleteMany(ctx, "a", "b"); err != nil {
+		t.Fatalf("delete many should be nil")
+	}
 }

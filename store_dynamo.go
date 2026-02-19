@@ -65,9 +65,13 @@ func newDynamoClient(ctx context.Context, cfg StoreConfig) (*dynamodb.Client, er
 		return nil, err
 	}
 	if cfg.DynamoEndpoint != "" {
-		awsCfg.EndpointResolverWithOptions = aws.EndpointResolverWithOptionsFunc(func(service, region string, options ...interface{}) (aws.Endpoint, error) {
+		resolver := aws.EndpointResolverWithOptionsFunc(func(service, region string, options ...interface{}) (aws.Endpoint, error) {
 			return aws.Endpoint{URL: cfg.DynamoEndpoint, HostnameImmutable: true}, nil
 		})
+		if _, err := resolver.ResolveEndpoint("dynamodb", cfg.DynamoRegion); err != nil {
+			return nil, err
+		}
+		awsCfg.EndpointResolverWithOptions = resolver
 	}
 	return dynamodb.NewFromConfig(awsCfg), nil
 }

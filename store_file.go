@@ -13,6 +13,11 @@ import (
 	"time"
 )
 
+var (
+	createTempFile = os.CreateTemp
+	renameFile     = os.Rename
+)
+
 type fileRecord struct {
 	ExpiresAt int64  `json:"expires_at"`
 	Value     []byte `json:"value"`
@@ -78,7 +83,7 @@ func (s *fileStore) Set(_ context.Context, key string, value []byte, ttl time.Du
 		return err
 	}
 
-	tmp, err := os.CreateTemp(s.dir, "cache-*")
+	tmp, err := createTempFile(s.dir, "cache-*")
 	if err != nil {
 		return err
 	}
@@ -92,7 +97,7 @@ func (s *fileStore) Set(_ context.Context, key string, value []byte, ttl time.Du
 		_ = os.Remove(tmpPath)
 		return err
 	}
-	return os.Rename(tmpPath, s.path(key))
+	return renameFile(tmpPath, s.path(key))
 }
 
 func (s *fileStore) Add(ctx context.Context, key string, value []byte, ttl time.Duration) (bool, error) {

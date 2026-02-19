@@ -2,6 +2,7 @@ package cache
 
 import (
 	"context"
+	"os"
 	"testing"
 	"time"
 )
@@ -35,6 +36,7 @@ func TestStoreOptionsMutateConfig(t *testing.T) {
 	cfg = WithDynamoEndpoint("http://localhost:8000")(cfg)
 	cfg = WithDynamoRegion("eu-west-1")(cfg)
 	cfg = WithDynamoTable("tbl")(cfg)
+	cfg = WithDynamoClient(&dynStub{})(cfg)
 	cfg = WithSQL("sqlite", "file::memory:?cache=shared", "cache_entries")(cfg)
 	client := newStubRedisClient()
 	cfg = WithRedisClient(client)(cfg)
@@ -49,6 +51,7 @@ func TestStoreOptionsMutateConfig(t *testing.T) {
 		cfg.DynamoEndpoint != "http://localhost:8000" ||
 		cfg.DynamoRegion != "eu-west-1" ||
 		cfg.DynamoTable != "tbl" ||
+		cfg.DynamoClient == nil ||
 		cfg.SQLDriverName != "sqlite" ||
 		cfg.SQLDSN != "file::memory:?cache=shared" ||
 		cfg.SQLTable != "cache_entries" {
@@ -94,6 +97,65 @@ func TestFactoryHelpers(t *testing.T) {
 
 	sqlStore := NewSQLStore(ctx, "sqlite", "file::memory:?cache=shared", "cache_entries")
 	if sqlStore.Driver() != DriverSQL {
+		t.Fatalf("expected sql driver")
+	}
+}
+
+func TestNewStoreFallsBackToMemory(t *testing.T) {
+	ctx := context.Background()
+	store := NewStore(ctx, StoreConfig{Driver: Driver("unknown")})
+	if store.Driver() != DriverMemory {
+		t.Fatalf("expected fallback to memory driver, got %s", store.Driver())
+	}
+}
+
+func TestNewDynamoStoreErrorReturnsErrorStore(t *testing.T) {
+	ctx := context.Background()
+	empty := createEmptyAWSConfig(t)
+	t.Setenv("AWS_REGION", "")
+	t.Setenv("AWS_DEFAULT_REGION", "")
+	t.Setenv("AWS_CONFIG_FILE", empty)
+	t.Setenv("AWS_SHARED_CREDENTIALS_FILE", empty)
+
+	store := NewDynamoStore(ctx, StoreConfig{})
+	if es, ok := store.(*errorStore); !ok || es.driver != DriverDynamo {
+		t.Fatalf("expected errorStore for dynamo failure")
+	}
+}
+
+func TestNewSQLStoreErrorReturnsErrorStore(t *testing.T) {
+	ctx := context.Background()
+	store := NewSQLStore(ctx, "", "", "")
+	if es, ok := store.(*errorStore); !ok || es.driver != DriverSQL {
+		t.Fatalf("expected errorStore for sql failure")
+	}
+}
+
+func createEmptyAWSConfig(t *testing.T) string {
+	t.Helper()
+	f, err := os.CreateTemp("", "empty-aws-*")
+	if err != nil {
+		t.Fatalf("create temp: %v", err)
+	}
+	f.Close()
+	return f.Name()
+}
+
+func TestNewDynamoStoreAppliesOptions(t *testing.T) {
+	ctx := context.Background()
+	store := NewDynamoStore(ctx, StoreConfig{
+		DynamoClient: newDynStub(),
+		DynamoTable:  "tbl",
+	}, WithPrefix("opt"))
+	if store.Driver() != DriverDynamo {
+		t.Fatalf("expected dynamo driver")
+	}
+}
+
+func TestNewSQLStoreAppliesOptions(t *testing.T) {
+	ctx := context.Background()
+	store := NewSQLStore(ctx, "sqlite", "file::memory:?cache=shared", "tbl", WithPrefix("opt"))
+	if store.Driver() != DriverSQL {
 		t.Fatalf("expected sql driver")
 	}
 }

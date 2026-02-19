@@ -2,19 +2,9 @@ package cache
 
 import (
 	"context"
-	"net"
 	"testing"
 	"time"
 )
-
-// memcachedInMemoryDial spins up a handler per connection using a shared map.
-func memcachedInMemoryDial(data map[string][]byte) func(context.Context, string, string) (net.Conn, error) {
-	return func(_ context.Context, _, _ string) (net.Conn, error) {
-		server, client := net.Pipe()
-		go handleMemcachedConn(server, data)
-		return client, nil
-	}
-}
 
 func TestMemcachedStoreFullCoverage(t *testing.T) {
 	data := map[string][]byte{}
