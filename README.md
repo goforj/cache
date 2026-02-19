@@ -14,7 +14,7 @@
     <a href="https://goreportcard.com/report/github.com/goforj/cache"><img src="https://goreportcard.com/badge/github.com/goforj/cache" alt="Go Report Card"></a>
     <a href="https://codecov.io/gh/goforj/cache"><img src="https://codecov.io/gh/goforj/cache/graph/badge.svg?token=B6ROULLKWU"/></a>
 <!-- test-count:embed:start -->
-    <img src="https://img.shields.io/badge/tests-87-brightgreen" alt="Tests">
+    <img src="https://img.shields.io/badge/tests-90-brightgreen" alt="Tests">
 <!-- test-count:embed:end -->
 </p>
 
@@ -31,7 +31,8 @@ An explicit cache abstraction with a minimal Store interface and ergonomic Cache
 |              <img src="https://img.shields.io/badge/memory-5c5c5c?logo=cachet&logoColor=white" alt="Memory"> | In-process | - | - | ✓ | ✓ | Fastest; per-process only, best for single-node or short-lived data. |
 |        <img src="https://img.shields.io/badge/memcached-0198c4?logo=buffer&logoColor=white" alt="Memcached"> | Networked | ✓ | - | ✓ | ✓ | Millisecond access; TTL resolution is 1s; use multiple nodes via `WithMemcachedAddresses`. |
 |              <img src="https://img.shields.io/badge/redis-%23DC382D?logo=redis&logoColor=white" alt="Redis"> | Networked | ✓ | - | ✓ | ✓ | Full feature set; supports prefixing and counters with per-key TTL refresh. |
-| <img src="https://img.shields.io/badge/dynamodb-4053D6?logo=amazon-dynamodb&logoColor=white" alt="DynamoDB"> | Networked | ✓ | ✓ | ✓ | ✓ | Stubbed placeholder; add AWS SDK + table setup to enable. |
+| <img src="https://img.shields.io/badge/dynamodb-4053D6?logo=amazon-dynamodb&logoColor=white" alt="DynamoDB"> | Networked | ✓ | ✓ | ✓ | ✓ | Backed by DynamoDB (supports localstack/dynamodb-local). |
+|    <img src="https://img.shields.io/badge/sql-336791?logo=postgresql&logoColor=white" alt="SQL"> | Networked / local | ✓ | ✓ | ✓ | ✓ | Postgres / MySQL / SQLite via database/sql; table schema managed automatically. |
 
 ## Installation
 
@@ -90,11 +91,24 @@ StoreConfig keeps configuration explicit:
 
 Cache wraps a Store with ergonomic helpers:
 
-- Remember, RememberString, RememberJSON
-- Get, GetString, GetJSON
-- Set, SetString, SetJSON
-- Add, Increment, Decrement
-- Pull, Delete, DeleteMany, Flush
+```go
+Remember(ctx context.Context, key string, ttl time.Duration, fn func(context.Context) ([]byte, error)) ([]byte, error)                     // returns value or computes/stores it when missing.
+RememberString(ctx context.Context, key string, ttl time.Duration, fn func(context.Context) (string, error)) (string, error)             // returns string value or computes/stores it when missing.
+RememberJSON[T any](ctx context.Context, cache *Cache, key string, ttl time.Duration, fn func(context.Context) (T, error)) (T, error)    // returns JSON value or computes/stores it when missing.
+Get(ctx context.Context, key string) ([]byte, bool, error)                                                                               // returns raw bytes for key when present.
+GetString(ctx context.Context, key string) (string, bool, error)                                                                         // returns string for key when present.
+GetJSON[T any](ctx context.Context, cache *Cache, key string) (T, bool, error)                                                           // decodes JSON into T when key exists.
+Set(ctx context.Context, key string, value []byte, ttl time.Duration) error                                                              // writes bytes to key with TTL.
+SetString(ctx context.Context, key string, value string, ttl time.Duration) error                                                        // writes string to key with TTL.
+SetJSON[T any](ctx context.Context, cache *Cache, key string, value T, ttl time.Duration) error                                          // writes JSON-encoded value to key with TTL.
+Add(ctx context.Context, key string, value []byte, ttl time.Duration) (bool, error)                                                      // writes value only when key is not present.
+Increment(ctx context.Context, key string, delta int64, ttl time.Duration) (int64, error)                                                // increments numeric value and returns the result.
+Decrement(ctx context.Context, key string, delta int64, ttl time.Duration) (int64, error)                                                // decrements numeric value and returns the result.
+Pull(ctx context.Context, key string) ([]byte, bool, error)                                                                              // returns value and removes it.
+Delete(ctx context.Context, key string) error                                                                                            // removes a single key.
+DeleteMany(ctx context.Context, keys ...string) error                                                                                    // removes multiple keys.
+Flush(ctx context.Context) error                                                                                                         // clears all keys for this store scope.
+```
 
 Example:
 
@@ -137,9 +151,9 @@ The API section below is autogenerated; do not edit between the markers.
 |------:|:-----------|
 | **Cache** | [Add](#add) [Decrement](#decrement) [Delete](#delete) [DeleteMany](#deletemany) [Driver](#driver) [Flush](#flush) [Get](#get) [GetString](#getstring) [Increment](#increment) [NewCache](#newcache) [NewCacheWithTTL](#newcachewithttl) [Pull](#pull) [Remember](#remember) [RememberString](#rememberstring) [Set](#set) [SetString](#setstring) [Store](#store) |
 | **Cache JSON** | [GetJSON](#getjson) [RememberJSON](#rememberjson) [SetJSON](#setjson) |
-| **Constructors** | [NewDynamoStore](#newdynamostore) [NewFileStore](#newfilestore) [NewMemcachedStore](#newmemcachedstore) [NewMemoryStore](#newmemorystore) [NewNullStore](#newnullstore) [NewRedisStore](#newredisstore) [NewStore](#newstore) [NewStoreWith](#newstorewith) |
+| **Constructors** | [NewDynamoStore](#newdynamostore) [NewFileStore](#newfilestore) [NewMemcachedStore](#newmemcachedstore) [NewMemoryStore](#newmemorystore) [NewNullStore](#newnullstore) [NewRedisStore](#newredisstore) [NewSQLStore](#newsqlstore) [NewStore](#newstore) [NewStoreWith](#newstorewith) |
 | **Memoization** | [NewMemoStore](#newmemostore) |
-| **Other** | [WithDefaultTTL](#withdefaultttl) [WithDynamoClient](#withdynamoclient) [WithDynamoEndpoint](#withdynamoendpoint) [WithDynamoRegion](#withdynamoregion) [WithDynamoTable](#withdynamotable) [WithFileDir](#withfiledir) [WithMemcachedAddresses](#withmemcachedaddresses) [WithMemoryCleanupInterval](#withmemorycleanupinterval) [WithPrefix](#withprefix) [WithRedisClient](#withredisclient) |
+| **Other** | [WithDefaultTTL](#withdefaultttl) [WithDynamoClient](#withdynamoclient) [WithDynamoEndpoint](#withdynamoendpoint) [WithDynamoRegion](#withdynamoregion) [WithDynamoTable](#withdynamotable) [WithFileDir](#withfiledir) [WithMemcachedAddresses](#withmemcachedaddresses) [WithMemoryCleanupInterval](#withmemorycleanupinterval) [WithPrefix](#withprefix) [WithRedisClient](#withredisclient) [WithSQL](#withsql) |
 
 
 ## Cache
@@ -425,6 +439,34 @@ store := cache.NewRedisStore(ctx, redisClient, cache.WithPrefix("app"))
 fmt.Println(store.Driver()) // redis
 ```
 
+### <a id="newsqlstore"></a>NewSQLStore
+
+NewSQLStore builds a SQL-backed store (postgres, mysql, sqlite).
+
+_Example: sqlite helper_
+
+```go
+ctx := context.Background()
+store := cache.NewSQLStore(ctx, "sqlite", "file:cache.db?cache=shared&mode=rwc", "cache_entries")
+fmt.Println(store.Driver()) // sql
+```
+
+_Example: postgres helper_
+
+```go
+dsnPg := "postgres://user:pass@localhost:5432/app?sslmode=disable"
+storePg := cache.NewSQLStore(ctx, "pgx", dsnPg, "cache_entries")
+fmt.Println(storePg.Driver()) // sql
+```
+
+_Example: mysql helper_
+
+```go
+dsnMy := "user:pass@tcp(localhost:3306)/app?parseTime=true"
+storeMy := cache.NewSQLStore(ctx, "mysql", dsnMy, "cache_entries")
+fmt.Println(storeMy.Driver()) // sql
+```
+
 ### <a id="newstore"></a>NewStore
 
 NewStore returns a concrete store for the requested driver.
@@ -526,4 +568,8 @@ WithPrefix sets the key prefix for shared backends (e.g., redis).
 ### <a id="withredisclient"></a>WithRedisClient
 
 WithRedisClient sets the redis client; required when using DriverRedis.
+
+### <a id="withsql"></a>WithSQL
+
+WithSQL configures the SQL driver (driver name + DSN + optional table).
 <!-- api:embed:end -->

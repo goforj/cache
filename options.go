@@ -84,3 +84,15 @@ func WithDynamoClient(client DynamoAPI) StoreOption {
 		return cfg
 	}
 }
+
+// WithSQL configures the SQL driver (driver name + DSN + optional table).
+func WithSQL(driverName, dsn, table string) StoreOption {
+	return func(cfg StoreConfig) StoreConfig {
+		cfg.SQLDriverName = driverName
+		cfg.SQLDSN = dsn
+		if table != "" {
+			cfg.SQLTable = table
+		}
+		return cfg
+	}
+}

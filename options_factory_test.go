@@ -35,6 +35,7 @@ func TestStoreOptionsMutateConfig(t *testing.T) {
 	cfg = WithDynamoEndpoint("http://localhost:8000")(cfg)
 	cfg = WithDynamoRegion("eu-west-1")(cfg)
 	cfg = WithDynamoTable("tbl")(cfg)
+	cfg = WithSQL("sqlite", "file::memory:?cache=shared", "cache_entries")(cfg)
 	client := newStubRedisClient()
 	cfg = WithRedisClient(client)(cfg)
 
@@ -47,7 +48,10 @@ func TestStoreOptionsMutateConfig(t *testing.T) {
 		cfg.MemcachedAddresses[0] != "127.0.0.1:11211" ||
 		cfg.DynamoEndpoint != "http://localhost:8000" ||
 		cfg.DynamoRegion != "eu-west-1" ||
-		cfg.DynamoTable != "tbl" {
+		cfg.DynamoTable != "tbl" ||
+		cfg.SQLDriverName != "sqlite" ||
+		cfg.SQLDSN != "file::memory:?cache=shared" ||
+		cfg.SQLTable != "cache_entries" {
 		t.Fatalf("options did not apply correctly: %+v", cfg)
 	}
 }
@@ -86,5 +90,10 @@ func TestFactoryHelpers(t *testing.T) {
 	dyn := NewDynamoStore(ctx, StoreConfig{})
 	if dyn.Driver() != DriverDynamo {
 		t.Fatalf("expected dynamo driver")
+	}
+
+	sqlStore := NewSQLStore(ctx, "sqlite", "file::memory:?cache=shared", "cache_entries")
+	if sqlStore.Driver() != DriverSQL {
+		t.Fatalf("expected sql driver")
 	}
 }

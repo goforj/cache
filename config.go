@@ -46,6 +46,13 @@ type StoreConfig struct {
 	DynamoTable string
 	// DynamoClient allows injecting a preconfigured DynamoDB client.
 	DynamoClient DynamoAPI
+
+	// SQLDriverName is the database/sql driver name: "postgres", "mysql", or "sqlite".
+	SQLDriverName string
+	// SQLDSN is the driver-specific DSN.
+	SQLDSN string
+	// SQLTable is the table name for the SQL driver.
+	SQLTable string
 }
 
 func (c StoreConfig) withDefaults() StoreConfig {
@@ -72,6 +79,9 @@ func (c StoreConfig) withDefaults() StoreConfig {
 	}
 	if c.DynamoTable == "" {
 		c.DynamoTable = "cache_entries"
+	}
+	if c.SQLTable == "" {
+		c.SQLTable = "cache_entries"
 	}
 	return c
 }

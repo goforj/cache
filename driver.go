@@ -9,5 +9,6 @@ const (
 	DriverMemory    Driver = "memory"
 	DriverMemcached Driver = "memcached"
 	DriverDynamo    Driver = "dynamodb"
+	DriverSQL       Driver = "sql"
 	DriverRedis     Driver = "redis"
 )
