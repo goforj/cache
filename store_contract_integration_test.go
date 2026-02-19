@@ -240,7 +240,66 @@ func integrationFixtures(t *testing.T) []storeFactory {
 		})
 	}
 
-	// Dynamo driver is stubbed; integration intentionally skipped.
+	if integrationDriverEnabled("sql_sqlite") {
+		fixtures = append(fixtures, storeFactory{
+			name: "sql_sqlite",
+			new: func(t *testing.T) (Store, func()) {
+				store := NewStore(context.Background(), StoreConfig{
+					Driver:        DriverSQL,
+					DefaultTTL:    2 * time.Second,
+					SQLDriverName: "sqlite",
+					SQLDSN:        "file::memory:?cache=shared",
+					SQLTable:      "cache_entries",
+					Prefix:        "itest",
+				})
+				return store, func() {}
+			},
+		})
+	}
+
+	if integrationDriverEnabled("sql_postgres") {
+		addr := integrationAddr("sql_postgres")
+		if addr == "" {
+			t.Fatalf("sql_postgres integration requested but no address available")
+		}
+		fixtures = append(fixtures, storeFactory{
+			name: "sql_postgres",
+			new: func(t *testing.T) (Store, func()) {
+				dsn := "postgres://user:pass@" + addr + "/app?sslmode=disable"
+				store := NewStore(context.Background(), StoreConfig{
+					Driver:        DriverSQL,
+					DefaultTTL:    2 * time.Second,
+					SQLDriverName: "pgx",
+					SQLDSN:        dsn,
+					SQLTable:      "cache_entries",
+					Prefix:        "itest",
+				})
+				return store, func() {}
+			},
+		})
+	}
+
+	if integrationDriverEnabled("sql_mysql") {
+		addr := integrationAddr("sql_mysql")
+		if addr == "" {
+			t.Fatalf("sql_mysql integration requested but no address available")
+		}
+		fixtures = append(fixtures, storeFactory{
+			name: "sql_mysql",
+			new: func(t *testing.T) (Store, func()) {
+				dsn := "user:pass@tcp(" + addr + ")/app?parseTime=true"
+				store := NewStore(context.Background(), StoreConfig{
+					Driver:        DriverSQL,
+					DefaultTTL:    2 * time.Second,
+					SQLDriverName: "mysql",
+					SQLDSN:        dsn,
+					SQLTable:      "cache_entries",
+					Prefix:        "itest",
+				})
+				return store, func() {}
+			},
+		})
+	}
 
 	return fixtures
 }

@@ -54,7 +54,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        driver: [memory, file, redis, memcached, dynamodb]
+        driver: [memory, file, redis, memcached, dynamodb, sql_sqlite, sql_postgres, sql_mysql]
     env:
       GOCACHE: /tmp/go-build-cache
       INTEGRATION_DRIVER: ${{ matrix.driver }}
@@ -71,4 +71,4 @@ jobs:
         run: go mod download
 
       - name: Run integration tests (per driver)
-        run: go test -tags integration ./...
+        run: INTEGRATION_DRIVER=${{ matrix.driver }} go test -tags integration ./...
