@@ -349,24 +349,24 @@ func (c *Cache) FlushCtx(ctx context.Context) error {
 	return err
 }
 
-// Remember returns key value or computes/stores it when missing.
+// RememberBytes returns key value or computes/stores it when missing.
 // @group Cache
 //
 // Example: remember bytes
 //
 //	ctx := context.Background()
 //	c := cache.NewCache(cache.NewMemoryStore(ctx))
-//	data, err := c.Remember("dashboard:summary", time.Minute, func() ([]byte, error) {
+//	data, err := c.RememberBytes("dashboard:summary", time.Minute, func() ([]byte, error) {
 //		return []byte("payload"), nil
 //	})
 //	fmt.Println(err == nil, string(data)) // true payload
-func (c *Cache) Remember(key string, ttl time.Duration, fn func() ([]byte, error)) ([]byte, error) {
-	return c.RememberCtx(context.Background(), key, ttl, func(ctx context.Context) ([]byte, error) {
-		if fn == nil {
-			return nil, errors.New("cache remember requires a callback")
-		}
-		return fn()
-	})
+func (c *Cache) RememberBytes(key string, ttl time.Duration, fn func() ([]byte, error)) ([]byte, error) {
+    return c.RememberCtx(context.Background(), key, ttl, func(ctx context.Context) ([]byte, error) {
+        if fn == nil {
+            return nil, errors.New("cache remember requires a callback")
+        }
+        return fn()
+    })
 }
 
 func (c *Cache) RememberCtx(ctx context.Context, key string, ttl time.Duration, fn func(context.Context) ([]byte, error)) ([]byte, error) {
@@ -461,6 +461,63 @@ func RememberJSON[T any](cache *Cache, key string, ttl time.Duration, fn func() 
 		}
 		return fn()
 	})
+}
+
+// Remember is the ergonomic, typed remember helper using JSON encoding by default.
+// @group Cache
+func Remember[T any](cache *Cache, key string, ttl time.Duration, fn func() (T, error)) (T, error) {
+    return RememberValue(cache, key, ttl, fn)
+}
+
+// ValueCodec defines how to encode/decode values for RememberValue.
+type ValueCodec[T any] struct {
+	Encode func(T) ([]byte, error)
+	Decode func([]byte) (T, error)
+}
+
+// defaultValueCodec uses JSON to encode/decode values.
+func defaultValueCodec[T any]() ValueCodec[T] {
+	return ValueCodec[T]{
+		Encode: func(v T) ([]byte, error) { return json.Marshal(v) },
+		Decode: func(b []byte) (T, error) {
+			var out T
+			err := json.Unmarshal(b, &out)
+			return out, err
+		},
+	}
+}
+
+// RememberValue returns a typed value or computes/stores it when missing using JSON encoding by default.
+// @group Cache
+func RememberValue[T any](cache *Cache, key string, ttl time.Duration, fn func() (T, error)) (T, error) {
+    return RememberValueWithCodec(context.Background(), cache, key, ttl, fn, defaultValueCodec[T]())
+}
+
+// RememberValueWithCodec allows custom encoding/decoding for typed remember operations.
+func RememberValueWithCodec[T any](ctx context.Context, cache *Cache, key string, ttl time.Duration, fn func() (T, error), codec ValueCodec[T]) (T, error) {
+	var zero T
+	body, ok, err := cache.GetCtx(ctx, key)
+	if err != nil {
+		return zero, err
+	}
+	if ok {
+		return codec.Decode(body)
+	}
+	if fn == nil {
+		return zero, errors.New("cache remember value requires a callback")
+	}
+	val, err := fn()
+	if err != nil {
+		return zero, err
+	}
+	encoded, err := codec.Encode(val)
+	if err != nil {
+		return zero, err
+	}
+	if err := cache.SetCtx(ctx, key, encoded, ttl); err != nil {
+		return zero, err
+	}
+	return val, nil
 }
 
 func RememberJSONCtx[T any](ctx context.Context, cache *Cache, key string, ttl time.Duration, fn func(context.Context) (T, error)) (T, error) {

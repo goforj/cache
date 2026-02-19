@@ -13,11 +13,16 @@ import (
 func main() {
 	// Remember returns key value or computes/stores it when missing.
 
-	// Example: remember bytes
+	// Example: remember typed struct
 	ctx := context.Background()
 	c := cache.NewCache(cache.NewMemoryStore(ctx))
-	data, err := c.Remember("dashboard:summary", time.Minute, func() ([]byte, error) {
-		return []byte("payload"), nil
+
+	type Profile struct {
+		Name string `json:"name"`
+	}
+
+	profile, err := cache.Remember[Profile](c, "user:42:profile", time.Minute, func() (Profile, error) {
+		return Profile{Name: "Ada"}, nil
 	})
-	fmt.Println(err == nil, string(data)) // true payload
+	fmt.Println(err == nil, profile.Name) // true Ada
 }
