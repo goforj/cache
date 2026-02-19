@@ -53,6 +53,11 @@ type StoreConfig struct {
 	SQLDSN string
 	// SQLTable is the table name for the SQL driver.
 	SQLTable string
+
+	// Compression controls value compression before storage.
+	Compression CompressionCodec
+	// MaxValueBytes enforces a maximum value size (post-compression) when > 0.
+	MaxValueBytes int
 }
 
 func (c StoreConfig) withDefaults() StoreConfig {

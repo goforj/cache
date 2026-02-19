@@ -6,6 +6,13 @@ import "time"
 type StoreOption func(StoreConfig) StoreConfig
 
 // WithDefaultTTL overrides the fallback TTL used when ttl <= 0.
+// @group Options
+//
+// Example: override default TTL
+//
+//	ctx := context.Background()
+//	store := cache.NewStoreWith(ctx, cache.DriverMemory, cache.WithDefaultTTL(30*time.Second))
+//	fmt.Println(store.Driver()) // memory
 func WithDefaultTTL(ttl time.Duration) StoreOption {
 	return func(cfg StoreConfig) StoreConfig {
 		cfg.DefaultTTL = ttl
@@ -14,6 +21,13 @@ func WithDefaultTTL(ttl time.Duration) StoreOption {
 }
 
 // WithMemoryCleanupInterval overrides the sweep interval for the memory driver.
+// @group Options
+//
+// Example: custom memory sweep
+//
+//	ctx := context.Background()
+//	store := cache.NewStoreWith(ctx, cache.DriverMemory, cache.WithMemoryCleanupInterval(5*time.Minute))
+//	fmt.Println(store.Driver()) // memory
 func WithMemoryCleanupInterval(interval time.Duration) StoreOption {
 	return func(cfg StoreConfig) StoreConfig {
 		cfg.MemoryCleanupInterval = interval
@@ -22,6 +36,13 @@ func WithMemoryCleanupInterval(interval time.Duration) StoreOption {
 }
 
 // WithPrefix sets the key prefix for shared backends (e.g., redis).
+// @group Options
+//
+// Example: prefix keys
+//
+//	ctx := context.Background()
+//	store := cache.NewStoreWith(ctx, cache.DriverRedis, cache.WithPrefix("svc"))
+//	fmt.Println(store.Driver()) // redis
 func WithPrefix(prefix string) StoreOption {
 	return func(cfg StoreConfig) StoreConfig {
 		cfg.Prefix = prefix
@@ -30,6 +51,14 @@ func WithPrefix(prefix string) StoreOption {
 }
 
 // WithRedisClient sets the redis client; required when using DriverRedis.
+// @group Options
+//
+// Example: inject redis client
+//
+//	ctx := context.Background()
+//	rdb := redis.NewClient(&redis.Options{Addr: "127.0.0.1:6379"})
+//	store := cache.NewStoreWith(ctx, cache.DriverRedis, cache.WithRedisClient(rdb))
+//	fmt.Println(store.Driver()) // redis
 func WithRedisClient(client RedisClient) StoreOption {
 	return func(cfg StoreConfig) StoreConfig {
 		cfg.RedisClient = client
@@ -38,6 +67,13 @@ func WithRedisClient(client RedisClient) StoreOption {
 }
 
 // WithFileDir sets the directory used by the file driver.
+// @group Options
+//
+// Example: set file dir
+//
+//	ctx := context.Background()
+//	store := cache.NewStoreWith(ctx, cache.DriverFile, cache.WithFileDir("/tmp/cache"))
+//	fmt.Println(store.Driver()) // file
 func WithFileDir(dir string) StoreOption {
 	return func(cfg StoreConfig) StoreConfig {
 		cfg.FileDir = dir
@@ -46,6 +82,13 @@ func WithFileDir(dir string) StoreOption {
 }
 
 // WithMemcachedAddresses sets memcached server addresses (host:port).
+// @group Options
+//
+// Example: memcached cluster
+//
+//	ctx := context.Background()
+//	store := cache.NewStoreWith(ctx, cache.DriverMemcached, cache.WithMemcachedAddresses("127.0.0.1:11211"))
+//	fmt.Println(store.Driver()) // memcached
 func WithMemcachedAddresses(addrs ...string) StoreOption {
 	return func(cfg StoreConfig) StoreConfig {
 		cfg.MemcachedAddresses = append([]string{}, addrs...)
@@ -54,6 +97,13 @@ func WithMemcachedAddresses(addrs ...string) StoreOption {
 }
 
 // WithDynamoEndpoint sets the DynamoDB endpoint (useful for local testing).
+// @group Options
+//
+// Example: dynamo local endpoint
+//
+//	ctx := context.Background()
+//	store := cache.NewStoreWith(ctx, cache.DriverDynamo, cache.WithDynamoEndpoint("http://localhost:8000"))
+//	fmt.Println(store.Driver()) // dynamodb
 func WithDynamoEndpoint(endpoint string) StoreOption {
 	return func(cfg StoreConfig) StoreConfig {
 		cfg.DynamoEndpoint = endpoint
@@ -62,6 +112,13 @@ func WithDynamoEndpoint(endpoint string) StoreOption {
 }
 
 // WithDynamoRegion sets the DynamoDB region for requests.
+// @group Options
+//
+// Example: set dynamo region
+//
+//	ctx := context.Background()
+//	store := cache.NewStoreWith(ctx, cache.DriverDynamo, cache.WithDynamoRegion("us-west-2"))
+//	fmt.Println(store.Driver()) // dynamodb
 func WithDynamoRegion(region string) StoreOption {
 	return func(cfg StoreConfig) StoreConfig {
 		cfg.DynamoRegion = region
@@ -70,6 +127,13 @@ func WithDynamoRegion(region string) StoreOption {
 }
 
 // WithDynamoTable sets the table used by the DynamoDB driver.
+// @group Options
+//
+// Example: custom dynamo table
+//
+//	ctx := context.Background()
+//	store := cache.NewStoreWith(ctx, cache.DriverDynamo, cache.WithDynamoTable("cache_entries"))
+//	fmt.Println(store.Driver()) // dynamodb
 func WithDynamoTable(table string) StoreOption {
 	return func(cfg StoreConfig) StoreConfig {
 		cfg.DynamoTable = table
@@ -78,6 +142,14 @@ func WithDynamoTable(table string) StoreOption {
 }
 
 // WithDynamoClient injects a pre-built DynamoDB client.
+// @group Options
+//
+// Example: inject dynamo client
+//
+//	ctx := context.Background()
+//	var client cache.DynamoAPI // assume already configured
+//	store := cache.NewStoreWith(ctx, cache.DriverDynamo, cache.WithDynamoClient(client))
+//	fmt.Println(store.Driver()) // dynamodb
 func WithDynamoClient(client DynamoAPI) StoreOption {
 	return func(cfg StoreConfig) StoreConfig {
 		cfg.DynamoClient = client
@@ -86,6 +158,16 @@ func WithDynamoClient(client DynamoAPI) StoreOption {
 }
 
 // WithSQL configures the SQL driver (driver name + DSN + optional table).
+// @group Options
+//
+// Example: sqlite via options
+//
+//	ctx := context.Background()
+//	store := cache.NewStoreWith(ctx, cache.DriverSQL,
+//		cache.WithSQL("sqlite", "file::memory:?cache=shared", "cache_entries"),
+//		cache.WithPrefix("svc"),
+//	)
+//	fmt.Println(store.Driver()) // sql
 func WithSQL(driverName, dsn, table string) StoreOption {
 	return func(cfg StoreConfig) StoreConfig {
 		cfg.SQLDriverName = driverName
@@ -93,6 +175,36 @@ func WithSQL(driverName, dsn, table string) StoreOption {
 		if table != "" {
 			cfg.SQLTable = table
 		}
+		return cfg
+	}
+}
+
+// WithCompression enables value compression using the chosen codec.
+// @group Options
+//
+// Example: gzip compression
+//
+//	ctx := context.Background()
+//	store := cache.NewStoreWith(ctx, cache.DriverMemory, cache.WithCompression(cache.CompressionGzip))
+//	fmt.Println(store.Driver()) // memory
+func WithCompression(codec CompressionCodec) StoreOption {
+	return func(cfg StoreConfig) StoreConfig {
+		cfg.Compression = codec
+		return cfg
+	}
+}
+
+// WithMaxValueBytes sets a per-entry size limit (0 disables the check).
+// @group Options
+//
+// Example: limit value size
+//
+//	ctx := context.Background()
+//	store := cache.NewStoreWith(ctx, cache.DriverMemory, cache.WithMaxValueBytes(1024))
+//	fmt.Println(store.Driver()) // memory
+func WithMaxValueBytes(limit int) StoreOption {
+	return func(cfg StoreConfig) StoreConfig {
+		cfg.MaxValueBytes = limit
 		return cfg
 	}
 }

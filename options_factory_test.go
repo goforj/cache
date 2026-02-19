@@ -159,3 +159,13 @@ func TestNewSQLStoreAppliesOptions(t *testing.T) {
 		t.Fatalf("expected sql driver")
 	}
 }
+
+func TestStoreConfigWithDefaultsMemcached(t *testing.T) {
+	cfg := (StoreConfig{Driver: DriverMemcached}).withDefaults()
+	if len(cfg.MemcachedAddresses) == 0 {
+		t.Fatalf("expected default memcached address")
+	}
+	if cfg.DynamoRegion == "" || cfg.DynamoTable == "" {
+		t.Fatalf("expected dynamo defaults set")
+	}
+}

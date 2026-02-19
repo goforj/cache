@@ -15,32 +15,34 @@ import "context"
 //	fmt.Println(store.Driver()) // memory
 func NewStore(ctx context.Context, cfg StoreConfig) Store {
 	cfg = cfg.withDefaults()
+	var store Store
 	switch cfg.Driver {
 	case DriverNull:
-		return newNullStore()
+		store = newNullStore()
 	case DriverFile:
-		return newFileStore(cfg.FileDir, cfg.DefaultTTL)
+		store = newFileStore(cfg.FileDir, cfg.DefaultTTL)
 	case DriverMemory:
-		return newMemoryStore(cfg.DefaultTTL, cfg.MemoryCleanupInterval)
+		store = newMemoryStore(cfg.DefaultTTL, cfg.MemoryCleanupInterval)
 	case DriverMemcached:
-		return newMemcachedStore(cfg.MemcachedAddresses, cfg.DefaultTTL, cfg.Prefix)
+		store = newMemcachedStore(cfg.MemcachedAddresses, cfg.DefaultTTL, cfg.Prefix)
 	case DriverDynamo:
-		store, err := newDynamoStore(ctx, cfg)
+		var err error
+		store, err = newDynamoStore(ctx, cfg)
 		if err != nil {
 			return &errorStore{driver: DriverDynamo, err: err}
 		}
-		return store
 	case DriverSQL:
-		store, err := newSQLStore(cfg)
+		var err error
+		store, err = newSQLStore(cfg)
 		if err != nil {
 			return &errorStore{driver: DriverSQL, err: err}
 		}
-		return store
 	case DriverRedis:
-		return newRedisStore(cfg.RedisClient, cfg.DefaultTTL, cfg.Prefix)
+		store = newRedisStore(cfg.RedisClient, cfg.DefaultTTL, cfg.Prefix)
 	default:
-		return newMemoryStore(cfg.DefaultTTL, cfg.MemoryCleanupInterval)
+		store = newMemoryStore(cfg.DefaultTTL, cfg.MemoryCleanupInterval)
 	}
+	return newShapingStore(store, cfg.Compression, cfg.MaxValueBytes)
 }
 
 // NewStoreWith builds a store using a driver and a set of functional options.
