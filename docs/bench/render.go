@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -113,21 +114,49 @@ func renderTable(byOp map[string][]benchRow) string {
 	if len(byOp) == 0 {
 		return ""
 	}
+
+	// Collect all drivers present in any op.
+	driverSet := map[string]struct{}{}
+	for _, rows := range byOp {
+		for _, r := range rows {
+			driverSet[r.Driver] = struct{}{}
+		}
+	}
+	var drivers []string
+	for d := range driverSet {
+		drivers = append(drivers, d)
+	}
+	sort.Strings(drivers)
+
+	ops := []string{"Set", "Get", "Add", "Inc", "Dec"}
+
+	// Build lookup op -> driver -> ns/op
+	lookup := make(map[string]map[string]float64)
+	for op, rows := range byOp {
+		for _, r := range rows {
+			if lookup[op] == nil {
+				lookup[op] = make(map[string]float64)
+			}
+			lookup[op][r.Driver] = r.NsOp
+		}
+	}
+
 	var buf bytes.Buffer
 	buf.WriteString(benchStart + "\n\n")
-	for _, op := range []string{"Set", "Get", "Add", "Inc", "Dec"} {
-		rows := byOp[op]
-		if len(rows) == 0 {
-			continue
+	buf.WriteString("| Driver | Set (ns/op) | Get | Add | Inc | Dec |\n")
+	buf.WriteString("|:------|------------:|----:|----:|----:|----:|\n")
+	for _, d := range drivers {
+		buf.WriteString(fmt.Sprintf("| %s", d))
+		for _, op := range ops {
+			if val, ok := lookup[op][d]; ok {
+				buf.WriteString(fmt.Sprintf(" | %.0f", val))
+			} else {
+				buf.WriteString(" | -")
+			}
 		}
-		buf.WriteString(fmt.Sprintf("### %s\n\n", op))
-		buf.WriteString("| Driver | ns/op |\n|:------|-----:|\n")
-		for _, r := range rows {
-			buf.WriteString(fmt.Sprintf("| %s | %.0f |\n", r.Driver, r.NsOp))
-		}
-		buf.WriteString("\n")
+		buf.WriteString(" |\n")
 	}
-	buf.WriteString(benchEnd + "\n")
+	buf.WriteString("\n" + benchEnd + "\n")
 	return buf.String()
 }
 

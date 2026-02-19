@@ -157,70 +157,16 @@ go test ./docs/bench -tags benchrender
 
 <!-- bench:embed:start -->
 
-### Set
-
-| Driver | ns/op |
-|:------|-----:|
-| memory | 103 |
-| file | 124090 |
-| redis | 87847 |
-| memcached | 422199 |
-| dynamodb | 750955 |
-| sql_postgres | 536534 |
-| sql_mysql | 1447028 |
-| sql_sqlite | 38143 |
-
-### Get
-
-| Driver | ns/op |
-|:------|-----:|
-| memory | 48 |
-| file | 3322 |
-| redis | 85112 |
-| memcached | 464319 |
-| dynamodb | 548770 |
-| sql_postgres | 102264 |
-| sql_mysql | 173348 |
-| sql_sqlite | 6821 |
-
-### Add
-
-| Driver | ns/op |
-|:------|-----:|
-| memory | 164 |
-| file | 11564 |
-| redis | 86716 |
-| memcached | 445796 |
-| dynamodb | 651123 |
-| sql_postgres | 140249 |
-| sql_mysql | 170597 |
-| sql_sqlite | 8895 |
-
-### Inc
-
-| Driver | ns/op |
-|:------|-----:|
-| memory | 166 |
-| file | 148097 |
-| redis | 156431 |
-| memcached | 428132 |
-| dynamodb | 911456 |
-| sql_postgres | 820212 |
-| sql_mysql | 1727795 |
-| sql_sqlite | 201994 |
-
-### Dec
-
-| Driver | ns/op |
-|:------|-----:|
-| memory | 304 |
-| file | 136801 |
-| redis | 157097 |
-| memcached | 438690 |
-| dynamodb | 998266 |
-| sql_postgres | 889743 |
-| sql_mysql | 1801926 |
-| sql_sqlite | 197080 |
+| Driver | Set (ns/op) | Get | Add | Inc | Dec |
+|:------|------------:|----:|----:|----:|----:|
+| dynamodb | 618327 | 598451 | 668462 | 999761 | 947362 |
+| file | 124522 | 2177 | 11551 | 140116 | 142392 |
+| memcached | 423594 | 804310 | 439042 | 490211 | 409042 |
+| memory | 96 | 50 | 163 | 158 | 159 |
+| redis | 80624 | 88332 | 83751 | 159739 | 147184 |
+| sql_mysql | 1395176 | 156484 | 177023 | 1775029 | 1867264 |
+| sql_postgres | 600169 | 99184 | 132898 | 910235 | 886676 |
+| sql_sqlite | 39298 | 7189 | 8002 | 214662 | 212148 |
 
 <!-- bench:embed:end -->
 
