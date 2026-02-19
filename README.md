@@ -20,7 +20,7 @@
 
 ## What cache is
 
-An explicit cache abstraction with a minimal `Store` interface and ergonomic `Cache` helpers. Drivers are chosen when you construct the store (no env coupling), so swapping backends is a dependency-injection change instead of a refactor.
+An explicit cache abstraction with a minimal Store interface and ergonomic Cache helpers. Drivers are chosen when you construct the store (no env coupling), so swapping backends is a dependency-injection change instead of a refactor.
 
 ## Drivers
 
@@ -77,23 +77,23 @@ func main() {
 
 ## StoreConfig
 
-`StoreConfig` keeps configuration explicit:
+StoreConfig keeps configuration explicit:
 
-- `Driver`: `DriverMemory` (default) or `DriverRedis`
-- `DefaultTTL`: fallback TTL when a call provides `ttl <= 0`
-- `MemoryCleanupInterval`: sweep interval for memory driver
-- `Prefix`: key prefix for shared backends
-- `RedisClient`: required when using the Redis driver
+- Driver: DriverMemory (default) or DriverRedis
+- DefaultTTL: fallback TTL when a call provides ttl <= 0
+- MemoryCleanupInterval: sweep interval for memory driver
+- Prefix: key prefix for shared backends
+- RedisClient: required when using the Redis driver
 
 ## Cache helpers
 
-`Cache` wraps a `Store` with ergonomic helpers:
+Cache wraps a Store with ergonomic helpers:
 
-- `Remember`, `RememberString`, `RememberJSON`
-- `Get`, `GetString`, `GetJSON`
-- `Set`, `SetString`, `SetJSON`
-- `Add`, `Increment`, `Decrement`
-- `Pull`, `Delete`, `DeleteMany`, `Flush`
+- Remember, RememberString, RememberJSON
+- Get, GetString, GetJSON
+- Set, SetString, SetJSON
+- Add, Increment, Decrement
+- Pull, Delete, DeleteMany, Flush
 
 Example:
 
