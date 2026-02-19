@@ -39,6 +39,26 @@ func TestCacheRememberCachesValue(t *testing.T) {
 	}
 }
 
+func TestRememberValueTyped(t *testing.T) {
+	type profile struct{ Name string }
+	c := NewCache(newMemoryStore(0, 0))
+
+	val, err := Remember[profile](c, "p", time.Minute, func() (profile, error) {
+		return profile{Name: "Ada"}, nil
+	})
+	if err != nil || val.Name != "Ada" {
+		t.Fatalf("unexpected remember value: %+v err=%v", val, err)
+	}
+
+	// ensure cached
+	val, err = Remember[profile](c, "p", time.Minute, func() (profile, error) {
+		return profile{Name: "Other"}, nil
+	})
+	if err != nil || val.Name != "Ada" {
+		t.Fatalf("expected cached value, got %+v err=%v", val, err)
+	}
+}
+
 func TestCacheRememberJSON(t *testing.T) {
 	repo := NewCache(newMemoryStore(0, 0))
 	ctx := context.Background()

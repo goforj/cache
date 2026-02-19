@@ -114,6 +114,23 @@ func runStoreContractSuite(t *testing.T, store Store) {
 	if _, ok, err := store.Get(ctx, "flush"); err != nil || ok {
 		t.Fatalf("expected flush to clear key; ok=%v err=%v", ok, err)
 	}
+
+	// Typed remember across drivers.
+	type payload struct{ Name string `json:"name"` }
+	cache := NewCache(store)
+	val, err := Remember[payload](cache, "remember:typed", time.Minute, func() (payload, error) {
+		return payload{Name: "Ada"}, nil
+	})
+	if err != nil || val.Name != "Ada" {
+		t.Fatalf("remember typed failed: %+v err=%v", val, err)
+	}
+	// Cached path should bypass callback.
+	val, err = Remember[payload](cache, "remember:typed", time.Minute, func() (payload, error) {
+		return payload{Name: "Other"}, nil
+	})
+	if err != nil || val.Name != "Ada" {
+		t.Fatalf("remember typed cache miss: %+v err=%v", val, err)
+	}
 }
 
 func contractTTL(driver Driver) (ttl time.Duration, wait time.Duration) {
