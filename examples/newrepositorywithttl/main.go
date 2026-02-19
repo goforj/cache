@@ -14,7 +14,7 @@ func main() {
 
 	// Example: repository with custom default TTL
 	ctx := context.Background()
-	store := cache.NewStore(ctx, cache.StoreConfig{Driver: cache.DriverMemory})
+	store := cache.NewMemoryStore(ctx)
 	repo := cache.NewRepositoryWithTTL(store, 2*time.Minute)
 	_ = ctx
 	_ = repo

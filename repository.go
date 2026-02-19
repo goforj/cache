@@ -19,7 +19,7 @@ type Repository struct {
 // Example: repository from store
 //
 //	ctx := context.Background()
-//	store := cache.NewStore(ctx, cache.StoreConfig{Driver: cache.DriverMemory})
+//	store := cache.NewMemoryStore(ctx)
 //	repo := cache.NewRepository(store)
 //	_ = repo
 func NewRepository(store Store) *Repository {
@@ -32,7 +32,7 @@ func NewRepository(store Store) *Repository {
 // Example: repository with custom default TTL
 //
 //	ctx := context.Background()
-//	store := cache.NewStore(ctx, cache.StoreConfig{Driver: cache.DriverMemory})
+//	store := cache.NewMemoryStore(ctx)
 //	repo := cache.NewRepositoryWithTTL(store, 2*time.Minute)
 //	_ = ctx
 //	_ = repo
@@ -48,6 +48,10 @@ func NewRepositoryWithTTL(store Store, defaultTTL time.Duration) *Repository {
 
 // Store returns the underlying store implementation.
 // @group Repository
+//
+// Example: access store
+//
+//	store := repo.Store()
 func (r *Repository) Store() Store {
 	return r.store
 }
@@ -58,7 +62,8 @@ func (r *Repository) Store() Store {
 // Example: get bytes
 //
 //	ctx := context.Background()
-//	repo := cache.NewRepository(cache.NewStore(ctx, cache.StoreConfig{Driver: cache.DriverMemory}))
+//	store := cache.NewMemoryStore(ctx)
+//	repo := cache.NewRepository(store)
 //	_ = repo.Set(ctx, "user:42", []byte("Ada"), 0)
 //	value, ok, _ := repo.Get(ctx, "user:42")
 //	_ = value
@@ -73,7 +78,8 @@ func (r *Repository) Get(ctx context.Context, key string) ([]byte, bool, error) 
 // Example: get string
 //
 //	ctx := context.Background()
-//	repo := cache.NewRepository(cache.NewStore(ctx, cache.StoreConfig{Driver: cache.DriverMemory}))
+//	store := cache.NewMemoryStore(ctx)
+//	repo := cache.NewRepository(store)
 //	_ = repo.SetString(ctx, "user:42:name", "Ada", 0)
 //	name, ok, _ := repo.GetString(ctx, "user:42:name")
 //	_ = name
@@ -93,7 +99,8 @@ func (r *Repository) GetString(ctx context.Context, key string) (string, bool, e
 //
 //	type Profile struct { Name string `json:"name"` }
 //	ctx := context.Background()
-//	repo := cache.NewRepository(cache.NewStore(ctx, cache.StoreConfig{Driver: cache.DriverMemory}))
+//	store := cache.NewMemoryStore(ctx)
+//	repo := cache.NewRepository(store)
 //	_ = cache.SetJSON(ctx, repo, "profile:42", Profile{Name: "Ada"}, 0)
 //	profile, ok, _ := cache.GetJSON[Profile](ctx, repo, "profile:42")
 //	_ = profile
@@ -117,7 +124,8 @@ func GetJSON[T any](ctx context.Context, r *Repository, key string) (T, bool, er
 // Example: set bytes with ttl
 //
 //	ctx := context.Background()
-//	repo := cache.NewRepository(cache.NewStore(ctx, cache.StoreConfig{Driver: cache.DriverMemory}))
+//	store := cache.NewMemoryStore(ctx)
+//	repo := cache.NewRepository(store)
 //	_ = repo.Set(ctx, "token", []byte("abc"), time.Minute)
 func (r *Repository) Set(ctx context.Context, key string, value []byte, ttl time.Duration) error {
 	return r.store.Set(ctx, key, value, r.resolveTTL(ttl))
@@ -129,7 +137,8 @@ func (r *Repository) Set(ctx context.Context, key string, value []byte, ttl time
 // Example: set string
 //
 //	ctx := context.Background()
-//	repo := cache.NewRepository(cache.NewStore(ctx, cache.StoreConfig{Driver: cache.DriverMemory}))
+//	store := cache.NewMemoryStore(ctx)
+//	repo := cache.NewRepository(store)
 //	_ = repo.SetString(ctx, "user:42:name", "Ada", time.Minute)
 func (r *Repository) SetString(ctx context.Context, key string, value string, ttl time.Duration) error {
 	return r.Set(ctx, key, []byte(value), ttl)
@@ -142,7 +151,8 @@ func (r *Repository) SetString(ctx context.Context, key string, value string, tt
 //
 //	type Profile struct { Name string `json:"name"` }
 //	ctx := context.Background()
-//	repo := cache.NewRepository(cache.NewStore(ctx, cache.StoreConfig{Driver: cache.DriverMemory}))
+//	store := cache.NewMemoryStore(ctx)
+//	repo := cache.NewRepository(store)
 //	_ = cache.SetJSON(ctx, repo, "profile:42", Profile{Name: "Ada"}, time.Minute)
 func SetJSON[T any](ctx context.Context, r *Repository, key string, value T, ttl time.Duration) error {
 	body, err := json.Marshal(value)
@@ -158,7 +168,8 @@ func SetJSON[T any](ctx context.Context, r *Repository, key string, value T, ttl
 // Example: add once
 //
 //	ctx := context.Background()
-//	repo := cache.NewRepository(cache.NewStore(ctx, cache.StoreConfig{Driver: cache.DriverMemory}))
+//	store := cache.NewMemoryStore(ctx)
+//	repo := cache.NewRepository(store)
 //	created, _ := repo.Add(ctx, "boot:seeded", []byte("1"), time.Hour)
 //	_ = created
 func (r *Repository) Add(ctx context.Context, key string, value []byte, ttl time.Duration) (bool, error) {
@@ -171,7 +182,8 @@ func (r *Repository) Add(ctx context.Context, key string, value []byte, ttl time
 // Example: increment counter
 //
 //	ctx := context.Background()
-//	repo := cache.NewRepository(cache.NewStore(ctx, cache.StoreConfig{Driver: cache.DriverMemory}))
+//	store := cache.NewMemoryStore(ctx)
+//	repo := cache.NewRepository(store)
 //	value, _ := repo.Increment(ctx, "rate:login:42", 1, time.Minute)
 //	_ = value
 func (r *Repository) Increment(ctx context.Context, key string, delta int64, ttl time.Duration) (int64, error) {
@@ -184,7 +196,8 @@ func (r *Repository) Increment(ctx context.Context, key string, delta int64, ttl
 // Example: decrement counter
 //
 //	ctx := context.Background()
-//	repo := cache.NewRepository(cache.NewStore(ctx, cache.StoreConfig{Driver: cache.DriverMemory}))
+//	store := cache.NewMemoryStore(ctx)
+//	repo := cache.NewRepository(store)
 //	value, _ := repo.Decrement(ctx, "rate:login:42", 1, time.Minute)
 //	_ = value
 func (r *Repository) Decrement(ctx context.Context, key string, delta int64, ttl time.Duration) (int64, error) {
@@ -197,7 +210,8 @@ func (r *Repository) Decrement(ctx context.Context, key string, delta int64, ttl
 // Example: pull and delete
 //
 //	ctx := context.Background()
-//	repo := cache.NewRepository(cache.NewStore(ctx, cache.StoreConfig{Driver: cache.DriverMemory}))
+//	store := cache.NewMemoryStore(ctx)
+//	repo := cache.NewRepository(store)
 //	_ = repo.SetString(ctx, "reset:token:42", "abc", time.Minute)
 //	body, ok, _ := repo.Pull(ctx, "reset:token:42")
 //	_ = body
@@ -215,18 +229,36 @@ func (r *Repository) Pull(ctx context.Context, key string) ([]byte, bool, error)
 
 // Delete removes a single key.
 // @group Repository
+//
+// Example: delete key
+//
+//	ctx := context.Background()
+//	repo := cache.NewRepository(cache.NewMemoryStore(ctx))
+//	_ = repo.Delete(ctx, "a")
 func (r *Repository) Delete(ctx context.Context, key string) error {
 	return r.store.Delete(ctx, key)
 }
 
 // DeleteMany removes multiple keys.
 // @group Repository
+//
+// Example: delete many keys
+//
+//	ctx := context.Background()
+//	repo := cache.NewRepository(cache.NewMemoryStore(ctx))
+//	_ = repo.DeleteMany(ctx, "a", "b")
 func (r *Repository) DeleteMany(ctx context.Context, keys ...string) error {
 	return r.store.DeleteMany(ctx, keys...)
 }
 
 // Flush clears all keys for this store scope.
 // @group Repository
+//
+// Example: flush all keys
+//
+//	ctx := context.Background()
+//	repo := cache.NewRepository(cache.NewMemoryStore(ctx))
+//	_ = repo.Flush(ctx)
 func (r *Repository) Flush(ctx context.Context) error {
 	return r.store.Flush(ctx)
 }
@@ -237,7 +269,8 @@ func (r *Repository) Flush(ctx context.Context) error {
 // Example: remember bytes
 //
 //	ctx := context.Background()
-//	repo := cache.NewRepository(cache.NewStore(ctx, cache.StoreConfig{Driver: cache.DriverMemory}))
+//	store := cache.NewMemoryStore(ctx)
+//	repo := cache.NewRepository(store)
 //	data, err := repo.Remember(ctx, "dashboard:summary", time.Minute, func(context.Context) ([]byte, error) {
 //		return []byte("payload"), nil
 //	})
@@ -270,7 +303,8 @@ func (r *Repository) Remember(ctx context.Context, key string, ttl time.Duration
 // Example: remember string
 //
 //	ctx := context.Background()
-//	repo := cache.NewRepository(cache.NewStore(ctx, cache.StoreConfig{Driver: cache.DriverMemory}))
+//	store := cache.NewMemoryStore(ctx)
+//	repo := cache.NewRepository(store)
 //	value, err := repo.RememberString(ctx, "settings:mode", time.Minute, func(context.Context) (string, error) {
 //		return "on", nil
 //	})
@@ -300,7 +334,8 @@ func (r *Repository) RememberString(ctx context.Context, key string, ttl time.Du
 //
 //	type Settings struct { Enabled bool `json:"enabled"` }
 //	ctx := context.Background()
-//	repo := cache.NewRepository(cache.NewStore(ctx, cache.StoreConfig{Driver: cache.DriverMemory}))
+//	store := cache.NewMemoryStore(ctx)
+//	repo := cache.NewRepository(store)
 //	settings, err := cache.RememberJSON[Settings](ctx, repo, "settings:alerts", time.Minute, func(context.Context) (Settings, error) {
 //		return Settings{Enabled: true}, nil
 //	})

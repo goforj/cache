@@ -15,7 +15,8 @@ func main() {
 	// Example: remember JSON
 	type Settings struct { Enabled bool `json:"enabled"` }
 	ctx := context.Background()
-	repo := cache.NewRepository(cache.NewStore(ctx, cache.StoreConfig{Driver: cache.DriverMemory}))
+	store := cache.NewMemoryStore(ctx)
+	repo := cache.NewRepository(store)
 	settings, err := cache.RememberJSON[Settings](ctx, repo, "settings:alerts", time.Minute, func(context.Context) (Settings, error) {
 		return Settings{Enabled: true}, nil
 	})

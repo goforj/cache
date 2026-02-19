@@ -5,18 +5,18 @@ package main
 
 import (
 	"context"
+
 	"github.com/goforj/cache"
 )
 
 func main() {
-	// GetString returns a UTF-8 string value for key when present.
+	// Store returns the underlying store implementation.
 
-	// Example: get string
+	// Example: access store
 	ctx := context.Background()
 	store := cache.NewMemoryStore(ctx)
 	repo := cache.NewRepository(store)
-	_ = repo.SetString(ctx, "user:42:name", "Ada", 0)
-	name, ok, _ := repo.GetString(ctx, "user:42:name")
-	_ = name
-	_ = ok
+
+	underlying := repo.Store()
+	_ = underlying
 }

@@ -13,7 +13,8 @@ func main() {
 
 	// Example: get bytes
 	ctx := context.Background()
-	repo := cache.NewRepository(cache.NewStore(ctx, cache.StoreConfig{Driver: cache.DriverMemory}))
+	store := cache.NewMemoryStore(ctx)
+	repo := cache.NewRepository(store)
 	_ = repo.Set(ctx, "user:42", []byte("Ada"), 0)
 	value, ok, _ := repo.Get(ctx, "user:42")
 	_ = value

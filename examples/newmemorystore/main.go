@@ -9,11 +9,10 @@ import (
 )
 
 func main() {
-	// NewRepository creates a cache repository bound to a concrete store.
+	// NewMemoryStore is a convenience for an in-process store with optional overrides.
 
-	// Example: repository from store
+	// Example: memory helper
 	ctx := context.Background()
 	store := cache.NewMemoryStore(ctx)
-	repo := cache.NewRepository(store)
-	_ = repo
+	_ = store
 }

@@ -14,7 +14,8 @@ func main() {
 
 	// Example: remember bytes
 	ctx := context.Background()
-	repo := cache.NewRepository(cache.NewStore(ctx, cache.StoreConfig{Driver: cache.DriverMemory}))
+	store := cache.NewMemoryStore(ctx)
+	repo := cache.NewRepository(store)
 	data, err := repo.Remember(ctx, "dashboard:summary", time.Minute, func(context.Context) ([]byte, error) {
 		return []byte("payload"), nil
 	})

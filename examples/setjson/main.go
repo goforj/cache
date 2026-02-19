@@ -15,6 +15,7 @@ func main() {
 	// Example: set JSON
 	type Profile struct { Name string `json:"name"` }
 	ctx := context.Background()
-	repo := cache.NewRepository(cache.NewStore(ctx, cache.StoreConfig{Driver: cache.DriverMemory}))
+	store := cache.NewMemoryStore(ctx)
+	repo := cache.NewRepository(store)
 	_ = cache.SetJSON(ctx, repo, "profile:42", Profile{Name: "Ada"}, time.Minute)
 }

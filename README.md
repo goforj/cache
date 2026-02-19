@@ -13,7 +13,7 @@
     <img src="https://img.shields.io/github/v/tag/goforj/cache?label=version&sort=semver" alt="Latest tag">
     <a href="https://goreportcard.com/report/github.com/goforj/cache"><img src="https://goreportcard.com/badge/github.com/goforj/cache" alt="Go Report Card"></a>
 <!-- test-count:embed:start -->
-    <img src="https://img.shields.io/badge/tests-32-brightgreen" alt="Tests">
+    <img src="https://img.shields.io/badge/tests-35-brightgreen" alt="Tests">
 <!-- test-count:embed:end -->
 </p>
 
@@ -53,11 +53,10 @@ import (
 func main() {
     ctx := context.Background()
 
-    store := cache.NewStore(ctx, cache.StoreConfig{
-        Driver:               cache.DriverMemory, // or DriverRedis
-        DefaultTTL:           5 * time.Minute,
-        MemoryCleanupInterval: 10 * time.Minute,
-    })
+    store := cache.NewStoreWith(ctx, cache.DriverMemory,
+        cache.WithDefaultTTL(5*time.Minute),
+        cache.WithMemoryCleanupInterval(10*time.Minute),
+    )
     repo := cache.NewRepository(store)
 
     // Remember pattern.
@@ -68,12 +67,11 @@ func main() {
 
     // Switch to Redis (dependency injection, no code changes below).
     client := redis.NewClient(&redis.Options{Addr: "127.0.0.1:6379"})
-    store = cache.NewStore(ctx, cache.StoreConfig{
-        Driver:      cache.DriverRedis,
-        Prefix:      "app",
-        DefaultTTL:  5 * time.Minute,
-        RedisClient: client,
-    })
+    store = cache.NewStoreWith(ctx, cache.DriverRedis,
+        cache.WithRedisClient(client),
+        cache.WithPrefix("app"),
+        cache.WithDefaultTTL(5*time.Minute),
+    )
     repo = cache.NewRepository(store)
 }
 ```
@@ -115,6 +113,8 @@ memoStore := cache.NewMemoStore(store)
 memoRepo := cache.NewRepository(memoStore)
 ```
 
+**Staleness note:** memoization is per-process only. Writes that happen in *other* processes (or outside your app) will not invalidate this memo cache. Use it when local staleness is acceptable, or scope it narrowly (e.g., per-request) if multiple writers exist.
+
 ## Testing
 
 Unit tests cover the public helpers. Integration tests use `testcontainers-go` to spin up Redis:
@@ -149,7 +149,7 @@ NewRepository creates a cache repository bound to a concrete store.
 
 ```go
 ctx := context.Background()
-store := cache.NewStore(ctx, cache.StoreConfig{Driver: cache.DriverMemory})
+store := cache.NewMemoryStore(ctx)
 repo := cache.NewRepository(store)
 _ = repo
 ```
@@ -160,7 +160,7 @@ NewRepositoryWithTTL lets callers override the default TTL applied when ttl <= 0
 
 ```go
 ctx := context.Background()
-store := cache.NewStore(ctx, cache.StoreConfig{Driver: cache.DriverMemory})
+store := cache.NewMemoryStore(ctx)
 repo := cache.NewRepositoryWithTTL(store, 2*time.Minute)
 _ = ctx
 _ = repo
@@ -173,9 +173,7 @@ Caller is responsible for providing any driver-specific dependencies.
 
 ```go
 ctx := context.Background()
-store := cache.NewStore(ctx, cache.StoreConfig{
-	Driver: cache.DriverMemory,
-})
+store := cache.NewMemoryStore(ctx)
 _ = store
 ```
 
@@ -185,9 +183,17 @@ _ = store
 
 NewMemoStore decorates store with per-process read memoization.
 
+Behavior:
+- First Get hits the backing store, clones the value, and memoizes it in-process.
+- Subsequent Get for the same key returns the memoized clone (no backend call).
+- Any write/delete/flush invalidates the memo entry so local reads stay in sync
+with changes made through this process.
+- Memo data is per-process only; other processes or external writers will not
+invalidate it. Use only when that staleness window is acceptable.
+
 ```go
 ctx := context.Background()
-base := cache.NewStore(ctx, cache.StoreConfig{Driver: cache.DriverMemory})
+base := cache.NewMemoryStore(ctx)
 memoStore := cache.NewMemoStore(base)
 repo := cache.NewRepository(memoStore)
 _ = repo
@@ -201,7 +207,8 @@ Add writes value only when key is not already present.
 
 ```go
 ctx := context.Background()
-repo := cache.NewRepository(cache.NewStore(ctx, cache.StoreConfig{Driver: cache.DriverMemory}))
+store := cache.NewMemoryStore(ctx)
+repo := cache.NewRepository(store)
 created, _ := repo.Add(ctx, "boot:seeded", []byte("1"), time.Hour)
 _ = created
 ```
@@ -212,7 +219,8 @@ Decrement decrements a numeric value and returns the result.
 
 ```go
 ctx := context.Background()
-repo := cache.NewRepository(cache.NewStore(ctx, cache.StoreConfig{Driver: cache.DriverMemory}))
+store := cache.NewMemoryStore(ctx)
+repo := cache.NewRepository(store)
 value, _ := repo.Decrement(ctx, "rate:login:42", 1, time.Minute)
 _ = value
 ```
@@ -221,13 +229,34 @@ _ = value
 
 Delete removes a single key.
 
+```go
+ctx := context.Background()
+store := cache.NewMemoryStore(ctx)
+repo := cache.NewRepository(store)
+_ = repo.Delete(ctx, "a")
+```
+
 ### <a id="deletemany"></a>DeleteMany
 
 DeleteMany removes multiple keys.
 
+```go
+ctx := context.Background()
+store := cache.NewMemoryStore(ctx)
+repo := cache.NewRepository(store)
+_ = repo.DeleteMany(ctx, "a", "b")
+```
+
 ### <a id="flush"></a>Flush
 
 Flush clears all keys for this store scope.
+
+```go
+ctx := context.Background()
+store := cache.NewMemoryStore(ctx)
+repo := cache.NewRepository(store)
+_ = repo.Flush(ctx)
+```
 
 ### <a id="get"></a>Get
 
@@ -235,7 +264,7 @@ Get returns raw bytes for key when present.
 
 ```go
 ctx := context.Background()
-repo := cache.NewRepository(cache.NewStore(ctx, cache.StoreConfig{Driver: cache.DriverMemory}))
+repo := cache.NewRepository(cache.NewMemoryStore(ctx))
 _ = repo.Set(ctx, "user:42", []byte("Ada"), 0)
 value, ok, _ := repo.Get(ctx, "user:42")
 _ = value
@@ -248,7 +277,7 @@ GetString returns a UTF-8 string value for key when present.
 
 ```go
 ctx := context.Background()
-repo := cache.NewRepository(cache.NewStore(ctx, cache.StoreConfig{Driver: cache.DriverMemory}))
+repo := cache.NewRepository(cache.NewMemoryStore(ctx))
 _ = repo.SetString(ctx, "user:42:name", "Ada", 0)
 name, ok, _ := repo.GetString(ctx, "user:42:name")
 _ = name
@@ -261,7 +290,7 @@ Increment increments a numeric value and returns the result.
 
 ```go
 ctx := context.Background()
-repo := cache.NewRepository(cache.NewStore(ctx, cache.StoreConfig{Driver: cache.DriverMemory}))
+repo := cache.NewRepository(cache.NewMemoryStore(ctx))
 value, _ := repo.Increment(ctx, "rate:login:42", 1, time.Minute)
 _ = value
 ```
@@ -272,7 +301,7 @@ Pull returns value and removes it from cache.
 
 ```go
 ctx := context.Background()
-repo := cache.NewRepository(cache.NewStore(ctx, cache.StoreConfig{Driver: cache.DriverMemory}))
+repo := cache.NewRepository(cache.NewMemoryStore(ctx))
 _ = repo.SetString(ctx, "reset:token:42", "abc", time.Minute)
 body, ok, _ := repo.Pull(ctx, "reset:token:42")
 _ = body
@@ -285,7 +314,7 @@ Remember returns key value or computes/stores it when missing.
 
 ```go
 ctx := context.Background()
-repo := cache.NewRepository(cache.NewStore(ctx, cache.StoreConfig{Driver: cache.DriverMemory}))
+repo := cache.NewRepository(cache.NewMemoryStore(ctx))
 data, err := repo.Remember(ctx, "dashboard:summary", time.Minute, func(context.Context) ([]byte, error) {
 	return []byte("payload"), nil
 })
@@ -299,7 +328,7 @@ RememberString returns key value or computes/stores it when missing.
 
 ```go
 ctx := context.Background()
-repo := cache.NewRepository(cache.NewStore(ctx, cache.StoreConfig{Driver: cache.DriverMemory}))
+repo := cache.NewRepository(cache.NewMemoryStore(ctx))
 value, err := repo.RememberString(ctx, "settings:mode", time.Minute, func(context.Context) (string, error) {
 	return "on", nil
 })
@@ -313,7 +342,7 @@ Set writes raw bytes to key.
 
 ```go
 ctx := context.Background()
-repo := cache.NewRepository(cache.NewStore(ctx, cache.StoreConfig{Driver: cache.DriverMemory}))
+repo := cache.NewRepository(cache.NewMemoryStore(ctx))
 _ = repo.Set(ctx, "token", []byte("abc"), time.Minute)
 ```
 
@@ -323,7 +352,7 @@ SetString writes a string value to key.
 
 ```go
 ctx := context.Background()
-repo := cache.NewRepository(cache.NewStore(ctx, cache.StoreConfig{Driver: cache.DriverMemory}))
+repo := cache.NewRepository(cache.NewMemoryStore(ctx))
 _ = repo.SetString(ctx, "user:42:name", "Ada", time.Minute)
 ```
 
@@ -340,7 +369,7 @@ GetJSON decodes a JSON value into T when key exists.
 ```go
 type Profile struct { Name string `json:"name"` }
 ctx := context.Background()
-repo := cache.NewRepository(cache.NewStore(ctx, cache.StoreConfig{Driver: cache.DriverMemory}))
+repo := cache.NewRepository(cache.NewMemoryStore(ctx))
 _ = cache.SetJSON(ctx, repo, "profile:42", Profile{Name: "Ada"}, 0)
 profile, ok, _ := cache.GetJSON[Profile](ctx, repo, "profile:42")
 _ = profile
@@ -354,7 +383,7 @@ RememberJSON returns key value or computes/stores JSON when missing.
 ```go
 type Settings struct { Enabled bool `json:"enabled"` }
 ctx := context.Background()
-repo := cache.NewRepository(cache.NewStore(ctx, cache.StoreConfig{Driver: cache.DriverMemory}))
+repo := cache.NewRepository(cache.NewMemoryStore(ctx))
 settings, err := cache.RememberJSON[Settings](ctx, repo, "settings:alerts", time.Minute, func(context.Context) (Settings, error) {
 	return Settings{Enabled: true}, nil
 })
@@ -369,7 +398,7 @@ SetJSON encodes value as JSON and writes it to key.
 ```go
 type Profile struct { Name string `json:"name"` }
 ctx := context.Background()
-repo := cache.NewRepository(cache.NewStore(ctx, cache.StoreConfig{Driver: cache.DriverMemory}))
+repo := cache.NewRepository(cache.NewMemoryStore(ctx))
 _ = cache.SetJSON(ctx, repo, "profile:42", Profile{Name: "Ada"}, time.Minute)
 ```
 <!-- api:embed:end -->

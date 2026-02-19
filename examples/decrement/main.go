@@ -14,7 +14,8 @@ func main() {
 
 	// Example: decrement counter
 	ctx := context.Background()
-	repo := cache.NewRepository(cache.NewStore(ctx, cache.StoreConfig{Driver: cache.DriverMemory}))
+	store := cache.NewMemoryStore(ctx)
+	repo := cache.NewRepository(store)
 	value, _ := repo.Decrement(ctx, "rate:login:42", 1, time.Minute)
 	_ = value
 }

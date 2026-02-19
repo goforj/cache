@@ -14,7 +14,8 @@ func main() {
 
 	// Example: add once
 	ctx := context.Background()
-	repo := cache.NewRepository(cache.NewStore(ctx, cache.StoreConfig{Driver: cache.DriverMemory}))
+	store := cache.NewMemoryStore(ctx)
+	repo := cache.NewRepository(store)
 	created, _ := repo.Add(ctx, "boot:seeded", []byte("1"), time.Hour)
 	_ = created
 }

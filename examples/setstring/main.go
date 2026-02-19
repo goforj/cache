@@ -14,6 +14,7 @@ func main() {
 
 	// Example: set string
 	ctx := context.Background()
-	repo := cache.NewRepository(cache.NewStore(ctx, cache.StoreConfig{Driver: cache.DriverMemory}))
+	store := cache.NewMemoryStore(ctx)
+	repo := cache.NewRepository(store)
 	_ = repo.SetString(ctx, "user:42:name", "Ada", time.Minute)
 }
