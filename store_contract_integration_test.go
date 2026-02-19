@@ -16,38 +16,7 @@ type storeFactory struct {
 }
 
 func TestStoreContract_AllDrivers(t *testing.T) {
-	fixtures := []storeFactory{
-		{
-			name: "memory",
-			new: func(t *testing.T) (Store, func()) {
-				store := NewStore(context.Background(), StoreConfig{
-					Driver:                DriverMemory,
-					DefaultTTL:            2 * time.Second,
-					MemoryCleanupInterval: time.Second,
-				})
-				return store, func() {}
-			},
-		},
-	}
-
-	if integrationDriverEnabled("redis") {
-		fixtures = append(fixtures, storeFactory{
-			name: "redis",
-			new: func(t *testing.T) (Store, func()) {
-				client := redis.NewClient(&redis.Options{Addr: integrationRedis.addr})
-				store := NewStore(context.Background(), StoreConfig{
-					Driver:      DriverRedis,
-					DefaultTTL:  2 * time.Second,
-					Prefix:      "itest",
-					RedisClient: client,
-				})
-				cleanup := func() {
-					_ = client.Close()
-				}
-				return store, cleanup
-			},
-		})
-	}
+	fixtures := integrationFixtures(t)
 
 	for _, fx := range fixtures {
 		fx := fx
@@ -139,4 +108,47 @@ func runStoreContractSuite(t *testing.T, store Store) {
 	if _, ok, err := store.Get(ctx, "flush"); err != nil || ok {
 		t.Fatalf("expected flush to clear key; ok=%v err=%v", ok, err)
 	}
+}
+
+func integrationFixtures(t *testing.T) []storeFactory {
+	t.Helper()
+
+	var fixtures []storeFactory
+
+	if integrationDriverEnabled("memory") {
+		fixtures = append(fixtures, storeFactory{
+			name: "memory",
+			new: func(t *testing.T) (Store, func()) {
+				store := NewStore(context.Background(), StoreConfig{
+					Driver:                DriverMemory,
+					DefaultTTL:            2 * time.Second,
+					MemoryCleanupInterval: time.Second,
+				})
+				return store, func() {}
+			},
+		})
+	}
+
+	if integrationDriverEnabled("redis") {
+		addr := integrationAddr("redis")
+		if addr == "" {
+			t.Fatalf("redis integration requested but no address available")
+		}
+		fixtures = append(fixtures, storeFactory{
+			name: "redis",
+			new: func(t *testing.T) (Store, func()) {
+				client := redis.NewClient(&redis.Options{Addr: addr})
+				store := NewStore(context.Background(), StoreConfig{
+					Driver:      DriverRedis,
+					DefaultTTL:  2 * time.Second,
+					Prefix:      "itest",
+					RedisClient: client,
+				})
+				cleanup := func() { _ = client.Close() }
+				return store, cleanup
+			},
+		})
+	}
+
+	return fixtures
 }

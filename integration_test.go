@@ -20,28 +20,47 @@ var integrationRedis struct {
 	addr      string
 }
 
+// integrationBackends define how to start infrastructure per driver.
+// Add new drivers here with a testcontainers-backed start function.
+var integrationBackends = map[string]func(context.Context) (testcontainers.Container, string, error){
+	"redis": startRedisContainer,
+}
+
+type integrationRuntime struct {
+	container testcontainers.Container
+	addr      string
+}
+
+var integrationRuntimes = map[string]*integrationRuntime{}
+
 func TestMain(m *testing.M) {
 	ctx := context.Background()
 	drivers := selectedIntegrationDrivers()
-	needsRedis := drivers["redis"]
 
-	if needsRedis {
-		redisContainer, redisAddr, err := startRedisContainer(ctx)
+	for name, enabled := range drivers {
+		if !enabled {
+			continue
+		}
+		start, ok := integrationBackends[name]
+		if !ok {
+			continue // driver without infra (e.g., memory)
+		}
+		container, addr, err := start(ctx)
 		if err != nil {
-			// Surface error and exit early to avoid running partial suites.
-			_, _ = os.Stderr.WriteString("failed to start redis integration container: " + err.Error() + "\n")
+			_, _ = os.Stderr.WriteString("failed to start " + name + " integration container: " + err.Error() + "\n")
 			os.Exit(1)
 		}
-		integrationRedis.container = redisContainer
-		integrationRedis.addr = redisAddr
+		integrationRuntimes[name] = &integrationRuntime{container: container, addr: addr}
 	}
 
 	exitCode := m.Run()
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	if integrationRedis.container != nil {
-		_ = integrationRedis.container.Terminate(shutdownCtx)
+	for _, rt := range integrationRuntimes {
+		if rt != nil && rt.container != nil {
+			_ = rt.container.Terminate(shutdownCtx)
+		}
 	}
 
 	os.Exit(exitCode)
@@ -73,6 +92,14 @@ func selectedIntegrationDrivers() map[string]bool {
 
 func integrationDriverEnabled(name string) bool {
 	return selectedIntegrationDrivers()[strings.ToLower(name)]
+}
+
+// integrationAddr returns the bound host:port for a driver started via testcontainers.
+func integrationAddr(name string) string {
+	if rt, ok := integrationRuntimes[strings.ToLower(name)]; ok && rt != nil {
+		return rt.addr
+	}
+	return ""
 }
 
 func startRedisContainer(ctx context.Context) (testcontainers.Container, string, error) {
