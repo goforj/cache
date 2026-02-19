@@ -37,6 +37,15 @@ type StoreConfig struct {
 
 	// MemcachedAddresses are required when DriverMemcached is used (host:port).
 	MemcachedAddresses []string
+
+	// DynamoEndpoint is the HTTP endpoint for DynamoDB (e.g., localstack/dynamodb-local).
+	DynamoEndpoint string
+	// DynamoRegion sets the AWS region used for signing.
+	DynamoRegion string
+	// DynamoTable is the table name used for cache entries.
+	DynamoTable string
+	// DynamoClient allows injecting a preconfigured DynamoDB client.
+	DynamoClient DynamoAPI
 }
 
 func (c StoreConfig) withDefaults() StoreConfig {
@@ -57,6 +66,12 @@ func (c StoreConfig) withDefaults() StoreConfig {
 	}
 	if len(c.MemcachedAddresses) == 0 && c.Driver == DriverMemcached {
 		c.MemcachedAddresses = []string{"127.0.0.1:11211"}
+	}
+	if c.DynamoRegion == "" {
+		c.DynamoRegion = "us-east-1"
+	}
+	if c.DynamoTable == "" {
+		c.DynamoTable = "cache_entries"
 	}
 	return c
 }

@@ -32,6 +32,9 @@ func TestStoreOptionsMutateConfig(t *testing.T) {
 	cfg = WithPrefix("svc")(cfg)
 	cfg = WithFileDir("/tmp/opts")(cfg)
 	cfg = WithMemcachedAddresses("127.0.0.1:11211")(cfg)
+	cfg = WithDynamoEndpoint("http://localhost:8000")(cfg)
+	cfg = WithDynamoRegion("eu-west-1")(cfg)
+	cfg = WithDynamoTable("tbl")(cfg)
 	client := newStubRedisClient()
 	cfg = WithRedisClient(client)(cfg)
 
@@ -41,7 +44,10 @@ func TestStoreOptionsMutateConfig(t *testing.T) {
 		cfg.RedisClient != client ||
 		cfg.FileDir != "/tmp/opts" ||
 		len(cfg.MemcachedAddresses) != 1 ||
-		cfg.MemcachedAddresses[0] != "127.0.0.1:11211" {
+		cfg.MemcachedAddresses[0] != "127.0.0.1:11211" ||
+		cfg.DynamoEndpoint != "http://localhost:8000" ||
+		cfg.DynamoRegion != "eu-west-1" ||
+		cfg.DynamoTable != "tbl" {
 		t.Fatalf("options did not apply correctly: %+v", cfg)
 	}
 }
@@ -75,5 +81,10 @@ func TestFactoryHelpers(t *testing.T) {
 	null := NewNullStore(ctx)
 	if null.Driver() != DriverNull {
 		t.Fatalf("expected null driver")
+	}
+
+	dyn := NewDynamoStore(ctx, StoreConfig{})
+	if dyn.Driver() != DriverDynamo {
+		t.Fatalf("expected dynamo driver")
 	}
 }

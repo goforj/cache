@@ -13,7 +13,7 @@ import "context"
 //		Driver: cache.DriverMemory,
 //	})
 //	fmt.Println(store.Driver()) // memory
-func NewStore(_ context.Context, cfg StoreConfig) Store {
+func NewStore(ctx context.Context, cfg StoreConfig) Store {
 	cfg = cfg.withDefaults()
 	switch cfg.Driver {
 	case DriverNull:
@@ -24,6 +24,12 @@ func NewStore(_ context.Context, cfg StoreConfig) Store {
 		return newMemoryStore(cfg.DefaultTTL, cfg.MemoryCleanupInterval)
 	case DriverMemcached:
 		return newMemcachedStore(cfg.MemcachedAddresses, cfg.DefaultTTL, cfg.Prefix)
+	case DriverDynamo:
+		store, err := newDynamoStore(ctx, cfg)
+		if err != nil {
+			return &errorStore{driver: DriverDynamo, err: err}
+		}
+		return store
 	case DriverRedis:
 		return newRedisStore(cfg.RedisClient, cfg.DefaultTTL, cfg.Prefix)
 	default:
@@ -117,4 +123,20 @@ func NewMemcachedStore(ctx context.Context, addrs []string, opts ...StoreOption)
 //	fmt.Println(store.Driver()) // null
 func NewNullStore(ctx context.Context, opts ...StoreOption) Store {
 	return NewStoreWith(ctx, DriverNull, opts...)
+}
+
+// NewDynamoStore is a convenience for a DynamoDB-backed store.
+// @group Constructors
+//
+// Example: dynamo helper (stub)
+//
+//	ctx := context.Background()
+//	store := cache.NewDynamoStore(ctx, cache.StoreConfig{DynamoEndpoint: "http://localhost:8000"})
+//	fmt.Println(store.Driver()) // dynamodb
+func NewDynamoStore(ctx context.Context, cfg StoreConfig, opts ...StoreOption) Store {
+	cfg.Driver = DriverDynamo
+	for _, opt := range opts {
+		cfg = opt(cfg)
+	}
+	return NewStore(ctx, cfg)
 }

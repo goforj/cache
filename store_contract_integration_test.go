@@ -7,6 +7,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -126,6 +130,16 @@ func integrationFixtures(t *testing.T) []storeFactory {
 
 	var fixtures []storeFactory
 
+	if integrationDriverEnabled("null") {
+		fixtures = append(fixtures, storeFactory{
+			name: "null",
+			new: func(t *testing.T) (Store, func()) {
+				store := NewNullStore(context.Background())
+				return store, func() {}
+			},
+		})
+	}
+
 	if integrationDriverEnabled("file") {
 		fixtures = append(fixtures, storeFactory{
 			name: "file",
@@ -194,6 +208,39 @@ func integrationFixtures(t *testing.T) []storeFactory {
 			},
 		})
 	}
+
+	if integrationDriverEnabled("dynamodb") {
+		endpoint := integrationAddr("dynamodb")
+		if endpoint == "" {
+			t.Fatalf("dynamodb integration requested but no address available")
+		}
+		awsCfg, err := config.LoadDefaultConfig(context.Background(),
+			config.WithRegion("us-east-1"),
+			config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider("dummy", "dummy", "")),
+			config.WithEndpointResolverWithOptions(aws.EndpointResolverWithOptionsFunc(func(service, region string, options ...interface{}) (aws.Endpoint, error) {
+				return aws.Endpoint{URL: endpoint, HostnameImmutable: true}, nil
+			})),
+		)
+		if err != nil {
+			t.Fatalf("aws config failed: %v", err)
+		}
+		client := dynamodb.NewFromConfig(awsCfg)
+		fixtures = append(fixtures, storeFactory{
+			name: "dynamodb",
+			new: func(t *testing.T) (Store, func()) {
+				store := NewStore(context.Background(), StoreConfig{
+					Driver:       DriverDynamo,
+					DefaultTTL:   2 * time.Second,
+					Prefix:       "itest",
+					DynamoTable:  "cache_entries",
+					DynamoClient: client,
+				})
+				return store, func() {}
+			},
+		})
+	}
+
+	// Dynamo driver is stubbed; integration intentionally skipped.
 
 	return fixtures
 }

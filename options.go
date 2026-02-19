@@ -52,3 +52,35 @@ func WithMemcachedAddresses(addrs ...string) StoreOption {
 		return cfg
 	}
 }
+
+// WithDynamoEndpoint sets the DynamoDB endpoint (useful for local testing).
+func WithDynamoEndpoint(endpoint string) StoreOption {
+	return func(cfg StoreConfig) StoreConfig {
+		cfg.DynamoEndpoint = endpoint
+		return cfg
+	}
+}
+
+// WithDynamoRegion sets the DynamoDB region for requests.
+func WithDynamoRegion(region string) StoreOption {
+	return func(cfg StoreConfig) StoreConfig {
+		cfg.DynamoRegion = region
+		return cfg
+	}
+}
+
+// WithDynamoTable sets the table used by the DynamoDB driver.
+func WithDynamoTable(table string) StoreOption {
+	return func(cfg StoreConfig) StoreConfig {
+		cfg.DynamoTable = table
+		return cfg
+	}
+}
+
+// WithDynamoClient injects a pre-built DynamoDB client.
+func WithDynamoClient(client DynamoAPI) StoreOption {
+	return func(cfg StoreConfig) StoreConfig {
+		cfg.DynamoClient = client
+		return cfg
+	}
+}

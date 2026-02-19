@@ -25,6 +25,7 @@ var integrationRedis struct {
 var integrationBackends = map[string]func(context.Context) (testcontainers.Container, string, error){
 	"redis":     startRedisContainer,
 	"memcached": startMemcachedContainer,
+	"dynamodb":  startDynamoContainer,
 }
 
 type integrationRuntime struct {
@@ -75,6 +76,7 @@ func selectedIntegrationDrivers() map[string]bool {
 		"file":      true,
 		"memory":    true,
 		"memcached": true,
+		"dynamodb":  true,
 		"redis":     true,
 		// null is intentionally excluded from integration because it is a no-op store.
 	}
@@ -157,4 +159,30 @@ func startMemcachedContainer(ctx context.Context) (testcontainers.Container, str
 		return nil, "", err
 	}
 	return container, net.JoinHostPort(host, port.Port()), nil
+}
+
+func startDynamoContainer(ctx context.Context) (testcontainers.Container, string, error) {
+	req := testcontainers.ContainerRequest{
+		Image:        "amazon/dynamodb-local:latest",
+		ExposedPorts: []string{"8000/tcp"},
+		WaitingFor:   wait.ForListeningPort("8000/tcp").WithStartupTimeout(45 * time.Second),
+	}
+	container, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
+		ContainerRequest: req,
+		Started:          true,
+	})
+	if err != nil {
+		return nil, "", err
+	}
+	host, err := container.Host(ctx)
+	if err != nil {
+		_ = container.Terminate(ctx)
+		return nil, "", err
+	}
+	port, err := container.MappedPort(ctx, "8000/tcp")
+	if err != nil {
+		_ = container.Terminate(ctx)
+		return nil, "", err
+	}
+	return container, "http://" + net.JoinHostPort(host, port.Port()), nil
 }

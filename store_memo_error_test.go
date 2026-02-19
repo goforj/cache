@@ -6,29 +6,9 @@ import (
 	"time"
 )
 
-type errorStore struct{ err error }
-
-func (e errorStore) Driver() Driver                                    { return DriverMemory }
-func (e errorStore) Get(context.Context, string) ([]byte, bool, error) { return nil, false, e.err }
-func (e errorStore) Set(context.Context, string, []byte, time.Duration) error {
-	return e.err
-}
-func (e errorStore) Add(context.Context, string, []byte, time.Duration) (bool, error) {
-	return false, e.err
-}
-func (e errorStore) Increment(context.Context, string, int64, time.Duration) (int64, error) {
-	return 0, e.err
-}
-func (e errorStore) Decrement(context.Context, string, int64, time.Duration) (int64, error) {
-	return 0, e.err
-}
-func (e errorStore) Delete(context.Context, string) error        { return e.err }
-func (e errorStore) DeleteMany(context.Context, ...string) error { return e.err }
-func (e errorStore) Flush(context.Context) error                 { return e.err }
-
 func TestMemoStorePropagatesErrors(t *testing.T) {
 	ctx := context.Background()
-	store := NewMemoStore(errorStore{err: expectedErr})
+	store := NewMemoStore(&errorStore{driver: DriverMemory, err: expectedErr})
 
 	if _, _, err := store.Get(ctx, "k"); err == nil {
 		t.Fatalf("expected get error")
