@@ -81,3 +81,29 @@ func TestMemoStoreMutationPathsInvalidateCache(t *testing.T) {
 		t.Fatalf("expected flush to clear memo + backing store")
 	}
 }
+
+func TestMemoStoreDeleteInvalidates(t *testing.T) {
+	ctx := context.Background()
+	base := newMemoryStore(0, 0)
+	if err := base.Set(ctx, "k", []byte("v"), time.Minute); err != nil {
+		t.Fatalf("set failed: %v", err)
+	}
+	store := NewMemoStore(base)
+
+	if _, ok, err := store.Get(ctx, "k"); err != nil || !ok {
+		t.Fatalf("get failed: %v ok=%v", err, ok)
+	}
+	if err := store.Delete(ctx, "k"); err != nil {
+		t.Fatalf("delete failed: %v", err)
+	}
+	_, ok, err := store.Get(ctx, "k")
+	if err != nil {
+		t.Fatalf("get after delete failed: %v", err)
+	}
+	if ok {
+		t.Fatalf("expected memo + backing deletion")
+	}
+	if store.Driver() != DriverMemory {
+		t.Fatalf("expected driver passthrough")
+	}
+}
