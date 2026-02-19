@@ -20,6 +20,9 @@ func TestStoreConfigWithDefaults(t *testing.T) {
 	if cfg.Prefix != defaultCachePrefix {
 		t.Fatalf("unexpected prefix: %s", cfg.Prefix)
 	}
+	if cfg.FileDir == "" {
+		t.Fatalf("expected default file dir set")
+	}
 }
 
 func TestStoreOptionsMutateConfig(t *testing.T) {
@@ -27,13 +30,15 @@ func TestStoreOptionsMutateConfig(t *testing.T) {
 	cfg = WithDefaultTTL(time.Second)(cfg)
 	cfg = WithMemoryCleanupInterval(2 * time.Second)(cfg)
 	cfg = WithPrefix("svc")(cfg)
+	cfg = WithFileDir("/tmp/opts")(cfg)
 	client := newStubRedisClient()
 	cfg = WithRedisClient(client)(cfg)
 
 	if cfg.DefaultTTL != time.Second ||
 		cfg.MemoryCleanupInterval != 2*time.Second ||
 		cfg.Prefix != "svc" ||
-		cfg.RedisClient != client {
+		cfg.RedisClient != client ||
+		cfg.FileDir != "/tmp/opts" {
 		t.Fatalf("options did not apply correctly: %+v", cfg)
 	}
 }
@@ -52,5 +57,10 @@ func TestFactoryHelpers(t *testing.T) {
 	rds := NewRedisStore(ctx, redisClient)
 	if rds.Driver() != DriverRedis {
 		t.Fatalf("expected redis driver")
+	}
+
+	file := NewFileStore(ctx, "/tmp/cache-file-test")
+	if file.Driver() != DriverFile {
+		t.Fatalf("expected file driver")
 	}
 }

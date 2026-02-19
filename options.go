@@ -36,3 +36,11 @@ func WithRedisClient(client RedisClient) StoreOption {
 		return cfg
 	}
 }
+
+// WithFileDir sets the directory used by the file driver.
+func WithFileDir(dir string) StoreOption {
+	return func(cfg StoreConfig) StoreConfig {
+		cfg.FileDir = dir
+		return cfg
+	}
+}

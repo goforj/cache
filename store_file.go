@@ -1,0 +1,165 @@
+package cache
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strconv"
+	"time"
+)
+
+type fileRecord struct {
+	ExpiresAt int64  `json:"expires_at"`
+	Value     []byte `json:"value"`
+}
+
+type fileStore struct {
+	dir        string
+	defaultTTL time.Duration
+}
+
+func newFileStore(dir string, defaultTTL time.Duration) Store {
+	if dir == "" {
+		dir = defaultFileDir()
+	}
+	if defaultTTL <= 0 {
+		defaultTTL = defaultCacheTTL
+	}
+	_ = os.MkdirAll(dir, 0o755)
+	return &fileStore{
+		dir:        dir,
+		defaultTTL: defaultTTL,
+	}
+}
+
+func (s *fileStore) Driver() Driver {
+	return DriverFile
+}
+
+func (s *fileStore) Get(_ context.Context, key string) ([]byte, bool, error) {
+	path := s.path(key)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, false, nil
+		}
+		return nil, false, err
+	}
+
+	var rec fileRecord
+	if err := json.Unmarshal(data, &rec); err != nil {
+		_ = os.Remove(path)
+		return nil, false, err
+	}
+
+	if rec.ExpiresAt > 0 && time.Now().UnixNano() > rec.ExpiresAt {
+		_ = os.Remove(path)
+		return nil, false, nil
+	}
+
+	return cloneBytes(rec.Value), true, nil
+}
+
+func (s *fileStore) Set(_ context.Context, key string, value []byte, ttl time.Duration) error {
+	if ttl <= 0 {
+		ttl = s.defaultTTL
+	}
+	rec := fileRecord{
+		ExpiresAt: time.Now().Add(ttl).UnixNano(),
+		Value:     cloneBytes(value),
+	}
+	data, err := json.Marshal(rec)
+	if err != nil {
+		return err
+	}
+
+	tmp, err := os.CreateTemp(s.dir, "cache-*")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		_ = os.Remove(tmpPath)
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		_ = os.Remove(tmpPath)
+		return err
+	}
+	return os.Rename(tmpPath, s.path(key))
+}
+
+func (s *fileStore) Add(ctx context.Context, key string, value []byte, ttl time.Duration) (bool, error) {
+	_, ok, err := s.Get(ctx, key)
+	if err != nil {
+		return false, err
+	}
+	if ok {
+		return false, nil
+	}
+	return true, s.Set(ctx, key, value, ttl)
+}
+
+func (s *fileStore) Increment(ctx context.Context, key string, delta int64, ttl time.Duration) (int64, error) {
+	current := int64(0)
+	if body, ok, err := s.Get(ctx, key); err != nil {
+		return 0, err
+	} else if ok {
+		n, err := strconv.ParseInt(string(body), 10, 64)
+		if err != nil {
+			return 0, fmt.Errorf("cache key %q does not contain a numeric value", key)
+		}
+		current = n
+	}
+	next := current + delta
+	if err := s.Set(ctx, key, []byte(strconv.FormatInt(next, 10)), ttl); err != nil {
+		return 0, err
+	}
+	return next, nil
+}
+
+func (s *fileStore) Decrement(ctx context.Context, key string, delta int64, ttl time.Duration) (int64, error) {
+	return s.Increment(ctx, key, -delta, ttl)
+}
+
+func (s *fileStore) Delete(_ context.Context, key string) error {
+	if err := os.Remove(s.path(key)); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return nil
+}
+
+func (s *fileStore) DeleteMany(ctx context.Context, keys ...string) error {
+	for _, key := range keys {
+		if err := s.Delete(ctx, key); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *fileStore) Flush(_ context.Context) error {
+	entries, err := os.ReadDir(s.dir)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		return err
+	}
+	for _, entry := range entries {
+		_ = os.Remove(filepath.Join(s.dir, entry.Name()))
+	}
+	return nil
+}
+
+func (s *fileStore) path(key string) string {
+	sum := sha256.Sum256([]byte(key))
+	name := hex.EncodeToString(sum[:])
+	return filepath.Join(s.dir, name+".cache")
+}

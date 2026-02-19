@@ -1,12 +1,20 @@
 package cache
 
-import "time"
+import (
+	"os"
+	"path/filepath"
+	"time"
+)
 
 const (
 	defaultCachePrefix           = "app"
 	defaultCacheTTL              = 5 * time.Minute
 	defaultMemoryCleanupInterval = 10 * time.Minute
 )
+
+func defaultFileDir() string {
+	return filepath.Join(os.TempDir(), "cache-file")
+}
 
 // StoreConfig controls how a Store is constructed.
 type StoreConfig struct {
@@ -23,6 +31,9 @@ type StoreConfig struct {
 
 	// RedisClient is required when DriverRedis is used.
 	RedisClient RedisClient
+
+	// FileDir controls where file driver stores cache entries.
+	FileDir string
 }
 
 func (c StoreConfig) withDefaults() StoreConfig {
@@ -37,6 +48,9 @@ func (c StoreConfig) withDefaults() StoreConfig {
 	}
 	if c.Prefix == "" {
 		c.Prefix = defaultCachePrefix
+	}
+	if c.FileDir == "" {
+		c.FileDir = defaultFileDir()
 	}
 	return c
 }

@@ -72,6 +72,7 @@ func selectedIntegrationDrivers() map[string]bool {
 	selected := map[string]bool{
 		"memory": true,
 		"redis":  true,
+		"file":   true,
 	}
 	value := strings.TrimSpace(strings.ToLower(os.Getenv("INTEGRATION_DRIVER")))
 	if value == "" || value == "all" {

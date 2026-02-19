@@ -18,6 +18,8 @@ func NewStore(_ context.Context, cfg StoreConfig) Store {
 	switch cfg.Driver {
 	case DriverRedis:
 		return newRedisStore(cfg.RedisClient, cfg.DefaultTTL, cfg.Prefix)
+	case DriverFile:
+		return newFileStore(cfg.FileDir, cfg.DefaultTTL)
 	default:
 		return newMemoryStore(cfg.DefaultTTL, cfg.MemoryCleanupInterval)
 	}
@@ -73,4 +75,16 @@ func NewMemoryStore(ctx context.Context, opts ...StoreOption) Store {
 //	fmt.Println(store.Driver()) // redis
 func NewRedisStore(ctx context.Context, client RedisClient, opts ...StoreOption) Store {
 	return NewStoreWith(ctx, DriverRedis, append([]StoreOption{WithRedisClient(client)}, opts...)...)
+}
+
+// NewFileStore is a convenience for a filesystem-backed store.
+// @group Constructors
+//
+// Example: file helper
+//
+//	ctx := context.Background()
+//	store := cache.NewFileStore(ctx, "/tmp/my-cache")
+//	fmt.Println(store.Driver()) // file
+func NewFileStore(ctx context.Context, dir string, opts ...StoreOption) Store {
+	return NewStoreWith(ctx, DriverFile, append([]StoreOption{WithFileDir(dir)}, opts...)...)
 }

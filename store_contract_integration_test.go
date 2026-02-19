@@ -115,6 +115,21 @@ func integrationFixtures(t *testing.T) []storeFactory {
 
 	var fixtures []storeFactory
 
+	if integrationDriverEnabled("file") {
+		fixtures = append(fixtures, storeFactory{
+			name: "file",
+			new: func(t *testing.T) (Store, func()) {
+				dir := t.TempDir()
+				store := NewStore(context.Background(), StoreConfig{
+					Driver:     DriverFile,
+					DefaultTTL: 2 * time.Second,
+					FileDir:    dir,
+				})
+				return store, func() {}
+			},
+		})
+	}
+
 	if integrationDriverEnabled("memory") {
 		fixtures = append(fixtures, storeFactory{
 			name: "memory",
