@@ -51,6 +51,9 @@ func TestSQLStoreBasics(t *testing.T) {
 	if err := store.Delete(ctx, "k"); err != nil {
 		t.Fatalf("delete failed: %v", err)
 	}
+	if err := store.DeleteMany(ctx, "a", "b"); err != nil {
+		t.Fatalf("delete many failed: %v", err)
+	}
 	if err := store.Flush(ctx); err != nil {
 		t.Fatalf("flush failed: %v", err)
 	}

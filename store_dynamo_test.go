@@ -10,7 +10,8 @@ import (
 )
 
 type dynStub struct {
-	items map[string]map[string]types.AttributeValue
+	items  map[string]map[string]types.AttributeValue
+	exists bool
 }
 
 func newDynStub() *dynStub { return &dynStub{items: map[string]map[string]types.AttributeValue{}} }
@@ -68,6 +69,9 @@ func (d *dynStub) CreateTable(context.Context, *dynamodb.CreateTableInput, ...fu
 }
 
 func (d *dynStub) DescribeTable(context.Context, *dynamodb.DescribeTableInput, ...func(*dynamodb.Options)) (*dynamodb.DescribeTableOutput, error) {
+	if d.exists {
+		return &dynamodb.DescribeTableOutput{}, nil
+	}
 	return nil, &types.ResourceNotFoundException{}
 }
 
@@ -103,7 +107,58 @@ func TestDynamoStoreBasicOperations(t *testing.T) {
 	if err := store.Delete(ctx, "k"); err != nil {
 		t.Fatalf("delete failed: %v", err)
 	}
+	if _, err := store.Decrement(ctx, "n", 1, time.Minute); err != nil {
+		t.Fatalf("decrement failed: %v", err)
+	}
 	if err := store.Flush(ctx); err != nil {
 		t.Fatalf("flush failed: %v", err)
+	}
+}
+
+func TestDynamoEnsureTableCreatesWhenMissing(t *testing.T) {
+	stub := newDynStub()
+	if err := ensureDynamoTable(context.Background(), stub, "tbl"); err != nil {
+		t.Fatalf("ensure table failed: %v", err)
+	}
+}
+
+func TestDynamoEnsureTableExistsPath(t *testing.T) {
+	stub := newDynStub()
+	stub.exists = true
+	if err := ensureDynamoTable(context.Background(), stub, "tbl"); err != nil {
+		t.Fatalf("ensure table exists path failed: %v", err)
+	}
+}
+
+func TestNewDynamoStoreDefaultsTTL(t *testing.T) {
+	stub := newDynStub()
+	store, err := newDynamoStore(context.Background(), StoreConfig{
+		DynamoClient: stub,
+		DynamoTable:  "tbl",
+		Prefix:       "p",
+		DefaultTTL:   0,
+	})
+	if err != nil {
+		t.Fatalf("expected store: %v", err)
+	}
+	ds := store.(*dynamoStore)
+	if ds.defaultTTL != defaultCacheTTL {
+		t.Fatalf("expected default ttl fallback, got %v", ds.defaultTTL)
+	}
+	if ds.cacheKey("k") != "p:k" {
+		t.Fatalf("unexpected cache key")
+	}
+}
+
+func TestNewDynamoClientBuilds(t *testing.T) {
+	client, err := newDynamoClient(context.Background(), StoreConfig{
+		DynamoRegion:   "us-east-1",
+		DynamoEndpoint: "http://localhost:8000",
+	})
+	if err != nil {
+		t.Fatalf("expected client build: %v", err)
+	}
+	if client == nil {
+		t.Fatalf("client nil")
 	}
 }

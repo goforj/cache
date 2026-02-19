@@ -12,6 +12,11 @@ import (
 	"time"
 )
 
+var dialMemcached = func(ctx context.Context, network, addr string) (net.Conn, error) {
+	d := net.Dialer{Timeout: 3 * time.Second}
+	return d.DialContext(ctx, network, addr)
+}
+
 type memcachedStore struct {
 	addrs      []string
 	defaultTTL time.Duration
@@ -257,8 +262,7 @@ func (s *memcachedStore) dial(ctx context.Context) (net.Conn, error) {
 	}
 	var errs bytes.Buffer
 	for _, addr := range s.addrs {
-		d := net.Dialer{Timeout: 3 * time.Second}
-		conn, err := d.DialContext(ctx, "tcp", addr)
+		conn, err := dialMemcached(ctx, "tcp", addr)
 		if err == nil {
 			return conn, nil
 		}
