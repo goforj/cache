@@ -21,7 +21,7 @@
 ## What cache is
  
 An explicit cache abstraction with a minimal Store interface and ergonomic Cache helpers. Drivers are chosen when you construct the store, so swapping backends is a dependency-injection change instead of a refactor.
-
+ 
 ## Drivers
 
 |                                                                                             Driver / Backend | Mode | Shared | Durable | TTL | Counters | Notes |
