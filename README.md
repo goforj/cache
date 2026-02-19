@@ -18,11 +18,6 @@
 <!-- test-count:embed:end -->
 </p>
 
-<p align="center">
-  <img src="https://img.shields.io/badge/drivers-memory%20%E2%9C%85%20|%20redis%20%E2%9C%85-brightgreen" alt="Drivers">
-  <img src="https://img.shields.io/badge/options-ttl%20|%20prefix%20|%20counters%20|%20add%20|%20memo-brightgreen" alt="Options">
-</p>
-
 ## What cache is
 
 An explicit cache abstraction with a minimal `Store` interface and ergonomic `Cache` helpers. Drivers are chosen when you construct the store (no env coupling), so swapping backends is a dependency-injection change instead of a refactor.
@@ -33,6 +28,7 @@ An explicit cache abstraction with a minimal `Store` interface and ergonomic `Ca
 | ---: | :--- | :---: | :---: | :---: | :---: |
 | <img src="https://img.shields.io/badge/memory-5c5c5c?logo=cachet&logoColor=white" alt="Memory"> | In-process | - | - | ✓ | ✓ |
 | <img src="https://img.shields.io/badge/redis-%23DC382D?logo=redis&logoColor=white" alt="Redis"> | Networked | ✓ | - | ✓ | ✓ |
+| <img src="https://img.shields.io/badge/file-3f51b5?logo=files&logoColor=white" alt="File"> | Local filesystem | - | ✓ | ✓ | ✓ |
 
 ## Installation
 
