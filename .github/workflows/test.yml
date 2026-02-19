@@ -54,7 +54,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        driver: [memory, redis]
+        driver: [memory, file, redis, memcached, dynamodb]
     env:
       GOCACHE: /tmp/go-build-cache
       INTEGRATION_DRIVER: ${{ matrix.driver }}
