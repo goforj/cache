@@ -100,10 +100,12 @@ type CacheAPI interface {
 	Flush() error
 	Remember(key string, ttl time.Duration, fn func() ([]byte, error)) ([]byte, error)
 	RememberString(key string, ttl time.Duration, fn func() (string, error)) (string, error)
-	RememberJSON[T any](cache *Cache, key string, ttl time.Duration, fn func() (T, error)) (T, error)
-	GetJSON[T any](cache *Cache, key string) (T, bool, error)
-	SetJSON[T any](cache *Cache, key string, value T, ttl time.Duration) error
 }
+
+// JSON helpers (free functions)
+func RememberJSON[T any](cache *Cache, key string, ttl time.Duration, fn func() (T, error)) (T, error)
+func GetJSON[T any](cache *Cache, key string) (T, bool, error)
+func SetJSON[T any](cache *Cache, key string, value T, ttl time.Duration) error
 ```
 ctx-aware twins: GetCtx, SetCtx, RememberCtx, RememberStringCtx, RememberJSONCtx, etc.
 
