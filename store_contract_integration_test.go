@@ -165,5 +165,24 @@ func integrationFixtures(t *testing.T) []storeFactory {
 		})
 	}
 
+	if integrationDriverEnabled("memcached") {
+		addr := integrationAddr("memcached")
+		if addr == "" {
+			t.Fatalf("memcached integration requested but no address available")
+		}
+		fixtures = append(fixtures, storeFactory{
+			name: "memcached",
+			new: func(t *testing.T) (Store, func()) {
+				store := NewStore(context.Background(), StoreConfig{
+					Driver:              DriverMemcached,
+					DefaultTTL:          2 * time.Second,
+					Prefix:              "itest",
+					MemcachedAddresses: []string{addr},
+				})
+				return store, func() {}
+			},
+		})
+	}
+
 	return fixtures
 }

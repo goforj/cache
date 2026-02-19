@@ -7,4 +7,5 @@ const (
 	DriverMemory Driver = "memory"
 	DriverRedis  Driver = "redis"
 	DriverFile   Driver = "file"
+	DriverMemcached Driver = "memcached"
 )

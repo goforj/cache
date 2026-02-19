@@ -44,3 +44,11 @@ func WithFileDir(dir string) StoreOption {
 		return cfg
 	}
 }
+
+// WithMemcachedAddresses sets memcached server addresses (host:port).
+func WithMemcachedAddresses(addrs ...string) StoreOption {
+	return func(cfg StoreConfig) StoreConfig {
+		cfg.MemcachedAddresses = append([]string{}, addrs...)
+		return cfg
+	}
+}

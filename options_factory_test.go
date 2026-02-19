@@ -31,6 +31,7 @@ func TestStoreOptionsMutateConfig(t *testing.T) {
 	cfg = WithMemoryCleanupInterval(2 * time.Second)(cfg)
 	cfg = WithPrefix("svc")(cfg)
 	cfg = WithFileDir("/tmp/opts")(cfg)
+	cfg = WithMemcachedAddresses("127.0.0.1:11211")(cfg)
 	client := newStubRedisClient()
 	cfg = WithRedisClient(client)(cfg)
 
@@ -38,7 +39,9 @@ func TestStoreOptionsMutateConfig(t *testing.T) {
 		cfg.MemoryCleanupInterval != 2*time.Second ||
 		cfg.Prefix != "svc" ||
 		cfg.RedisClient != client ||
-		cfg.FileDir != "/tmp/opts" {
+		cfg.FileDir != "/tmp/opts" ||
+		len(cfg.MemcachedAddresses) != 1 ||
+		cfg.MemcachedAddresses[0] != "127.0.0.1:11211" {
 		t.Fatalf("options did not apply correctly: %+v", cfg)
 	}
 }
@@ -62,5 +65,10 @@ func TestFactoryHelpers(t *testing.T) {
 	file := NewFileStore(ctx, "/tmp/cache-file-test")
 	if file.Driver() != DriverFile {
 		t.Fatalf("expected file driver")
+	}
+
+	memStore := NewMemcachedStore(ctx, []string{"127.0.0.1:11211"})
+	if memStore.Driver() != DriverMemcached {
+		t.Fatalf("expected memcached driver")
 	}
 }

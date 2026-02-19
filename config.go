@@ -34,6 +34,9 @@ type StoreConfig struct {
 
 	// FileDir controls where file driver stores cache entries.
 	FileDir string
+
+	// MemcachedAddresses are required when DriverMemcached is used (host:port).
+	MemcachedAddresses []string
 }
 
 func (c StoreConfig) withDefaults() StoreConfig {
@@ -51,6 +54,9 @@ func (c StoreConfig) withDefaults() StoreConfig {
 	}
 	if c.FileDir == "" {
 		c.FileDir = defaultFileDir()
+	}
+	if len(c.MemcachedAddresses) == 0 && c.Driver == DriverMemcached {
+		c.MemcachedAddresses = []string{"127.0.0.1:11211"}
 	}
 	return c
 }

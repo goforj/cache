@@ -24,6 +24,7 @@ var integrationRedis struct {
 // Add new drivers here with a testcontainers-backed start function.
 var integrationBackends = map[string]func(context.Context) (testcontainers.Container, string, error){
 	"redis": startRedisContainer,
+	"memcached": startMemcachedContainer,
 }
 
 type integrationRuntime struct {
@@ -122,6 +123,32 @@ func startRedisContainer(ctx context.Context) (testcontainers.Container, string,
 		return nil, "", err
 	}
 	port, err := container.MappedPort(ctx, "6379/tcp")
+	if err != nil {
+		_ = container.Terminate(ctx)
+		return nil, "", err
+	}
+	return container, net.JoinHostPort(host, port.Port()), nil
+}
+
+func startMemcachedContainer(ctx context.Context) (testcontainers.Container, string, error) {
+	req := testcontainers.ContainerRequest{
+		Image:        "memcached:alpine",
+		ExposedPorts: []string{"11211/tcp"},
+		WaitingFor:   wait.ForListeningPort("11211/tcp").WithStartupTimeout(30 * time.Second),
+	}
+	container, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
+		ContainerRequest: req,
+		Started:          true,
+	})
+	if err != nil {
+		return nil, "", err
+	}
+	host, err := container.Host(ctx)
+	if err != nil {
+		_ = container.Terminate(ctx)
+		return nil, "", err
+	}
+	port, err := container.MappedPort(ctx, "11211/tcp")
 	if err != nil {
 		_ = container.Terminate(ctx)
 		return nil, "", err

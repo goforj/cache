@@ -18,6 +18,8 @@ func NewStore(_ context.Context, cfg StoreConfig) Store {
 	switch cfg.Driver {
 	case DriverRedis:
 		return newRedisStore(cfg.RedisClient, cfg.DefaultTTL, cfg.Prefix)
+	case DriverMemcached:
+		return newMemcachedStore(cfg.MemcachedAddresses, cfg.DefaultTTL, cfg.Prefix)
 	case DriverFile:
 		return newFileStore(cfg.FileDir, cfg.DefaultTTL)
 	default:
@@ -87,4 +89,16 @@ func NewRedisStore(ctx context.Context, client RedisClient, opts ...StoreOption)
 //	fmt.Println(store.Driver()) // file
 func NewFileStore(ctx context.Context, dir string, opts ...StoreOption) Store {
 	return NewStoreWith(ctx, DriverFile, append([]StoreOption{WithFileDir(dir)}, opts...)...)
+}
+
+// NewMemcachedStore is a convenience for a memcached-backed store.
+// @group Constructors
+//
+// Example: memcached helper
+//
+//	ctx := context.Background()
+//	store := cache.NewMemcachedStore(ctx, []string{"127.0.0.1:11211"})
+//	fmt.Println(store.Driver()) // memcached
+func NewMemcachedStore(ctx context.Context, addrs []string, opts ...StoreOption) Store {
+	return NewStoreWith(ctx, DriverMemcached, append([]StoreOption{WithMemcachedAddresses(addrs...)}, opts...)...)
 }
