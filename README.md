@@ -58,8 +58,10 @@ func main() {
     c := cache.NewCache(store)
 
     // Remember pattern.
-    profile, err := c.Remember("user:42:profile", time.Minute, func() ([]byte, error) {
-        return []byte(`{"name":"ada"}`), nil
+    type Profile struct { Name string `json:"name"` }
+
+    profile, err := cache.Remember[Profile](c, "user:42:profile", time.Minute, func() (Profile, error) {
+        return Profile{Name: "Ada"}, nil
     })
     _ = profile
 
@@ -98,16 +100,18 @@ type CacheAPI interface {
 	Delete(key string) error
 	DeleteMany(keys ...string) error
 	Flush() error
-	Remember(key string, ttl time.Duration, fn func() ([]byte, error)) ([]byte, error)
+	RememberBytes(key string, ttl time.Duration, fn func() ([]byte, error)) ([]byte, error)
 	RememberString(key string, ttl time.Duration, fn func() (string, error)) (string, error)
 }
 
 // JSON helpers (free functions)
+func Remember[T any](cache *Cache, key string, ttl time.Duration, fn func() (T, error)) (T, error)
 func RememberJSON[T any](cache *Cache, key string, ttl time.Duration, fn func() (T, error)) (T, error)
 func GetJSON[T any](cache *Cache, key string) (T, bool, error)
 func SetJSON[T any](cache *Cache, key string, value T, ttl time.Duration) error
+func RememberValueWithCodec[T any](ctx context.Context, cache *Cache, key string, ttl time.Duration, fn func() (T, error), codec ValueCodec[T]) (T, error)
 ```
-ctx-aware twins: GetCtx, SetCtx, RememberCtx, RememberStringCtx, RememberJSONCtx, etc.
+ctx-aware twins: GetCtx, SetCtx, RememberCtx (bytes), RememberStringCtx, RememberJSONCtx, RememberValueWithCodec, etc.
 
 To observe cache operations (hits, misses, errors, latency), attach an Observer:
 
