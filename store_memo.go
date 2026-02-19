@@ -12,6 +12,15 @@ type memoEntry struct {
 }
 
 // NewMemoStore decorates store with per-process read memoization.
+// @group Memoization
+//
+// Example: memoize a backing store
+//
+//	ctx := context.Background()
+//	base := cache.NewStore(ctx, cache.StoreConfig{Driver: cache.DriverMemory})
+//	memoStore := cache.NewMemoStore(base)
+//	repo := cache.NewRepository(memoStore)
+//	_ = repo
 func NewMemoStore(store Store) Store {
 	return &memoStore{
 		store: store,
