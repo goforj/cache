@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -914,6 +916,89 @@ func TestCacheRefreshAheadHitTriggersAsyncRefresh(t *testing.T) {
 	}
 }
 
+func TestCacheRefreshAheadConcurrentHitTriggersSingleAsyncRefresh(t *testing.T) {
+	c := NewCache(NewMemoryStore(context.Background()))
+	key := "ra:contend"
+	ttl := 2 * time.Second
+	refreshAhead := 200 * time.Millisecond
+
+	var calls atomic.Int64
+	refreshStarted := make(chan struct{}, 1)
+	releaseRefresh := make(chan struct{})
+	cb := func() ([]byte, error) {
+		n := calls.Add(1)
+		if n == 1 {
+			return []byte("v1"), nil
+		}
+		select {
+		case refreshStarted <- struct{}{}:
+		default:
+		}
+		<-releaseRefresh
+		return []byte("v2"), nil
+	}
+
+	_, err := c.RefreshAhead(key, ttl, refreshAhead, cb)
+	if err != nil {
+		t.Fatalf("seed refresh ahead failed: %v", err)
+	}
+	time.Sleep(1850 * time.Millisecond)
+
+	const workers = 24
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+	errs := make(chan error, workers)
+	values := make(chan string, workers)
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			body, err := c.RefreshAhead(key, ttl, refreshAhead, cb)
+			if err != nil {
+				errs <- err
+				return
+			}
+			values <- string(body)
+		}()
+	}
+	close(start)
+	wg.Wait()
+
+	select {
+	case <-refreshStarted:
+	case <-time.After(2 * time.Second):
+		t.Fatalf("expected async refresh callback to start under contention")
+	}
+	close(releaseRefresh)
+
+	for len(errs) > 0 {
+		t.Fatalf("unexpected refresh ahead contention error: %v", <-errs)
+	}
+	for i := 0; i < workers; i++ {
+		if got := <-values; got != "v1" {
+			t.Fatalf("expected immediate cached value during contention, got %q", got)
+		}
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		body, ok, err := c.Get(key)
+		if err == nil && ok && string(body) == "v2" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("expected refreshed value v2, ok=%v body=%q err=%v", ok, string(body), err)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	maxAllowed := int64(workers/3 + 2)
+	if got := calls.Load(); got < 2 || got > maxAllowed {
+		t.Fatalf("expected refresh contention to stay bounded (2..%d callbacks), got %d", maxAllowed, got)
+	}
+}
+
 func TestCacheRefreshAheadValidationAndErrors(t *testing.T) {
 	c := NewCache(NewMemoryStore(context.Background()))
 	if _, err := c.RefreshAhead("ra:bad", 0, time.Second, func() ([]byte, error) { return []byte("x"), nil }); err == nil {
@@ -1026,6 +1111,124 @@ func TestCacheLockWaitsAndTimesOut(t *testing.T) {
 	locked, err = c.Lock(timeoutKey, time.Second, 80*time.Millisecond)
 	if err == nil || locked {
 		t.Fatalf("expected timeout lock failure, locked=%v err=%v", locked, err)
+	}
+}
+
+func TestCacheTryLockConcurrentContentionSingleWinner(t *testing.T) {
+	c := NewCache(NewMemoryStore(context.Background()))
+	key := "lock:contend:single-winner"
+
+	const workers = 32
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+	var winners atomic.Int64
+	errs := make(chan error, workers)
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			locked, err := c.TryLock(key, time.Second)
+			if err != nil {
+				errs <- err
+				return
+			}
+			if locked {
+				winners.Add(1)
+			}
+		}()
+	}
+	close(start)
+	wg.Wait()
+
+	for len(errs) > 0 {
+		t.Fatalf("unexpected try lock error: %v", <-errs)
+	}
+	if got := winners.Load(); got != 1 {
+		t.Fatalf("expected exactly one lock winner under contention, got %d", got)
+	}
+}
+
+func TestCacheLockConcurrentTimeoutContention(t *testing.T) {
+	c := NewCache(NewMemoryStore(context.Background()))
+	key := "lock:contend:timeout"
+
+	locked, err := c.TryLock(key, time.Second)
+	if err != nil || !locked {
+		t.Fatalf("seed lock failed: locked=%v err=%v", locked, err)
+	}
+
+	const workers = 16
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+	errs := make(chan error, workers)
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			locked, err := c.Lock(key, time.Second, 60*time.Millisecond)
+			if err == nil || locked {
+				errs <- errors.New("expected lock timeout under contention")
+				return
+			}
+		}()
+	}
+	close(start)
+	wg.Wait()
+
+	for len(errs) > 0 {
+		t.Fatalf("unexpected lock contention result: %v", <-errs)
+	}
+}
+
+func TestCacheRememberCtxConcurrentMissContention(t *testing.T) {
+	c := NewCache(NewMemoryStore(context.Background()))
+	ctx := context.Background()
+
+	var calls atomic.Int64
+	const workers = 24
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+	errs := make(chan error, workers)
+	values := make(chan string, workers)
+
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			body, err := c.RememberCtx(ctx, "remember:contend", time.Minute, func(context.Context) ([]byte, error) {
+				calls.Add(1)
+				time.Sleep(20 * time.Millisecond)
+				return []byte("value"), nil
+			})
+			if err != nil {
+				errs <- err
+				return
+			}
+			values <- string(body)
+		}()
+	}
+
+	close(start)
+	wg.Wait()
+
+	for len(errs) > 0 {
+		t.Fatalf("unexpected remember contention error: %v", <-errs)
+	}
+	for i := 0; i < workers; i++ {
+		if got := <-values; got != "value" {
+			t.Fatalf("unexpected remember value: %q", got)
+		}
+	}
+	if calls.Load() < 1 {
+		t.Fatalf("expected callback to run at least once")
+	}
+
+	body, ok, err := c.Get("remember:contend")
+	if err != nil || !ok || string(body) != "value" {
+		t.Fatalf("expected cached value after contention, ok=%v body=%q err=%v", ok, string(body), err)
 	}
 }
 
