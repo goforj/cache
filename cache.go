@@ -17,7 +17,7 @@ type Cache struct {
 }
 
 // NewCache creates a cache facade bound to a concrete store.
-// @group Cache
+// @group Core
 //
 // Example: cache from store
 //
@@ -30,7 +30,7 @@ func NewCache(store Store) *Cache {
 }
 
 // NewCacheWithTTL lets callers override the default TTL applied when ttl <= 0.
-// @group Cache
+// @group Core
 //
 // Example: cache with custom default TTL
 //
@@ -49,13 +49,14 @@ func NewCacheWithTTL(store Store, defaultTTL time.Duration) *Cache {
 }
 
 // WithObserver attaches an observer to receive operation events.
+// @group Observability
 func (c *Cache) WithObserver(o Observer) *Cache {
 	c.observer = o
 	return c
 }
 
 // Store returns the underlying store implementation.
-// @group Cache
+// @group Core
 //
 // Example: access store
 //
@@ -67,13 +68,13 @@ func (c *Cache) Store() Store {
 }
 
 // Driver reports the underlying store driver.
-// @group Cache
+// @group Core
 func (c *Cache) Driver() Driver {
 	return c.store.Driver()
 }
 
 // Get returns raw bytes for key when present.
-// @group Cache
+// @group Reads
 //
 // Example: get bytes
 //
@@ -87,6 +88,8 @@ func (c *Cache) Get(key string) ([]byte, bool, error) {
 	return c.GetCtx(context.Background(), key)
 }
 
+// GetCtx is the context-aware variant of Get.
+// @group Reads
 func (c *Cache) GetCtx(ctx context.Context, key string) ([]byte, bool, error) {
 	start := time.Now()
 	body, ok, err := c.store.Get(ctx, key)
@@ -96,7 +99,7 @@ func (c *Cache) GetCtx(ctx context.Context, key string) ([]byte, bool, error) {
 
 // BatchGet returns all found values for the provided keys.
 // Missing keys are omitted from the returned map.
-// @group Cache
+// @group Reads
 //
 // Example: batch get keys
 //
@@ -111,6 +114,7 @@ func (c *Cache) BatchGet(keys ...string) (map[string][]byte, error) {
 }
 
 // BatchGetCtx is the context-aware variant of BatchGet.
+// @group Reads
 func (c *Cache) BatchGetCtx(ctx context.Context, keys ...string) (map[string][]byte, error) {
 	out := make(map[string][]byte, len(keys))
 	for _, key := range keys {
@@ -126,7 +130,7 @@ func (c *Cache) BatchGetCtx(ctx context.Context, keys ...string) (map[string][]b
 }
 
 // GetString returns a UTF-8 string value for key when present.
-// @group Cache
+// @group Reads
 //
 // Example: get string
 //
@@ -139,6 +143,8 @@ func (c *Cache) GetString(key string) (string, bool, error) {
 	return c.GetStringCtx(context.Background(), key)
 }
 
+// GetStringCtx is the context-aware variant of GetString.
+// @group Reads
 func (c *Cache) GetStringCtx(ctx context.Context, key string) (string, bool, error) {
 	start := time.Now()
 	body, ok, err := c.GetCtx(ctx, key)
@@ -152,12 +158,13 @@ func (c *Cache) GetStringCtx(ctx context.Context, key string) (string, bool, err
 }
 
 // GetJSON decodes a JSON value into T when key exists, using background context.
-// @group Cache JSON
+// @group Reads
 func GetJSON[T any](cache *Cache, key string) (T, bool, error) {
 	return GetJSONCtx[T](context.Background(), cache, key)
 }
 
 // GetJSONCtx is the context-aware variant of GetJSON.
+// @group Reads
 func GetJSONCtx[T any](ctx context.Context, cache *Cache, key string) (T, bool, error) {
 	var zero T
 	start := time.Now()
@@ -176,7 +183,7 @@ func GetJSONCtx[T any](ctx context.Context, cache *Cache, key string) (T, bool, 
 }
 
 // Set writes raw bytes to key.
-// @group Cache
+// @group Writes
 //
 // Example: set bytes with ttl
 //
@@ -187,6 +194,8 @@ func (c *Cache) Set(key string, value []byte, ttl time.Duration) error {
 	return c.SetCtx(context.Background(), key, value, ttl)
 }
 
+// SetCtx is the context-aware variant of Set.
+// @group Writes
 func (c *Cache) SetCtx(ctx context.Context, key string, value []byte, ttl time.Duration) error {
 	start := time.Now()
 	err := c.store.Set(ctx, key, value, c.resolveTTL(ttl))
@@ -195,7 +204,7 @@ func (c *Cache) SetCtx(ctx context.Context, key string, value []byte, ttl time.D
 }
 
 // BatchSet writes many key/value pairs using a shared ttl.
-// @group Cache
+// @group Writes
 //
 // Example: batch set keys
 //
@@ -211,6 +220,7 @@ func (c *Cache) BatchSet(values map[string][]byte, ttl time.Duration) error {
 }
 
 // BatchSetCtx is the context-aware variant of BatchSet.
+// @group Writes
 func (c *Cache) BatchSetCtx(ctx context.Context, values map[string][]byte, ttl time.Duration) error {
 	for key, value := range values {
 		if err := c.SetCtx(ctx, key, value, ttl); err != nil {
@@ -222,7 +232,7 @@ func (c *Cache) BatchSetCtx(ctx context.Context, values map[string][]byte, ttl t
 
 // RefreshAhead returns cached value immediately and refreshes asynchronously when near expiry.
 // On miss, it computes and stores synchronously.
-// @group Cache
+// @group Refresh Ahead
 //
 // Example: refresh ahead
 //
@@ -242,6 +252,7 @@ func (c *Cache) RefreshAhead(key string, ttl, refreshAhead time.Duration, fn fun
 }
 
 // RefreshAheadCtx is the context-aware variant of RefreshAhead.
+// @group Refresh Ahead
 func (c *Cache) RefreshAheadCtx(ctx context.Context, key string, ttl, refreshAhead time.Duration, fn func(context.Context) ([]byte, error)) ([]byte, error) {
 	if ttl <= 0 {
 		return nil, errors.New("cache refresh ahead requires ttl > 0")
@@ -318,7 +329,7 @@ func (c *Cache) setRefreshAheadValue(ctx context.Context, key string, value []by
 }
 
 // RefreshAhead returns a typed value and refreshes asynchronously when near expiry.
-// @group Cache
+// @group Refresh Ahead
 //
 // Example: refresh ahead typed
 //
@@ -340,6 +351,7 @@ func RefreshAhead[T any](cache *Cache, key string, ttl, refreshAhead time.Durati
 }
 
 // RefreshAheadCtx is the context-aware variant of RefreshAhead.
+// @group Refresh Ahead
 func RefreshAheadCtx[T any](ctx context.Context, cache *Cache, key string, ttl, refreshAhead time.Duration, fn func(context.Context) (T, error)) (T, error) {
 	return RefreshAheadValueWithCodec(ctx, cache, key, ttl, refreshAhead, func() (T, error) {
 		if fn == nil {
@@ -351,7 +363,7 @@ func RefreshAheadCtx[T any](ctx context.Context, cache *Cache, key string, ttl, 
 }
 
 // RefreshAheadValueWithCodec allows custom encoding/decoding for typed refresh-ahead operations.
-// @group Other
+// @group Refresh Ahead
 func RefreshAheadValueWithCodec[T any](ctx context.Context, cache *Cache, key string, ttl, refreshAhead time.Duration, fn func() (T, error), codec ValueCodec[T]) (T, error) {
 	var zero T
 	body, err := cache.RefreshAheadCtx(ctx, key, ttl, refreshAhead, func(ctx context.Context) ([]byte, error) {
@@ -375,7 +387,7 @@ func RefreshAheadValueWithCodec[T any](ctx context.Context, cache *Cache, key st
 }
 
 // SetString writes a string value to key.
-// @group Cache
+// @group Writes
 //
 // Example: set string
 //
@@ -386,6 +398,8 @@ func (c *Cache) SetString(key string, value string, ttl time.Duration) error {
 	return c.SetStringCtx(context.Background(), key, value, ttl)
 }
 
+// SetStringCtx is the context-aware variant of SetString.
+// @group Writes
 func (c *Cache) SetStringCtx(ctx context.Context, key string, value string, ttl time.Duration) error {
 	start := time.Now()
 	err := c.SetCtx(ctx, key, []byte(value), ttl)
@@ -394,12 +408,13 @@ func (c *Cache) SetStringCtx(ctx context.Context, key string, value string, ttl 
 }
 
 // SetJSON encodes value as JSON and writes it to key using background context.
-// @group Cache JSON
+// @group Writes
 func SetJSON[T any](cache *Cache, key string, value T, ttl time.Duration) error {
 	return SetJSONCtx[T](context.Background(), cache, key, value, ttl)
 }
 
 // SetJSONCtx is the context-aware variant of SetJSON.
+// @group Writes
 func SetJSONCtx[T any](ctx context.Context, cache *Cache, key string, value T, ttl time.Duration) error {
 	start := time.Now()
 	body, err := json.Marshal(value)
@@ -413,7 +428,7 @@ func SetJSONCtx[T any](ctx context.Context, cache *Cache, key string, value T, t
 }
 
 // Add writes value only when key is not already present.
-// @group Cache
+// @group Writes
 //
 // Example: add once
 //
@@ -425,6 +440,8 @@ func (c *Cache) Add(key string, value []byte, ttl time.Duration) (bool, error) {
 	return c.AddCtx(context.Background(), key, value, ttl)
 }
 
+// AddCtx is the context-aware variant of Add.
+// @group Writes
 func (c *Cache) AddCtx(ctx context.Context, key string, value []byte, ttl time.Duration) (bool, error) {
 	start := time.Now()
 	created, err := c.store.Add(ctx, key, value, c.resolveTTL(ttl))
@@ -433,7 +450,7 @@ func (c *Cache) AddCtx(ctx context.Context, key string, value []byte, ttl time.D
 }
 
 // Increment increments a numeric value and returns the result.
-// @group Cache
+// @group Writes
 //
 // Example: increment counter
 //
@@ -445,6 +462,8 @@ func (c *Cache) Increment(key string, delta int64, ttl time.Duration) (int64, er
 	return c.IncrementCtx(context.Background(), key, delta, ttl)
 }
 
+// IncrementCtx is the context-aware variant of Increment.
+// @group Writes
 func (c *Cache) IncrementCtx(ctx context.Context, key string, delta int64, ttl time.Duration) (int64, error) {
 	start := time.Now()
 	val, err := c.store.Increment(ctx, key, delta, c.resolveTTL(ttl))
@@ -453,7 +472,7 @@ func (c *Cache) IncrementCtx(ctx context.Context, key string, delta int64, ttl t
 }
 
 // Decrement decrements a numeric value and returns the result.
-// @group Cache
+// @group Writes
 //
 // Example: decrement counter
 //
@@ -465,6 +484,8 @@ func (c *Cache) Decrement(key string, delta int64, ttl time.Duration) (int64, er
 	return c.DecrementCtx(context.Background(), key, delta, ttl)
 }
 
+// DecrementCtx is the context-aware variant of Decrement.
+// @group Writes
 func (c *Cache) DecrementCtx(ctx context.Context, key string, delta int64, ttl time.Duration) (int64, error) {
 	start := time.Now()
 	val, err := c.store.Decrement(ctx, key, delta, c.resolveTTL(ttl))
@@ -473,7 +494,7 @@ func (c *Cache) DecrementCtx(ctx context.Context, key string, delta int64, ttl t
 }
 
 // RateLimit increments key in a fixed window and reports whether requests are allowed.
-// @group Cache
+// @group Rate Limiting
 //
 // Example: fixed-window rate limit
 //
@@ -486,13 +507,14 @@ func (c *Cache) RateLimit(key string, limit int64, window time.Duration) (bool, 
 }
 
 // RateLimitCtx is the context-aware variant of RateLimit.
+// @group Rate Limiting
 func (c *Cache) RateLimitCtx(ctx context.Context, key string, limit int64, window time.Duration) (bool, int64, error) {
 	allowed, count, _, _, err := c.RateLimitWithRemainingCtx(ctx, key, limit, window)
 	return allowed, count, err
 }
 
 // RateLimitWithRemaining increments a fixed-window counter and returns allowance metadata.
-// @group Cache
+// @group Rate Limiting
 //
 // Example: rate limit headers metadata
 //
@@ -505,6 +527,7 @@ func (c *Cache) RateLimitWithRemaining(key string, limit int64, window time.Dura
 }
 
 // RateLimitWithRemainingCtx is the context-aware variant of RateLimitWithRemaining.
+// @group Rate Limiting
 func (c *Cache) RateLimitWithRemainingCtx(ctx context.Context, key string, limit int64, window time.Duration) (bool, int64, int64, time.Time, error) {
 	if limit <= 0 {
 		return false, 0, 0, time.Time{}, errors.New("cache rate limit requires limit > 0")
@@ -529,7 +552,7 @@ func (c *Cache) RateLimitWithRemainingCtx(ctx context.Context, key string, limit
 }
 
 // TryLock acquires a short-lived lock key when not already held.
-// @group Cache
+// @group Locking
 //
 // Example: try lock
 //
@@ -542,6 +565,7 @@ func (c *Cache) TryLock(key string, ttl time.Duration) (bool, error) {
 }
 
 // TryLockCtx is the context-aware variant of TryLock.
+// @group Locking
 func (c *Cache) TryLockCtx(ctx context.Context, key string, ttl time.Duration) (bool, error) {
 	if ttl <= 0 {
 		return false, errors.New("cache try lock requires ttl > 0")
@@ -553,7 +577,7 @@ func (c *Cache) TryLockCtx(ctx context.Context, key string, ttl time.Duration) (
 }
 
 // Lock waits until the lock is acquired or timeout elapses.
-// @group Cache
+// @group Locking
 //
 // Example: lock with timeout
 //
@@ -572,6 +596,7 @@ func (c *Cache) Lock(key string, ttl, timeout time.Duration) (bool, error) {
 }
 
 // LockCtx retries lock acquisition until success or context cancellation.
+// @group Locking
 func (c *Cache) LockCtx(ctx context.Context, key string, ttl, retryInterval time.Duration) (bool, error) {
 	if retryInterval <= 0 {
 		retryInterval = defaultLockRetryInterval
@@ -598,7 +623,7 @@ func (c *Cache) LockCtx(ctx context.Context, key string, ttl, retryInterval time
 }
 
 // Unlock releases a previously acquired lock key.
-// @group Cache
+// @group Locking
 //
 // Example: unlock key
 //
@@ -613,6 +638,7 @@ func (c *Cache) Unlock(key string) error {
 }
 
 // UnlockCtx is the context-aware variant of Unlock.
+// @group Locking
 func (c *Cache) UnlockCtx(ctx context.Context, key string) error {
 	start := time.Now()
 	err := c.store.Delete(ctx, lockPrefix+key)
@@ -621,7 +647,7 @@ func (c *Cache) UnlockCtx(ctx context.Context, key string) error {
 }
 
 // Pull returns value and removes it from cache.
-// @group Cache
+// @group Invalidation
 //
 // Example: pull and delete
 //
@@ -634,6 +660,8 @@ func (c *Cache) Pull(key string) ([]byte, bool, error) {
 	return c.PullCtx(context.Background(), key)
 }
 
+// PullCtx is the context-aware variant of Pull.
+// @group Invalidation
 func (c *Cache) PullCtx(ctx context.Context, key string) ([]byte, bool, error) {
 	start := time.Now()
 	body, ok, err := c.GetCtx(ctx, key)
@@ -650,7 +678,7 @@ func (c *Cache) PullCtx(ctx context.Context, key string) ([]byte, bool, error) {
 }
 
 // Delete removes a single key.
-// @group Cache
+// @group Invalidation
 //
 // Example: delete key
 //
@@ -662,6 +690,8 @@ func (c *Cache) Delete(key string) error {
 	return c.DeleteCtx(context.Background(), key)
 }
 
+// DeleteCtx is the context-aware variant of Delete.
+// @group Invalidation
 func (c *Cache) DeleteCtx(ctx context.Context, key string) error {
 	start := time.Now()
 	err := c.store.Delete(ctx, key)
@@ -670,7 +700,7 @@ func (c *Cache) DeleteCtx(ctx context.Context, key string) error {
 }
 
 // DeleteMany removes multiple keys.
-// @group Cache
+// @group Invalidation
 //
 // Example: delete many keys
 //
@@ -681,6 +711,8 @@ func (c *Cache) DeleteMany(keys ...string) error {
 	return c.DeleteManyCtx(context.Background(), keys...)
 }
 
+// DeleteManyCtx is the context-aware variant of DeleteMany.
+// @group Invalidation
 func (c *Cache) DeleteManyCtx(ctx context.Context, keys ...string) error {
 	start := time.Now()
 	err := c.store.DeleteMany(ctx, keys...)
@@ -691,7 +723,7 @@ func (c *Cache) DeleteManyCtx(ctx context.Context, keys ...string) error {
 }
 
 // Flush clears all keys for this store scope.
-// @group Cache
+// @group Invalidation
 //
 // Example: flush all keys
 //
@@ -703,6 +735,8 @@ func (c *Cache) Flush() error {
 	return c.FlushCtx(context.Background())
 }
 
+// FlushCtx is the context-aware variant of Flush.
+// @group Invalidation
 func (c *Cache) FlushCtx(ctx context.Context) error {
 	start := time.Now()
 	err := c.store.Flush(ctx)
@@ -711,7 +745,7 @@ func (c *Cache) FlushCtx(ctx context.Context) error {
 }
 
 // RememberBytes returns key value or computes/stores it when missing.
-// @group Cache
+// @group Read Through
 //
 // Example: remember bytes
 //
@@ -722,12 +756,12 @@ func (c *Cache) FlushCtx(ctx context.Context) error {
 //	})
 //	fmt.Println(err == nil, string(data)) // true payload
 func (c *Cache) RememberBytes(key string, ttl time.Duration, fn func() ([]byte, error)) ([]byte, error) {
-    return c.RememberCtx(context.Background(), key, ttl, func(ctx context.Context) ([]byte, error) {
-        if fn == nil {
-            return nil, errors.New("cache remember requires a callback")
-        }
-        return fn()
-    })
+	return c.RememberCtx(context.Background(), key, ttl, func(ctx context.Context) ([]byte, error) {
+		if fn == nil {
+			return nil, errors.New("cache remember requires a callback")
+		}
+		return fn()
+	})
 }
 
 const staleSuffix = ":__stale"
@@ -739,6 +773,7 @@ const refreshLockPrefix = "__refresh_lock:"
 // RememberStaleBytes returns a fresh value when available, otherwise computes and caches it.
 // If computing fails and a stale value exists, it returns the stale value.
 // The returned bool is true when a stale fallback was used.
+// @group Read Through
 //
 // Example: stale fallback on upstream failure
 //
@@ -758,6 +793,7 @@ func (c *Cache) RememberStaleBytes(key string, ttl, staleTTL time.Duration, fn f
 }
 
 // RememberStaleBytesCtx is the context-aware variant of RememberStaleBytes.
+// @group Read Through
 func (c *Cache) RememberStaleBytesCtx(ctx context.Context, key string, ttl, staleTTL time.Duration, fn func(context.Context) ([]byte, error)) ([]byte, bool, error) {
 	start := time.Now()
 	staleKey := key + staleSuffix
@@ -805,6 +841,8 @@ func (c *Cache) RememberStaleBytesCtx(ctx context.Context, key string, ttl, stal
 	return nil, false, err
 }
 
+// RememberCtx is the context-aware variant of RememberBytes.
+// @group Read Through
 func (c *Cache) RememberCtx(ctx context.Context, key string, ttl time.Duration, fn func(context.Context) ([]byte, error)) ([]byte, error) {
 	start := time.Now()
 	body, ok, err := c.GetCtx(ctx, key)
@@ -835,7 +873,7 @@ func (c *Cache) RememberCtx(ctx context.Context, key string, ttl time.Duration, 
 }
 
 // RememberString returns key value or computes/stores it when missing.
-// @group Cache
+// @group Read Through
 //
 // Example: remember string
 //
@@ -854,6 +892,8 @@ func (c *Cache) RememberString(key string, ttl time.Duration, fn func() (string,
 	})
 }
 
+// RememberStringCtx is the context-aware variant of RememberString.
+// @group Read Through
 func (c *Cache) RememberStringCtx(ctx context.Context, key string, ttl time.Duration, fn func(context.Context) (string, error)) (string, error) {
 	start := time.Now()
 	value, err := c.RememberCtx(ctx, key, ttl, func(ctx context.Context) ([]byte, error) {
@@ -878,7 +918,7 @@ func (c *Cache) RememberStringCtx(ctx context.Context, key string, ttl time.Dura
 }
 
 // RememberJSON returns key value or computes/stores JSON when missing.
-// @group Cache JSON
+// @group Read Through
 //
 // Example: remember JSON
 //
@@ -900,7 +940,7 @@ func RememberJSON[T any](cache *Cache, key string, ttl time.Duration, fn func() 
 }
 
 // RememberStale returns a typed value with stale fallback semantics using JSON encoding by default.
-// @group Cache
+// @group Read Through
 //
 // Example: remember stale typed
 //
@@ -922,9 +962,9 @@ func RememberStale[T any](cache *Cache, key string, ttl, staleTTL time.Duration,
 }
 
 // Remember is the ergonomic, typed remember helper using JSON encoding by default.
-// @group Cache
+// @group Read Through
 func Remember[T any](cache *Cache, key string, ttl time.Duration, fn func() (T, error)) (T, error) {
-    return RememberValue(cache, key, ttl, fn)
+	return RememberValue(cache, key, ttl, fn)
 }
 
 // ValueCodec defines how to encode/decode values for RememberValue.
@@ -946,12 +986,13 @@ func defaultValueCodec[T any]() ValueCodec[T] {
 }
 
 // RememberValue returns a typed value or computes/stores it when missing using JSON encoding by default.
-// @group Cache
+// @group Read Through
 func RememberValue[T any](cache *Cache, key string, ttl time.Duration, fn func() (T, error)) (T, error) {
-    return RememberValueWithCodec(context.Background(), cache, key, ttl, fn, defaultValueCodec[T]())
+	return RememberValueWithCodec(context.Background(), cache, key, ttl, fn, defaultValueCodec[T]())
 }
 
 // RememberValueWithCodec allows custom encoding/decoding for typed remember operations.
+// @group Read Through
 func RememberValueWithCodec[T any](ctx context.Context, cache *Cache, key string, ttl time.Duration, fn func() (T, error), codec ValueCodec[T]) (T, error) {
 	var zero T
 	body, ok, err := cache.GetCtx(ctx, key)
@@ -979,7 +1020,7 @@ func RememberValueWithCodec[T any](ctx context.Context, cache *Cache, key string
 }
 
 // RememberStaleValueWithCodec allows custom encoding/decoding for typed stale remember operations.
-// @group Other
+// @group Read Through
 //
 // Example: remember stale with custom codec
 //
@@ -1016,6 +1057,8 @@ func RememberStaleValueWithCodec[T any](ctx context.Context, cache *Cache, key s
 	return out, stale, nil
 }
 
+// RememberJSONCtx is the context-aware variant of RememberJSON.
+// @group Read Through
 func RememberJSONCtx[T any](ctx context.Context, cache *Cache, key string, ttl time.Duration, fn func(context.Context) (T, error)) (T, error) {
 	var zero T
 	out, ok, err := GetJSONCtx[T](ctx, cache, key)
@@ -1039,7 +1082,7 @@ func RememberJSONCtx[T any](ctx context.Context, cache *Cache, key string, ttl t
 }
 
 // RememberStaleCtx returns a typed value with stale fallback semantics using JSON encoding by default.
-// @group Other
+// @group Read Through
 //
 // Example: remember stale typed with context
 //
