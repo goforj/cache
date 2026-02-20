@@ -37,5 +37,5 @@ func TestDynamoStoreLocalIntegration(t *testing.T) {
 		DefaultTTL:   time.Second,
 	})
 
-	runStoreContractSuite(t, store)
+	runStoreContractSuite(t, store, contractCase{name: "baseline"})
 }

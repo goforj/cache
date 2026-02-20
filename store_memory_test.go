@@ -143,6 +143,18 @@ func TestMemoryStoreAddUsesDefaultTTLWhenMissing(t *testing.T) {
 	}
 }
 
+func TestMemoryStoreCleanupIntervalSweeps(t *testing.T) {
+	store := newMemoryStore(5*time.Millisecond, 2*time.Millisecond)
+	ctx := context.Background()
+	if err := store.Set(ctx, "k", []byte("v"), 5*time.Millisecond); err != nil {
+		t.Fatalf("set failed: %v", err)
+	}
+	time.Sleep(20 * time.Millisecond)
+	if _, ok, _ := store.Get(ctx, "k"); ok {
+		t.Fatalf("expected cleanup to evict expired key")
+	}
+}
+
 func TestMemoryStoreReadInt64Variants(t *testing.T) {
 	ms := newMemoryStore(0, 0).(*memoryStore)
 

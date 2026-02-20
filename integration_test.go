@@ -74,7 +74,7 @@ func TestMain(m *testing.M) {
 // INTEGRATION_DRIVER may be "all" (default) or a comma-separated list such as "redis,memory".
 func selectedIntegrationDrivers() map[string]bool {
 	selected := map[string]bool{
-		"null":         false, // no-op store; skip integration
+		"null":         true,
 		"file":         true,
 		"memory":       true,
 		"memcached":    true,
@@ -83,7 +83,6 @@ func selectedIntegrationDrivers() map[string]bool {
 		"sql_postgres": true,
 		"sql_mysql":    true,
 		"redis":        true,
-		// null is intentionally excluded from integration because it is a no-op store.
 	}
 	value := strings.TrimSpace(strings.ToLower(os.Getenv("INTEGRATION_DRIVER")))
 	if value == "" || value == "all" {

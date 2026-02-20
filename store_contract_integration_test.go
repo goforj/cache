@@ -4,37 +4,48 @@ package cache
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/credentials"
-	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/redis/go-redis/v9"
 )
 
 type storeFactory struct {
 	name string
-	new  func(t *testing.T) (Store, func())
+	new  func(t *testing.T, opts ...StoreOption) (Store, func())
+}
+
+type contractCase struct {
+	name                   string
+	opts                   []StoreOption
+	verifyDefaultTTLExpiry bool
+	verifyMaxValueLimit    bool
 }
 
 func TestStoreContract_AllDrivers(t *testing.T) {
 	fixtures := integrationFixtures(t)
+	cases := integrationContractCases()
 
 	for _, fx := range fixtures {
 		fx := fx
 		t.Run(fx.name, func(t *testing.T) {
-			store, cleanup := fx.new(t)
-			t.Cleanup(cleanup)
-			runStoreContractSuite(t, store)
+			for _, tc := range cases {
+				tc := tc
+				t.Run(tc.name, func(t *testing.T) {
+					store, cleanup := fx.new(t, tc.opts...)
+					t.Cleanup(cleanup)
+					runStoreContractSuite(t, store, tc)
+				})
+			}
 		})
 	}
 }
 
-func runStoreContractSuite(t *testing.T, store Store) {
+func runStoreContractSuite(t *testing.T, store Store, tc contractCase) {
 	t.Helper()
 	ctx := context.Background()
+	noOp := store.Driver() == DriverNull
 
 	ttl, wait := contractTTL(store.Driver())
 
@@ -43,13 +54,22 @@ func runStoreContractSuite(t *testing.T, store Store) {
 		t.Fatalf("set failed: %v", err)
 	}
 	body, ok, err := store.Get(ctx, "alpha")
-	if err != nil || !ok {
+	if err != nil {
 		t.Fatalf("get failed: ok=%v err=%v", ok, err)
 	}
-	body[0] = 'X'
-	body2, ok, err := store.Get(ctx, "alpha")
-	if err != nil || !ok || string(body2) != "value" {
-		t.Fatalf("expected stored value unchanged, got %q err=%v", string(body2), err)
+	if noOp {
+		if ok {
+			t.Fatalf("expected null store miss on get")
+		}
+	} else {
+		if !ok {
+			t.Fatalf("expected key hit on get")
+		}
+		body[0] = 'X'
+		body2, ok, err := store.Get(ctx, "alpha")
+		if err != nil || !ok || string(body2) != "value" {
+			t.Fatalf("expected stored value unchanged, got %q err=%v", string(body2), err)
+		}
 	}
 
 	// TTL expiry.
@@ -63,25 +83,43 @@ func runStoreContractSuite(t *testing.T, store Store) {
 
 	// Add only when missing.
 	created, err := store.Add(ctx, "once", []byte("first"), time.Second)
-	if err != nil || !created {
+	if err != nil {
 		t.Fatalf("add first failed: created=%v err=%v", created, err)
 	}
 	created, err = store.Add(ctx, "once", []byte("second"), time.Second)
 	if err != nil {
 		t.Fatalf("add duplicate failed: %v", err)
 	}
-	if created {
+	if noOp {
+		if !created {
+			t.Fatalf("expected null add to report created=true")
+		}
+	} else if created {
 		t.Fatalf("expected duplicate add to return created=false")
 	}
 
 	// Counters refresh TTL.
 	value, err := store.Increment(ctx, "counter", 3, time.Second)
-	if err != nil || value != 3 {
+	if err != nil {
 		t.Fatalf("increment failed: value=%d err=%v", value, err)
 	}
+	if noOp {
+		if value != 0 {
+			t.Fatalf("expected null increment to return 0, got %d", value)
+		}
+	} else if value != 3 {
+		t.Fatalf("expected incremented value to be 3, got %d", value)
+	}
 	value, err = store.Decrement(ctx, "counter", 1, time.Second)
-	if err != nil || value != 2 {
+	if err != nil {
 		t.Fatalf("decrement failed: value=%d err=%v", value, err)
+	}
+	if noOp {
+		if value != 0 {
+			t.Fatalf("expected null decrement to return 0, got %d", value)
+		}
+	} else if value != 2 {
+		t.Fatalf("expected decremented value to be 2, got %d", value)
 	}
 
 	// Delete & DeleteMany.
@@ -118,7 +156,9 @@ func runStoreContractSuite(t *testing.T, store Store) {
 	// Typed remember across drivers.
 	type payload struct{ Name string `json:"name"` }
 	cache := NewCache(store)
+	calls := 0
 	val, err := Remember[payload](cache, "remember:typed", time.Minute, func() (payload, error) {
+		calls++
 		return payload{Name: "Ada"}, nil
 	})
 	if err != nil || val.Name != "Ada" {
@@ -126,10 +166,36 @@ func runStoreContractSuite(t *testing.T, store Store) {
 	}
 	// Cached path should bypass callback.
 	val, err = Remember[payload](cache, "remember:typed", time.Minute, func() (payload, error) {
+		calls++
 		return payload{Name: "Other"}, nil
 	})
-	if err != nil || val.Name != "Ada" {
-		t.Fatalf("remember typed cache miss: %+v err=%v", val, err)
+	if err != nil {
+		t.Fatalf("remember typed second call failed: %+v err=%v", val, err)
+	}
+	if noOp {
+		if calls != 2 || val.Name != "Other" {
+			t.Fatalf("expected null remember to recompute, calls=%d val=%+v", calls, val)
+		}
+	} else if calls != 1 || val.Name != "Ada" {
+		t.Fatalf("remember typed cache miss: calls=%d val=%+v err=%v", calls, val, err)
+	}
+
+	if tc.verifyDefaultTTLExpiry {
+		if err := store.Set(ctx, "default_ttl", []byte("v"), 0); err != nil {
+			t.Fatalf("set default ttl key failed: %v", err)
+		}
+		time.Sleep(defaultTTLWait(store.Driver()))
+		if _, ok, err := store.Get(ctx, "default_ttl"); err != nil || ok {
+			t.Fatalf("expected default ttl key expired; ok=%v err=%v", ok, err)
+		}
+	}
+
+	if tc.verifyMaxValueLimit {
+		tooLarge := []byte("abcdefghijklmnopqrstuvwxyz0123456789")
+		err := store.Set(ctx, "too-large", tooLarge, time.Second)
+		if !errors.Is(err, ErrValueTooLarge) {
+			t.Fatalf("expected ErrValueTooLarge, got %v", err)
+		}
 	}
 }
 
@@ -142,6 +208,51 @@ func contractTTL(driver Driver) (ttl time.Duration, wait time.Duration) {
 	}
 }
 
+func defaultTTLWait(driver Driver) time.Duration {
+	switch driver {
+	case DriverMemcached:
+		return 1500 * time.Millisecond
+	default:
+		return 120 * time.Millisecond
+	}
+}
+
+func integrationContractCases() []contractCase {
+	encryptionKey := []byte("0123456789abcdef0123456789abcdef")
+	return []contractCase{
+		{name: "baseline"},
+		{
+			name: "with_prefix",
+			opts: []StoreOption{WithPrefix("itest_opt")},
+		},
+		{
+			name: "with_compression",
+			opts: []StoreOption{WithCompression(CompressionGzip)},
+		},
+		{
+			name: "with_encryption",
+			opts: []StoreOption{WithEncryptionKey(encryptionKey)},
+		},
+		{
+			name: "with_max_value_bytes",
+			opts: []StoreOption{WithMaxValueBytes(16)},
+			verifyMaxValueLimit: true,
+		},
+		{
+			name: "with_default_ttl",
+			opts: []StoreOption{WithDefaultTTL(60 * time.Millisecond)},
+			verifyDefaultTTLExpiry: true,
+		},
+	}
+}
+
+func applyStoreOptions(cfg StoreConfig, opts ...StoreOption) StoreConfig {
+	for _, opt := range opts {
+		cfg = opt(cfg)
+	}
+	return cfg
+}
+
 func integrationFixtures(t *testing.T) []storeFactory {
 	t.Helper()
 
@@ -150,8 +261,8 @@ func integrationFixtures(t *testing.T) []storeFactory {
 	if integrationDriverEnabled("null") {
 		fixtures = append(fixtures, storeFactory{
 			name: "null",
-			new: func(t *testing.T) (Store, func()) {
-				store := NewNullStore(context.Background())
+			new: func(t *testing.T, opts ...StoreOption) (Store, func()) {
+				store := NewNullStore(context.Background(), opts...)
 				return store, func() {}
 			},
 		})
@@ -160,13 +271,14 @@ func integrationFixtures(t *testing.T) []storeFactory {
 	if integrationDriverEnabled("file") {
 		fixtures = append(fixtures, storeFactory{
 			name: "file",
-			new: func(t *testing.T) (Store, func()) {
+			new: func(t *testing.T, opts ...StoreOption) (Store, func()) {
 				dir := t.TempDir()
-				store := NewStore(context.Background(), StoreConfig{
+				cfg := applyStoreOptions(StoreConfig{
 					Driver:     DriverFile,
 					DefaultTTL: 2 * time.Second,
 					FileDir:    dir,
-				})
+				}, opts...)
+				store := NewStore(context.Background(), cfg)
 				return store, func() {}
 			},
 		})
@@ -175,12 +287,13 @@ func integrationFixtures(t *testing.T) []storeFactory {
 	if integrationDriverEnabled("memory") {
 		fixtures = append(fixtures, storeFactory{
 			name: "memory",
-			new: func(t *testing.T) (Store, func()) {
-				store := NewStore(context.Background(), StoreConfig{
+			new: func(t *testing.T, opts ...StoreOption) (Store, func()) {
+				cfg := applyStoreOptions(StoreConfig{
 					Driver:                DriverMemory,
 					DefaultTTL:            2 * time.Second,
 					MemoryCleanupInterval: time.Second,
-				})
+				}, opts...)
+				store := NewStore(context.Background(), cfg)
 				return store, func() {}
 			},
 		})
@@ -193,14 +306,15 @@ func integrationFixtures(t *testing.T) []storeFactory {
 		}
 		fixtures = append(fixtures, storeFactory{
 			name: "redis",
-			new: func(t *testing.T) (Store, func()) {
+			new: func(t *testing.T, opts ...StoreOption) (Store, func()) {
 				client := redis.NewClient(&redis.Options{Addr: addr})
-				store := NewStore(context.Background(), StoreConfig{
+				cfg := applyStoreOptions(StoreConfig{
 					Driver:      DriverRedis,
 					DefaultTTL:  2 * time.Second,
 					Prefix:      "itest",
 					RedisClient: client,
-				})
+				}, opts...)
+				store := NewStore(context.Background(), cfg)
 				cleanup := func() { _ = client.Close() }
 				return store, cleanup
 			},
@@ -214,13 +328,14 @@ func integrationFixtures(t *testing.T) []storeFactory {
 		}
 		fixtures = append(fixtures, storeFactory{
 			name: "memcached",
-			new: func(t *testing.T) (Store, func()) {
-				store := NewStore(context.Background(), StoreConfig{
+			new: func(t *testing.T, opts ...StoreOption) (Store, func()) {
+				cfg := applyStoreOptions(StoreConfig{
 					Driver:             DriverMemcached,
 					DefaultTTL:         2 * time.Second,
 					Prefix:             "itest",
 					MemcachedAddresses: []string{addr},
-				})
+				}, opts...)
+				store := NewStore(context.Background(), cfg)
 				return store, func() {}
 			},
 		})
@@ -231,27 +346,18 @@ func integrationFixtures(t *testing.T) []storeFactory {
 		if endpoint == "" {
 			t.Fatalf("dynamodb integration requested but no address available")
 		}
-		awsCfg, err := config.LoadDefaultConfig(context.Background(),
-			config.WithRegion("us-east-1"),
-			config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider("dummy", "dummy", "")),
-			config.WithEndpointResolverWithOptions(aws.EndpointResolverWithOptionsFunc(func(service, region string, options ...interface{}) (aws.Endpoint, error) {
-				return aws.Endpoint{URL: endpoint, HostnameImmutable: true}, nil
-			})),
-		)
-		if err != nil {
-			t.Fatalf("aws config failed: %v", err)
-		}
-		client := dynamodb.NewFromConfig(awsCfg)
 		fixtures = append(fixtures, storeFactory{
 			name: "dynamodb",
-			new: func(t *testing.T) (Store, func()) {
-				store := NewStore(context.Background(), StoreConfig{
+			new: func(t *testing.T, opts ...StoreOption) (Store, func()) {
+				cfg := applyStoreOptions(StoreConfig{
 					Driver:       DriverDynamo,
 					DefaultTTL:   2 * time.Second,
 					Prefix:       "itest",
+					DynamoEndpoint: endpoint,
+					DynamoRegion: "us-east-1",
 					DynamoTable:  "cache_entries",
-					DynamoClient: client,
-				})
+				}, opts...)
+				store := NewStore(context.Background(), cfg)
 				return store, func() {}
 			},
 		})
@@ -260,15 +366,16 @@ func integrationFixtures(t *testing.T) []storeFactory {
 	if integrationDriverEnabled("sql_sqlite") {
 		fixtures = append(fixtures, storeFactory{
 			name: "sql_sqlite",
-			new: func(t *testing.T) (Store, func()) {
-				store := NewStore(context.Background(), StoreConfig{
+			new: func(t *testing.T, opts ...StoreOption) (Store, func()) {
+				cfg := applyStoreOptions(StoreConfig{
 					Driver:        DriverSQL,
 					DefaultTTL:    2 * time.Second,
 					SQLDriverName: "sqlite",
 					SQLDSN:        "file::memory:?cache=shared",
 					SQLTable:      "cache_entries",
 					Prefix:        "itest",
-				})
+				}, opts...)
+				store := NewStore(context.Background(), cfg)
 				return store, func() {}
 			},
 		})
@@ -281,16 +388,17 @@ func integrationFixtures(t *testing.T) []storeFactory {
 		}
 		fixtures = append(fixtures, storeFactory{
 			name: "sql_postgres",
-			new: func(t *testing.T) (Store, func()) {
+			new: func(t *testing.T, opts ...StoreOption) (Store, func()) {
 				dsn := "postgres://user:pass@" + addr + "/app?sslmode=disable"
-				store := NewStore(context.Background(), StoreConfig{
+				cfg := applyStoreOptions(StoreConfig{
 					Driver:        DriverSQL,
 					DefaultTTL:    2 * time.Second,
 					SQLDriverName: "pgx",
 					SQLDSN:        dsn,
 					SQLTable:      "cache_entries",
 					Prefix:        "itest",
-				})
+				}, opts...)
+				store := NewStore(context.Background(), cfg)
 				return store, func() {}
 			},
 		})
@@ -303,16 +411,17 @@ func integrationFixtures(t *testing.T) []storeFactory {
 		}
 		fixtures = append(fixtures, storeFactory{
 			name: "sql_mysql",
-			new: func(t *testing.T) (Store, func()) {
+			new: func(t *testing.T, opts ...StoreOption) (Store, func()) {
 				dsn := "user:pass@tcp(" + addr + ")/app?parseTime=true"
-				store := NewStore(context.Background(), StoreConfig{
+				cfg := applyStoreOptions(StoreConfig{
 					Driver:        DriverSQL,
 					DefaultTTL:    2 * time.Second,
 					SQLDriverName: "mysql",
 					SQLDSN:        dsn,
 					SQLTable:      "cache_entries",
 					Prefix:        "itest",
-				})
+				}, opts...)
+				store := NewStore(context.Background(), cfg)
 				return store, func() {}
 			},
 		})
