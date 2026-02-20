@@ -275,19 +275,45 @@ func (c *Cache) RateLimit(key string, limit int64, window time.Duration) (bool, 
 
 // RateLimitCtx is the context-aware variant of RateLimit.
 func (c *Cache) RateLimitCtx(ctx context.Context, key string, limit int64, window time.Duration) (bool, int64, error) {
+	allowed, count, _, _, err := c.RateLimitWithRemainingCtx(ctx, key, limit, window)
+	return allowed, count, err
+}
+
+// RateLimitWithRemaining increments a fixed-window counter and returns allowance metadata.
+// @group Cache
+//
+// Example: rate limit headers metadata
+//
+//	ctx := context.Background()
+//	c := cache.NewCache(cache.NewMemoryStore(ctx))
+//	allowed, count, remaining, resetAt, err := c.RateLimitWithRemaining("rl:api:ip:1.2.3.4", 100, time.Minute)
+//	fmt.Println(err == nil, allowed, count >= 1, remaining >= 0, resetAt.After(time.Now()))
+func (c *Cache) RateLimitWithRemaining(key string, limit int64, window time.Duration) (bool, int64, int64, time.Time, error) {
+	return c.RateLimitWithRemainingCtx(context.Background(), key, limit, window)
+}
+
+// RateLimitWithRemainingCtx is the context-aware variant of RateLimitWithRemaining.
+func (c *Cache) RateLimitWithRemainingCtx(ctx context.Context, key string, limit int64, window time.Duration) (bool, int64, int64, time.Time, error) {
 	if limit <= 0 {
-		return false, 0, errors.New("cache rate limit requires limit > 0")
+		return false, 0, 0, time.Time{}, errors.New("cache rate limit requires limit > 0")
 	}
 	if window <= 0 {
-		return false, 0, errors.New("cache rate limit requires window > 0")
+		return false, 0, 0, time.Time{}, errors.New("cache rate limit requires window > 0")
 	}
-	bucket := time.Now().UnixNano() / window.Nanoseconds()
+
+	now := time.Now()
+	bucket := now.UnixNano() / window.Nanoseconds()
 	bucketKey := fmt.Sprintf("%s:%d", key, bucket)
 	count, err := c.IncrementCtx(ctx, bucketKey, 1, window)
 	if err != nil {
-		return false, 0, err
+		return false, 0, 0, time.Time{}, err
 	}
-	return count <= limit, count, nil
+	remaining := limit - count
+	if remaining < 0 {
+		remaining = 0
+	}
+	resetAt := time.Unix(0, (bucket+1)*window.Nanoseconds())
+	return count <= limit, count, remaining, resetAt, nil
 }
 
 // TryLock acquires a short-lived lock key when not already held.

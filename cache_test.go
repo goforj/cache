@@ -784,6 +784,46 @@ func TestCacheRateLimitWindowResets(t *testing.T) {
 	}
 }
 
+func TestCacheRateLimitWithRemaining(t *testing.T) {
+	c := NewCache(NewMemoryStore(context.Background()))
+	key := "rl:remaining:user:1"
+
+	allowed, count, remaining, resetAt, err := c.RateLimitWithRemaining(key, 3, time.Minute)
+	if err != nil || !allowed || count != 1 || remaining != 2 || !resetAt.After(time.Now()) {
+		t.Fatalf("first call mismatch allowed=%v count=%d remaining=%d resetAt=%v err=%v", allowed, count, remaining, resetAt, err)
+	}
+
+	allowed, count, remaining, _, err = c.RateLimitWithRemaining(key, 3, time.Minute)
+	if err != nil || !allowed || count != 2 || remaining != 1 {
+		t.Fatalf("second call mismatch allowed=%v count=%d remaining=%d err=%v", allowed, count, remaining, err)
+	}
+
+	allowed, count, remaining, _, err = c.RateLimitWithRemaining(key, 3, time.Minute)
+	if err != nil || !allowed || count != 3 || remaining != 0 {
+		t.Fatalf("third call mismatch allowed=%v count=%d remaining=%d err=%v", allowed, count, remaining, err)
+	}
+
+	allowed, count, remaining, _, err = c.RateLimitWithRemaining(key, 3, time.Minute)
+	if err != nil || allowed || count != 4 || remaining != 0 {
+		t.Fatalf("fourth call mismatch allowed=%v count=%d remaining=%d err=%v", allowed, count, remaining, err)
+	}
+}
+
+func TestCacheRateLimitWithRemainingValidationAndError(t *testing.T) {
+	c := NewCache(NewMemoryStore(context.Background()))
+	if _, _, _, _, err := c.RateLimitWithRemaining("rl:bad", 0, time.Second); err == nil {
+		t.Fatalf("expected limit validation error")
+	}
+	if _, _, _, _, err := c.RateLimitWithRemaining("rl:bad", 1, 0); err == nil {
+		t.Fatalf("expected window validation error")
+	}
+
+	cErr := NewCache(&spyStore{driver: DriverMemory, incErr: expectedErr})
+	if _, _, _, _, err := cErr.RateLimitWithRemaining("rl:err", 1, time.Second); !errors.Is(err, expectedErr) {
+		t.Fatalf("expected increment error, got %v", err)
+	}
+}
+
 func TestCacheTryLockAndUnlock(t *testing.T) {
 	c := NewCache(NewMemoryStore(context.Background()))
 	key := "lock:job:1"
