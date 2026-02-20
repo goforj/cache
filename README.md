@@ -164,29 +164,21 @@ Note: NATS numbers can look slower than Redis/memory because the NATS driver pre
 
 <!-- bench:embed:start -->
 
-```mermaid
-xychart-beta
-    title "Get() latency (ns)"
-    x-axis ["dynamodb","file","memcached","memory","nats","nats_bucket_ttl","redis","sql_mysql","sql_postgres","sql_sqlite"]
-    y-axis "ns" 0 --> 3339514
-    bar "latency" [232319,1491,3035921,69,76900,128714,71050,173959,79783,7409]
-```
+### Latency (ns/op)
 
-```mermaid
-xychart-beta
-    title "Set() latency (ns)"
-    x-axis ["dynamodb","file","memcached","memory","nats","nats_bucket_ttl","redis","sql_mysql","sql_postgres","sql_sqlite"]
-    y-axis "ns" 0 --> 6072288
-    bar "latency" [246391,125550,5520261,93,162768,75445,71161,1614654,598775,15994]
-```
+![Cache benchmark latency chart](docs/bench/benchmarks_ns.svg)
 
-```mermaid
-xychart-beta
-    title "Delete() latency (ns)"
-    x-axis ["dynamodb","file","memcached","memory","nats","nats_bucket_ttl","redis","sql_mysql","sql_postgres","sql_sqlite"]
-    y-axis "ns" 0 --> 476268
-    bar "latency" [215599,2272,432970,37,92108,311848,71557,155466,333175,7567]
-```
+### Iterations (N)
+
+![Cache benchmark iteration chart](docs/bench/benchmarks_ops.svg)
+
+### Allocated Bytes (B/op)
+
+![Cache benchmark bytes chart](docs/bench/benchmarks_bytes.svg)
+
+### Allocations (allocs/op)
+
+![Cache benchmark allocs chart](docs/bench/benchmarks_allocs.svg)
 
 <!-- bench:embed:end -->
 

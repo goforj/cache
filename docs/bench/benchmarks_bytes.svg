@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="920" viewBox="0 0 1600 920">
+<rect width="100%" height="100%" fill="#111827"/>
+<text x="800" y="44" text-anchor="middle" fill="#f9fafb" font-size="34" font-family="Arial, sans-serif">Cache Benchmark Allocated Bytes (B/op)</text>
+<text x="800" y="72" text-anchor="middle" fill="#9ca3af" font-size="18" font-family="Arial, sans-serif">Stacked by operation (Get, Set, Delete)</text>
+<line x1="90" y1="710" x2="1550" y2="710" stroke="#374151" stroke-width="1"/>
+<text x="80" y="715" text-anchor="end" fill="#d1d5db" font-size="13" font-family="Arial, sans-serif">0</text>
+<line x1="90" y1="586" x2="1550" y2="586" stroke="#374151" stroke-width="1"/>
+<text x="80" y="591" text-anchor="end" fill="#d1d5db" font-size="13" font-family="Arial, sans-serif">20544</text>
+<line x1="90" y1="462" x2="1550" y2="462" stroke="#374151" stroke-width="1"/>
+<text x="80" y="467" text-anchor="end" fill="#d1d5db" font-size="13" font-family="Arial, sans-serif">41089</text>
+<line x1="90" y1="338" x2="1550" y2="338" stroke="#374151" stroke-width="1"/>
+<text x="80" y="343" text-anchor="end" fill="#d1d5db" font-size="13" font-family="Arial, sans-serif">61634</text>
+<line x1="90" y1="214" x2="1550" y2="214" stroke="#374151" stroke-width="1"/>
+<text x="80" y="219" text-anchor="end" fill="#d1d5db" font-size="13" font-family="Arial, sans-serif">82179</text>
+<line x1="90" y1="90" x2="1550" y2="90" stroke="#374151" stroke-width="1"/>
+<text x="80" y="95" text-anchor="end" fill="#d1d5db" font-size="13" font-family="Arial, sans-serif">102724</text>
+<line x1="90" y1="710" x2="1550" y2="710" stroke="#e5e7eb" stroke-width="2"/>
+<line x1="90" y1="710" x2="90" y2="90" stroke="#e5e7eb" stroke-width="2"/>
+<rect x="130" y="709" width="81" height="1" fill="#4e79a7"/>
+<rect x="130" y="708" width="81" height="1" fill="#59a14f"/>
+<rect x="130" y="708" width="81" height="0" fill="#e15759"/>
+<text x="171" y="812" text-anchor="middle" fill="#d1d5db" font-size="20" font-family="Arial, sans-serif" transform="rotate(-28,171,812)">memory</text>
+<rect x="292" y="701" width="81" height="9" fill="#4e79a7"/>
+<rect x="292" y="692" width="81" height="9" fill="#59a14f"/>
+<rect x="292" y="688" width="81" height="4" fill="#e15759"/>
+<text x="333" y="812" text-anchor="middle" fill="#d1d5db" font-size="20" font-family="Arial, sans-serif" transform="rotate(-28,333,812)">file</text>
+<rect x="454" y="702" width="81" height="8" fill="#4e79a7"/>
+<rect x="454" y="694" width="81" height="8" fill="#59a14f"/>
+<rect x="454" y="688" width="81" height="6" fill="#e15759"/>
+<text x="495" y="812" text-anchor="middle" fill="#d1d5db" font-size="20" font-family="Arial, sans-serif" transform="rotate(-28,495,812)">sql_sqlite</text>
+<rect x="616" y="704" width="81" height="6" fill="#4e79a7"/>
+<rect x="616" y="700" width="81" height="4" fill="#59a14f"/>
+<rect x="616" y="699" width="81" height="1" fill="#e15759"/>
+<text x="657" y="812" text-anchor="middle" fill="#d1d5db" font-size="20" font-family="Arial, sans-serif" transform="rotate(-28,657,812)">sql_postgres</text>
+<rect x="778" y="705" width="81" height="5" fill="#4e79a7"/>
+<rect x="778" y="700" width="81" height="5" fill="#59a14f"/>
+<rect x="778" y="698" width="81" height="2" fill="#e15759"/>
+<text x="819" y="812" text-anchor="middle" fill="#d1d5db" font-size="20" font-family="Arial, sans-serif" transform="rotate(-28,819,812)">sql_mysql</text>
+<rect x="940" y="709" width="81" height="1" fill="#4e79a7"/>
+<rect x="940" y="708" width="81" height="1" fill="#59a14f"/>
+<rect x="940" y="707" width="81" height="1" fill="#e15759"/>
+<text x="981" y="812" text-anchor="middle" fill="#d1d5db" font-size="20" font-family="Arial, sans-serif" transform="rotate(-28,981,812)">redis</text>
+<rect x="1102" y="663" width="81" height="47" fill="#4e79a7"/>
+<rect x="1102" y="616" width="81" height="47" fill="#59a14f"/>
+<rect x="1102" y="569" width="81" height="47" fill="#e15759"/>
+<text x="1143" y="812" text-anchor="middle" fill="#d1d5db" font-size="20" font-family="Arial, sans-serif" transform="rotate(-28,1143,812)">memcached</text>
+<rect x="1264" y="693" width="81" height="17" fill="#4e79a7"/>
+<rect x="1264" y="686" width="81" height="7" fill="#59a14f"/>
+<rect x="1264" y="679" width="81" height="7" fill="#e15759"/>
+<text x="1305" y="812" text-anchor="middle" fill="#d1d5db" font-size="20" font-family="Arial, sans-serif" transform="rotate(-28,1305,812)">nats</text>
+<rect x="1426" y="516" width="81" height="194" fill="#4e79a7"/>
+<rect x="1426" y="334" width="81" height="182" fill="#59a14f"/>
+<rect x="1426" y="149" width="81" height="185" fill="#e15759"/>
+<text x="1467" y="812" text-anchor="middle" fill="#d1d5db" font-size="20" font-family="Arial, sans-serif" transform="rotate(-28,1467,812)">dynamodb</text>
+<rect x="1250" y="81" width="20" height="20" fill="#4e79a7"/>
+<text x="1280" y="96" fill="#f3f4f6" font-size="20" font-family="Arial, sans-serif">Get</text>
+<rect x="1250" y="113" width="20" height="20" fill="#59a14f"/>
+<text x="1280" y="128" fill="#f3f4f6" font-size="20" font-family="Arial, sans-serif">Set</text>
+<rect x="1250" y="145" width="20" height="20" fill="#e15759"/>
+<text x="1280" y="160" fill="#f3f4f6" font-size="20" font-family="Arial, sans-serif">Delete</text>
+</svg>
