@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 )
 
@@ -217,6 +218,160 @@ func (c *Cache) BatchSetCtx(ctx context.Context, values map[string][]byte, ttl t
 		}
 	}
 	return nil
+}
+
+// RefreshAhead returns cached value immediately and refreshes asynchronously when near expiry.
+// On miss, it computes and stores synchronously.
+// @group Cache
+//
+// Example: refresh ahead
+//
+//	ctx := context.Background()
+//	c := cache.NewCache(cache.NewMemoryStore(ctx))
+//	body, err := c.RefreshAhead("dashboard:summary", time.Minute, 10*time.Second, func() ([]byte, error) {
+//		return []byte("payload"), nil
+//	})
+//	fmt.Println(err == nil, len(body) > 0) // true true
+func (c *Cache) RefreshAhead(key string, ttl, refreshAhead time.Duration, fn func() ([]byte, error)) ([]byte, error) {
+	return c.RefreshAheadCtx(context.Background(), key, ttl, refreshAhead, func(ctx context.Context) ([]byte, error) {
+		if fn == nil {
+			return nil, errors.New("cache refresh ahead requires a callback")
+		}
+		return fn()
+	})
+}
+
+// RefreshAheadCtx is the context-aware variant of RefreshAhead.
+func (c *Cache) RefreshAheadCtx(ctx context.Context, key string, ttl, refreshAhead time.Duration, fn func(context.Context) ([]byte, error)) ([]byte, error) {
+	if ttl <= 0 {
+		return nil, errors.New("cache refresh ahead requires ttl > 0")
+	}
+	if refreshAhead <= 0 {
+		return nil, errors.New("cache refresh ahead requires refreshAhead > 0")
+	}
+	start := time.Now()
+	body, ok, err := c.GetCtx(ctx, key)
+	if err != nil {
+		c.observe(ctx, "refresh_ahead", key, false, err, start)
+		return nil, err
+	}
+	if ok {
+		c.maybeTriggerRefreshAhead(key, ttl, refreshAhead, fn)
+		c.observe(ctx, "refresh_ahead", key, true, nil, start)
+		return body, nil
+	}
+	if fn == nil {
+		err := errors.New("cache refresh ahead requires a callback")
+		c.observe(ctx, "refresh_ahead", key, false, err, start)
+		return nil, err
+	}
+	value, err := fn(ctx)
+	if err != nil {
+		c.observe(ctx, "refresh_ahead", key, false, err, start)
+		return nil, err
+	}
+	if err := c.setRefreshAheadValue(ctx, key, value, ttl); err != nil {
+		c.observe(ctx, "refresh_ahead", key, false, err, start)
+		return nil, err
+	}
+	c.observe(ctx, "refresh_ahead", key, true, nil, start)
+	return value, nil
+}
+
+func (c *Cache) maybeTriggerRefreshAhead(key string, ttl, refreshAhead time.Duration, fn func(context.Context) ([]byte, error)) {
+	metaKey := key + refreshMetaSuffix
+	meta, ok, err := c.GetCtx(context.Background(), metaKey)
+	if err != nil || !ok {
+		return
+	}
+	expiresAt, err := strconv.ParseInt(string(meta), 10, 64)
+	if err != nil {
+		return
+	}
+	if time.Until(time.Unix(0, expiresAt)) > refreshAhead {
+		return
+	}
+	go func() {
+		lockKey := refreshLockPrefix + key
+		locked, err := c.TryLock(lockKey, refreshAhead)
+		if err != nil || !locked {
+			return
+		}
+		defer func() { _ = c.Unlock(lockKey) }()
+		if fn == nil {
+			return
+		}
+		value, err := fn(context.Background())
+		if err != nil {
+			return
+		}
+		_ = c.setRefreshAheadValue(context.Background(), key, value, ttl)
+	}()
+}
+
+func (c *Cache) setRefreshAheadValue(ctx context.Context, key string, value []byte, ttl time.Duration) error {
+	if err := c.SetCtx(ctx, key, value, ttl); err != nil {
+		return err
+	}
+	expiresAt := time.Now().Add(c.resolveTTL(ttl)).UnixNano()
+	return c.SetCtx(ctx, key+refreshMetaSuffix, []byte(strconv.FormatInt(expiresAt, 10)), ttl)
+}
+
+// RefreshAhead returns a typed value and refreshes asynchronously when near expiry.
+// @group Cache
+//
+// Example: refresh ahead typed
+//
+//	type Summary struct { Text string `json:"text"` }
+//	ctx := context.Background()
+//	c := cache.NewCache(cache.NewMemoryStore(ctx))
+//	s, err := cache.RefreshAhead[Summary](c, "dashboard:summary", time.Minute, 10*time.Second, func() (Summary, error) {
+//		return Summary{Text: "ok"}, nil
+//	})
+//	fmt.Println(err == nil, s.Text) // true ok
+func RefreshAhead[T any](cache *Cache, key string, ttl, refreshAhead time.Duration, fn func() (T, error)) (T, error) {
+	return RefreshAheadCtx(context.Background(), cache, key, ttl, refreshAhead, func(ctx context.Context) (T, error) {
+		if fn == nil {
+			var zero T
+			return zero, errors.New("cache refresh ahead requires a callback")
+		}
+		return fn()
+	})
+}
+
+// RefreshAheadCtx is the context-aware variant of RefreshAhead.
+func RefreshAheadCtx[T any](ctx context.Context, cache *Cache, key string, ttl, refreshAhead time.Duration, fn func(context.Context) (T, error)) (T, error) {
+	return RefreshAheadValueWithCodec(ctx, cache, key, ttl, refreshAhead, func() (T, error) {
+		if fn == nil {
+			var zero T
+			return zero, errors.New("cache refresh ahead requires a callback")
+		}
+		return fn(ctx)
+	}, defaultValueCodec[T]())
+}
+
+// RefreshAheadValueWithCodec allows custom encoding/decoding for typed refresh-ahead operations.
+// @group Other
+func RefreshAheadValueWithCodec[T any](ctx context.Context, cache *Cache, key string, ttl, refreshAhead time.Duration, fn func() (T, error), codec ValueCodec[T]) (T, error) {
+	var zero T
+	body, err := cache.RefreshAheadCtx(ctx, key, ttl, refreshAhead, func(ctx context.Context) ([]byte, error) {
+		if fn == nil {
+			return nil, errors.New("cache refresh ahead requires a callback")
+		}
+		val, err := fn()
+		if err != nil {
+			return nil, err
+		}
+		return codec.Encode(val)
+	})
+	if err != nil {
+		return zero, err
+	}
+	out, err := codec.Decode(body)
+	if err != nil {
+		return zero, err
+	}
+	return out, nil
 }
 
 // SetString writes a string value to key.
@@ -578,6 +733,8 @@ func (c *Cache) RememberBytes(key string, ttl time.Duration, fn func() ([]byte, 
 const staleSuffix = ":__stale"
 const lockPrefix = "__lock:"
 const defaultLockRetryInterval = 25 * time.Millisecond
+const refreshMetaSuffix = ":__refresh_exp"
+const refreshLockPrefix = "__refresh_lock:"
 
 // RememberStaleBytes returns a fresh value when available, otherwise computes and caches it.
 // If computing fails and a stale value exists, it returns the stale value.

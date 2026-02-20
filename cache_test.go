@@ -863,6 +863,109 @@ func TestCacheBatchSetPropagatesError(t *testing.T) {
 	}
 }
 
+func TestCacheRefreshAheadMissComputesSynchronously(t *testing.T) {
+	c := NewCache(NewMemoryStore(context.Background()))
+	calls := 0
+	body, err := c.RefreshAhead("ra:miss", time.Second, 200*time.Millisecond, func() ([]byte, error) {
+		calls++
+		return []byte("fresh"), nil
+	})
+	if err != nil || string(body) != "fresh" || calls != 1 {
+		t.Fatalf("unexpected miss result: body=%q calls=%d err=%v", string(body), calls, err)
+	}
+}
+
+func TestCacheRefreshAheadHitTriggersAsyncRefresh(t *testing.T) {
+	c := NewCache(NewMemoryStore(context.Background()))
+	key := "ra:hit"
+
+	calls := 0
+	_, err := c.RefreshAhead(key, 300*time.Millisecond, 250*time.Millisecond, func() ([]byte, error) {
+		calls++
+		return []byte("v1"), nil
+	})
+	if err != nil {
+		t.Fatalf("seed refresh ahead failed: %v", err)
+	}
+
+	time.Sleep(80 * time.Millisecond)
+
+	done := make(chan struct{}, 1)
+	body, err := c.RefreshAhead(key, 300*time.Millisecond, 250*time.Millisecond, func() ([]byte, error) {
+		calls++
+		done <- struct{}{}
+		return []byte("v2"), nil
+	})
+	if err != nil || string(body) != "v1" {
+		t.Fatalf("expected immediate cached value, body=%q err=%v", string(body), err)
+	}
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatalf("expected async refresh callback to run")
+	}
+
+	body2, ok, err := c.Get(key)
+	if err != nil || !ok || string(body2) != "v2" {
+		t.Fatalf("expected refreshed value, ok=%v body=%q err=%v", ok, string(body2), err)
+	}
+	if calls < 2 {
+		t.Fatalf("expected refresh callback to run twice total, calls=%d", calls)
+	}
+}
+
+func TestCacheRefreshAheadValidationAndErrors(t *testing.T) {
+	c := NewCache(NewMemoryStore(context.Background()))
+	if _, err := c.RefreshAhead("ra:bad", 0, time.Second, func() ([]byte, error) { return []byte("x"), nil }); err == nil {
+		t.Fatalf("expected ttl validation error")
+	}
+	if _, err := c.RefreshAhead("ra:bad", time.Second, 0, func() ([]byte, error) { return []byte("x"), nil }); err == nil {
+		t.Fatalf("expected refreshAhead validation error")
+	}
+	if _, err := c.RefreshAhead("ra:bad", time.Second, time.Second, nil); err == nil {
+		t.Fatalf("expected nil callback error")
+	}
+
+	expected := errors.New("upstream")
+	if _, err := c.RefreshAhead("ra:err", time.Second, time.Second, func() ([]byte, error) {
+		return nil, expected
+	}); !errors.Is(err, expected) {
+		t.Fatalf("expected callback error, got %v", err)
+	}
+}
+
+func TestRefreshAheadTyped(t *testing.T) {
+	type summary struct {
+		Text string `json:"text"`
+	}
+	c := NewCache(NewMemoryStore(context.Background()))
+
+	val, err := RefreshAhead[summary](c, "ra:typed", time.Second, 300*time.Millisecond, func() (summary, error) {
+		return summary{Text: "hello"}, nil
+	})
+	if err != nil || val.Text != "hello" {
+		t.Fatalf("typed refresh ahead failed: val=%+v err=%v", val, err)
+	}
+}
+
+func TestRefreshAheadValueWithCodecErrors(t *testing.T) {
+	c := NewCache(NewMemoryStore(context.Background()))
+	ctx := context.Background()
+
+	if _, err := RefreshAheadValueWithCodec[int](ctx, c, "ra:codec:nil", time.Second, 200*time.Millisecond, nil, defaultValueCodec[int]()); err == nil {
+		t.Fatalf("expected nil callback error")
+	}
+
+	encodeErr := errors.New("encode boom")
+	codec := ValueCodec[int]{
+		Encode: func(v int) ([]byte, error) { return nil, encodeErr },
+		Decode: func(b []byte) (int, error) { return 0, nil },
+	}
+	if _, err := RefreshAheadValueWithCodec[int](ctx, c, "ra:codec:encode", time.Second, 200*time.Millisecond, func() (int, error) { return 1, nil }, codec); !errors.Is(err, encodeErr) {
+		t.Fatalf("expected encode error, got %v", err)
+	}
+}
+
 func TestCacheTryLockAndUnlock(t *testing.T) {
 	c := NewCache(NewMemoryStore(context.Background()))
 	key := "lock:job:1"
