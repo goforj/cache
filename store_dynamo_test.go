@@ -12,11 +12,15 @@ import (
 )
 
 type dynStub struct {
-	items   map[string]map[string]types.AttributeValue
-	exists  bool
-	putErr  error
-	scanErr error
-	getErr  error
+	items        map[string]map[string]types.AttributeValue
+	exists       bool
+	putErr       error
+	scanErr      error
+	getErr       error
+	describeErrs []error
+	createErrs   []error
+	describeHits int
+	createHits   int
 }
 
 func newDynStub() *dynStub { return &dynStub{items: map[string]map[string]types.AttributeValue{}} }
@@ -79,14 +83,50 @@ func (d *dynStub) Scan(_ context.Context, in *dynamodb.ScanInput, _ ...func(*dyn
 }
 
 func (d *dynStub) CreateTable(context.Context, *dynamodb.CreateTableInput, ...func(*dynamodb.Options)) (*dynamodb.CreateTableOutput, error) {
+	d.createHits++
+	if len(d.createErrs) > 0 {
+		err := d.createErrs[0]
+		d.createErrs = d.createErrs[1:]
+		if err != nil {
+			return nil, err
+		}
+	}
 	return &dynamodb.CreateTableOutput{}, nil
 }
 
 func (d *dynStub) DescribeTable(context.Context, *dynamodb.DescribeTableInput, ...func(*dynamodb.Options)) (*dynamodb.DescribeTableOutput, error) {
+	d.describeHits++
+	if len(d.describeErrs) > 0 {
+		err := d.describeErrs[0]
+		d.describeErrs = d.describeErrs[1:]
+		if err != nil {
+			return nil, err
+		}
+		return &dynamodb.DescribeTableOutput{}, nil
+	}
 	if d.exists {
 		return &dynamodb.DescribeTableOutput{}, nil
 	}
 	return nil, &types.ResourceNotFoundException{}
+}
+
+func TestEnsureDynamoTableRetriesStartupErrors(t *testing.T) {
+	stub := newDynStub()
+	stub.describeErrs = []error{
+		errors.New("request send failed: connection reset by peer"),
+		&types.ResourceNotFoundException{},
+		nil,
+	}
+
+	if err := ensureDynamoTable(context.Background(), stub, "tbl"); err != nil {
+		t.Fatalf("expected retry path to succeed, got err=%v", err)
+	}
+	if stub.createHits != 1 {
+		t.Fatalf("expected create table to be called once, got %d", stub.createHits)
+	}
+	if stub.describeHits < 2 {
+		t.Fatalf("expected describe to be retried, got %d calls", stub.describeHits)
+	}
 }
 
 func TestDynamoStoreBasicOperations(t *testing.T) {

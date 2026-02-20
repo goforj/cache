@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -155,20 +156,20 @@ func writeDashboard(root string, byOp map[string][]benchRow) error {
 	if len(drivers) == 0 {
 		return nil
 	}
-	if err := writeDashboardSVG(root, "benchmarks_ns.svg", "Cache Benchmark Latency", "ns/op", drivers, byDriver); err != nil {
+	if err := writeDashboardSVG(root, "benchmarks_ns.svg", "Cache Benchmark Latency", "ns/op", "linear", drivers, byDriver); err != nil {
 		return err
 	}
-	if err := writeMetricSVG(root, "benchmarks_ops.svg", "Cache Benchmark Iterations", "N", drivers, byOp, func(r benchRow) float64 {
+	if err := writeMetricSVG(root, "benchmarks_ops.svg", "Cache Benchmark Iterations", "N", "split", drivers, byOp, func(r benchRow) float64 {
 		return float64(r.Ops)
 	}); err != nil {
 		return err
 	}
-	if err := writeMetricSVG(root, "benchmarks_bytes.svg", "Cache Benchmark Allocated Bytes", "B/op", drivers, byOp, func(r benchRow) float64 {
+	if err := writeMetricSVG(root, "benchmarks_bytes.svg", "Cache Benchmark Allocated Bytes", "B/op", "linear", drivers, byOp, func(r benchRow) float64 {
 		return r.BytesOp
 	}); err != nil {
 		return err
 	}
-	return writeMetricSVG(root, "benchmarks_allocs.svg", "Cache Benchmark Allocations", "allocs/op", drivers, byOp, func(r benchRow) float64 {
+	return writeMetricSVG(root, "benchmarks_allocs.svg", "Cache Benchmark Allocations", "allocs/op", "linear", drivers, byOp, func(r benchRow) float64 {
 		return r.AllocsOp
 	})
 }
@@ -206,7 +207,7 @@ func orderDrivers(drivers []string) []string {
 	return out
 }
 
-func writeMetricSVG(root, fileName, title, yUnit string, drivers []string, byOp map[string][]benchRow, valueFn func(benchRow) float64) error {
+func writeMetricSVG(root, fileName, title, yUnit, scale string, drivers []string, byOp map[string][]benchRow, valueFn func(benchRow) float64) error {
 	ops := []string{"Get", "Set", "Delete"}
 	byDriver := map[string]map[string]float64{}
 	for _, op := range ops {
@@ -217,10 +218,13 @@ func writeMetricSVG(root, fileName, title, yUnit string, drivers []string, byOp 
 			byDriver[row.Driver][op] = valueFn(row)
 		}
 	}
-	return writeDashboardSVG(root, fileName, title, yUnit, drivers, byDriver)
+	return writeDashboardSVG(root, fileName, title, yUnit, scale, drivers, byDriver)
 }
 
-func writeDashboardSVG(root, fileName, title, yUnit string, drivers []string, byDriver map[string]map[string]float64) error {
+func writeDashboardSVG(root, fileName, title, yUnit, scale string, drivers []string, byDriver map[string]map[string]float64) error {
+	if scale == "split" {
+		return writeDashboardSplitSVG(root, fileName, title, yUnit, drivers, byDriver)
+	}
 	const (
 		width       = 1600
 		height      = 920
@@ -239,7 +243,11 @@ func writeDashboardSVG(root, fileName, title, yUnit string, drivers []string, by
 	svg.WriteString(`<svg xmlns="http://www.w3.org/2000/svg" width="` + strconv.Itoa(width) + `" height="` + strconv.Itoa(height) + `" viewBox="0 0 ` + strconv.Itoa(width) + ` ` + strconv.Itoa(height) + `">` + "\n")
 	svg.WriteString(`<rect width="100%" height="100%" fill="#111827"/>` + "\n")
 	svg.WriteString(`<text x="` + strconv.Itoa(width/2) + `" y="44" text-anchor="middle" fill="#f9fafb" font-size="34" font-family="Arial, sans-serif">` + title + ` (` + yUnit + `)</text>` + "\n")
-	svg.WriteString(`<text x="` + strconv.Itoa(width/2) + `" y="72" text-anchor="middle" fill="#9ca3af" font-size="18" font-family="Arial, sans-serif">Stacked by operation (Get, Set, Delete)</text>` + "\n")
+	scaleLabel := "linear"
+	if scale == "log" {
+		scaleLabel = "log"
+	}
+	svg.WriteString(`<text x="` + strconv.Itoa(width/2) + `" y="72" text-anchor="middle" fill="#9ca3af" font-size="18" font-family="Arial, sans-serif">Stacked by operation (Get, Set, Delete), ` + scaleLabel + ` y-scale</text>` + "\n")
 
 	axisX0 := marginLeft
 	axisX1 := width - marginRight
@@ -260,12 +268,30 @@ func writeDashboardSVG(root, fileName, title, yUnit string, drivers []string, by
 		maxV = 1
 	}
 	maxV *= 1.1
+	maxMapped := mapValue(maxV, scale)
+	if maxMapped <= 0 {
+		maxMapped = 1
+	}
+
+	mapToY := func(v float64) int {
+		if v < 0 {
+			v = 0
+		}
+		p := mapValue(v, scale) / maxMapped
+		if p < 0 {
+			p = 0
+		}
+		if p > 1 {
+			p = 1
+		}
+		return axisY0 - int(p*float64(plotH))
+	}
 
 	yTicks := 5
 	for i := 0; i <= yTicks; i++ {
 		p := float64(i) / float64(yTicks)
 		y := axisY0 - int(p*float64(plotH))
-		v := int(p * maxV)
+		v := int(unmapValue(p*maxMapped, scale))
 		svg.WriteString(`<line x1="` + strconv.Itoa(axisX0) + `" y1="` + strconv.Itoa(y) + `" x2="` + strconv.Itoa(axisX1) + `" y2="` + strconv.Itoa(y) + `" stroke="#374151" stroke-width="1"/>` + "\n")
 		svg.WriteString(`<text x="` + strconv.Itoa(axisX0-10) + `" y="` + strconv.Itoa(y+5) + `" text-anchor="end" fill="#d1d5db" font-size="13" font-family="Arial, sans-serif">` + strconv.Itoa(v) + `</text>` + "\n")
 	}
@@ -280,16 +306,18 @@ func writeDashboardSVG(root, fileName, title, yUnit string, drivers []string, by
 	}
 	for i, driver := range drivers {
 		barX := axisX0 + i*groupW + (groupW-barW)/2
-		stackTop := axisY0
+		cumulative := 0.0
 		for _, op := range ops {
 			v := byDriver[driver][op]
-			barH := int((v / maxV) * float64(plotH))
-			if barH < 1 && v > 0 {
-				barH = 1
+			y0 := mapToY(cumulative)
+			cumulative += v
+			y1 := mapToY(cumulative)
+			y := y1
+			h := y0 - y1
+			if h < 1 && v > 0 {
+				h = 1
 			}
-			y := stackTop - barH
-			svg.WriteString(`<rect x="` + strconv.Itoa(barX) + `" y="` + strconv.Itoa(y) + `" width="` + strconv.Itoa(barW) + `" height="` + strconv.Itoa(barH) + `" fill="` + colors[op] + `"/>` + "\n")
-			stackTop = y
+			svg.WriteString(`<rect x="` + strconv.Itoa(barX) + `" y="` + strconv.Itoa(y) + `" width="` + strconv.Itoa(barW) + `" height="` + strconv.Itoa(h) + `" fill="` + colors[op] + `"/>` + "\n")
 		}
 		labelX := axisX0 + i*groupW + groupW/2
 		labelY := axisY0 + 102
@@ -303,6 +331,134 @@ func writeDashboardSVG(root, fileName, title, yUnit string, drivers []string, by
 		svg.WriteString(`<rect x="` + strconv.Itoa(legendX) + `" y="` + strconv.Itoa(y-14) + `" width="20" height="20" fill="` + colors[op] + `"/>` + "\n")
 		svg.WriteString(`<text x="` + strconv.Itoa(legendX+30) + `" y="` + strconv.Itoa(y+1) + `" fill="#f3f4f6" font-size="20" font-family="Arial, sans-serif">` + op + `</text>` + "\n")
 	}
+
+	svg.WriteString(`</svg>` + "\n")
+	outPath := filepath.Join(root, "docs", "bench", fileName)
+	return os.WriteFile(outPath, svg.Bytes(), 0o644)
+}
+
+func mapValue(v float64, scale string) float64 {
+	if scale == "log" {
+		return math.Log10(v + 1)
+	}
+	return v
+}
+
+func unmapValue(v float64, scale string) float64 {
+	if scale == "log" {
+		return math.Pow(10, v) - 1
+	}
+	return v
+}
+
+func writeDashboardSplitSVG(root, fileName, title, yUnit string, drivers []string, byDriver map[string]map[string]float64) error {
+	const (
+		width       = 1600
+		height      = 1100
+		marginLeft  = 90
+		marginRight = 50
+		marginTop   = 90
+		marginBot   = 220
+		panelGap    = 80
+	)
+	ops := []string{"Get", "Set", "Delete"}
+	colors := map[string]string{"Get": "#4e79a7", "Set": "#59a14f", "Delete": "#e15759"}
+	plotW := width - marginLeft - marginRight
+	panelH := (height - marginTop - marginBot - panelGap) / 2
+
+	totals := make(map[string]float64, len(drivers))
+	outlier := ""
+	outlierTotal := -1.0
+	for _, d := range drivers {
+		total := 0.0
+		for _, op := range ops {
+			total += byDriver[d][op]
+		}
+		totals[d] = total
+		if total > outlierTotal {
+			outlierTotal = total
+			outlier = d
+		}
+	}
+	var rest []string
+	for _, d := range drivers {
+		if d != outlier {
+			rest = append(rest, d)
+		}
+	}
+
+	var svg bytes.Buffer
+	svg.WriteString(`<?xml version="1.0" encoding="UTF-8"?>` + "\n")
+	svg.WriteString(`<svg xmlns="http://www.w3.org/2000/svg" width="` + strconv.Itoa(width) + `" height="` + strconv.Itoa(height) + `" viewBox="0 0 ` + strconv.Itoa(width) + ` ` + strconv.Itoa(height) + `">` + "\n")
+	svg.WriteString(`<rect width="100%" height="100%" fill="#111827"/>` + "\n")
+	svg.WriteString(`<text x="` + strconv.Itoa(width/2) + `" y="44" text-anchor="middle" fill="#f9fafb" font-size="34" font-family="Arial, sans-serif">` + title + ` (` + yUnit + `)</text>` + "\n")
+	svg.WriteString(`<text x="` + strconv.Itoa(width/2) + `" y="72" text-anchor="middle" fill="#9ca3af" font-size="18" font-family="Arial, sans-serif">Linear split view: top outlier, bottom remaining drivers</text>` + "\n")
+
+	legendX := width - 350
+	legendY := 95
+	for i, op := range ops {
+		y := legendY + i*32
+		svg.WriteString(`<rect x="` + strconv.Itoa(legendX) + `" y="` + strconv.Itoa(y-14) + `" width="20" height="20" fill="` + colors[op] + `"/>` + "\n")
+		svg.WriteString(`<text x="` + strconv.Itoa(legendX+30) + `" y="` + strconv.Itoa(y+1) + `" fill="#f3f4f6" font-size="20" font-family="Arial, sans-serif">` + op + `</text>` + "\n")
+	}
+
+	drawPanel := func(panelTitle string, panelDrivers []string, yTop int) {
+		if len(panelDrivers) == 0 {
+			return
+		}
+		axisX0 := marginLeft
+		axisX1 := width - marginRight
+		axisY1 := yTop
+		axisY0 := yTop + panelH
+
+		maxV := 0.0
+		for _, d := range panelDrivers {
+			if totals[d] > maxV {
+				maxV = totals[d]
+			}
+		}
+		if maxV <= 0 {
+			maxV = 1
+		}
+		maxV *= 1.1
+
+		svg.WriteString(`<text x="` + strconv.Itoa(axisX0) + `" y="` + strconv.Itoa(axisY1-12) + `" fill="#f3f4f6" font-size="22" font-family="Arial, sans-serif">` + panelTitle + `</text>` + "\n")
+		for i := 0; i <= 5; i++ {
+			p := float64(i) / 5.0
+			y := axisY0 - int(p*float64(panelH))
+			v := int(p * maxV)
+			svg.WriteString(`<line x1="` + strconv.Itoa(axisX0) + `" y1="` + strconv.Itoa(y) + `" x2="` + strconv.Itoa(axisX1) + `" y2="` + strconv.Itoa(y) + `" stroke="#374151" stroke-width="1"/>` + "\n")
+			svg.WriteString(`<text x="` + strconv.Itoa(axisX0-10) + `" y="` + strconv.Itoa(y+5) + `" text-anchor="end" fill="#d1d5db" font-size="13" font-family="Arial, sans-serif">` + strconv.Itoa(v) + `</text>` + "\n")
+		}
+		svg.WriteString(`<line x1="` + strconv.Itoa(axisX0) + `" y1="` + strconv.Itoa(axisY0) + `" x2="` + strconv.Itoa(axisX1) + `" y2="` + strconv.Itoa(axisY0) + `" stroke="#e5e7eb" stroke-width="2"/>` + "\n")
+		svg.WriteString(`<line x1="` + strconv.Itoa(axisX0) + `" y1="` + strconv.Itoa(axisY0) + `" x2="` + strconv.Itoa(axisX0) + `" y2="` + strconv.Itoa(axisY1) + `" stroke="#e5e7eb" stroke-width="2"/>` + "\n")
+
+		groupW := plotW / len(panelDrivers)
+		barW := groupW / 2
+		if barW < 8 {
+			barW = 8
+		}
+		for i, d := range panelDrivers {
+			barX := axisX0 + i*groupW + (groupW-barW)/2
+			stackTop := axisY0
+			for _, op := range ops {
+				v := byDriver[d][op]
+				h := int((v / maxV) * float64(panelH))
+				if h < 1 && v > 0 {
+					h = 1
+				}
+				y := stackTop - h
+				svg.WriteString(`<rect x="` + strconv.Itoa(barX) + `" y="` + strconv.Itoa(y) + `" width="` + strconv.Itoa(barW) + `" height="` + strconv.Itoa(h) + `" fill="` + colors[op] + `"/>` + "\n")
+				stackTop = y
+			}
+			labelX := axisX0 + i*groupW + groupW/2
+			labelY := axisY0 + 102
+			svg.WriteString(`<text x="` + strconv.Itoa(labelX) + `" y="` + strconv.Itoa(labelY) + `" text-anchor="middle" fill="#d1d5db" font-size="20" font-family="Arial, sans-serif" transform="rotate(-28,` + strconv.Itoa(labelX) + `,` + strconv.Itoa(labelY) + `)">` + d + `</text>` + "\n")
+		}
+	}
+
+	drawPanel("Outlier: "+outlier, []string{outlier}, marginTop)
+	drawPanel("Remaining drivers", rest, marginTop+panelH+panelGap)
 
 	svg.WriteString(`</svg>` + "\n")
 	outPath := filepath.Join(root, "docs", "bench", fileName)

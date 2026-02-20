@@ -33,6 +33,11 @@ type dynamoStore struct {
 	defaultTTL time.Duration
 }
 
+const (
+	dynamoEnsureTableMaxAttempts = 20
+	dynamoEnsureTableRetryDelay  = 150 * time.Millisecond
+)
+
 func newDynamoStore(ctx context.Context, cfg StoreConfig) (Store, error) {
 	if cfg.DynamoClient == nil {
 		client, err := newDynamoClient(ctx, cfg)
@@ -246,24 +251,66 @@ func expired(item map[string]types.AttributeValue) bool {
 }
 
 func ensureDynamoTable(ctx context.Context, client DynamoAPI, table string) error {
-	_, err := client.DescribeTable(ctx, &dynamodb.DescribeTableInput{TableName: aws.String(table)})
-	if err == nil {
-		return nil
-	}
-	var rnfe *types.ResourceNotFoundException
-	if !errors.As(err, &rnfe) {
-		return err
-	}
+	var lastErr error
+	for attempt := 1; attempt <= dynamoEnsureTableMaxAttempts; attempt++ {
+		_, err := client.DescribeTable(ctx, &dynamodb.DescribeTableInput{TableName: aws.String(table)})
+		if err == nil {
+			return nil
+		}
 
-	_, createErr := client.CreateTable(ctx, &dynamodb.CreateTableInput{
-		TableName: aws.String(table),
-		KeySchema: []types.KeySchemaElement{
-			{AttributeName: aws.String("k"), KeyType: types.KeyTypeHash},
-		},
-		AttributeDefinitions: []types.AttributeDefinition{
-			{AttributeName: aws.String("k"), AttributeType: types.ScalarAttributeTypeS},
-		},
-		BillingMode: types.BillingModePayPerRequest,
-	})
-	return createErr
+		var rnfe *types.ResourceNotFoundException
+		if errors.As(err, &rnfe) {
+			_, createErr := client.CreateTable(ctx, &dynamodb.CreateTableInput{
+				TableName: aws.String(table),
+				KeySchema: []types.KeySchemaElement{
+					{AttributeName: aws.String("k"), KeyType: types.KeyTypeHash},
+				},
+				AttributeDefinitions: []types.AttributeDefinition{
+					{AttributeName: aws.String("k"), AttributeType: types.ScalarAttributeTypeS},
+				},
+				BillingMode: types.BillingModePayPerRequest,
+			})
+			if createErr == nil {
+				return nil
+			}
+			var inUse *types.ResourceInUseException
+			if errors.As(createErr, &inUse) {
+				return nil
+			}
+			if !isDynamoStartupRetryable(createErr) {
+				return createErr
+			}
+			lastErr = createErr
+		} else {
+			if !isDynamoStartupRetryable(err) {
+				return err
+			}
+			lastErr = err
+		}
+
+		if attempt == dynamoEnsureTableMaxAttempts {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(dynamoEnsureTableRetryDelay):
+		}
+	}
+	if lastErr == nil {
+		lastErr = errors.New("dynamo table ensure failed")
+	}
+	return fmt.Errorf("ensure dynamo table %q: %w", table, lastErr)
+}
+
+func isDynamoStartupRetryable(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "request send failed") ||
+		strings.Contains(msg, "connection reset by peer") ||
+		strings.Contains(msg, "connection refused") ||
+		strings.Contains(msg, "timeout") ||
+		strings.Contains(msg, "eof")
 }
