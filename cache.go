@@ -259,6 +259,34 @@ func (c *Cache) DecrementCtx(ctx context.Context, key string, delta int64, ttl t
 	return val, err
 }
 
+// RateLimit increments key in a fixed window and reports whether requests are allowed.
+// @group Cache
+//
+// Example: fixed-window rate limit
+//
+//	ctx := context.Background()
+//	c := cache.NewCache(cache.NewMemoryStore(ctx))
+//	allowed, count, _ := c.RateLimit("rl:login:user:42", 5, time.Minute)
+//	fmt.Println(allowed, count >= 1) // true true
+func (c *Cache) RateLimit(key string, limit int64, window time.Duration) (bool, int64, error) {
+	return c.RateLimitCtx(context.Background(), key, limit, window)
+}
+
+// RateLimitCtx is the context-aware variant of RateLimit.
+func (c *Cache) RateLimitCtx(ctx context.Context, key string, limit int64, window time.Duration) (bool, int64, error) {
+	if limit <= 0 {
+		return false, 0, errors.New("cache rate limit requires limit > 0")
+	}
+	if window <= 0 {
+		return false, 0, errors.New("cache rate limit requires window > 0")
+	}
+	count, err := c.IncrementCtx(ctx, key, 1, window)
+	if err != nil {
+		return false, 0, err
+	}
+	return count <= limit, count, nil
+}
+
 // Pull returns value and removes it from cache.
 // @group Cache
 //

@@ -720,3 +720,66 @@ func TestRememberValueWithCodecBranches(t *testing.T) {
 		t.Fatalf("expected encode error, got %v", err)
 	}
 }
+
+func TestCacheRateLimitAllowsThenDenies(t *testing.T) {
+	c := NewCache(NewMemoryStore(context.Background()))
+	key := "rl:test:user:1"
+
+	for i := 1; i <= 3; i++ {
+		allowed, count, err := c.RateLimit(key, 3, time.Minute)
+		if err != nil {
+			t.Fatalf("rate limit call %d failed: %v", i, err)
+		}
+		if !allowed || count != int64(i) {
+			t.Fatalf("expected allowed count=%d, got allowed=%v count=%d", i, allowed, count)
+		}
+	}
+
+	allowed, count, err := c.RateLimit(key, 3, time.Minute)
+	if err != nil {
+		t.Fatalf("rate limit deny call failed: %v", err)
+	}
+	if allowed || count != 4 {
+		t.Fatalf("expected denied at count=4, got allowed=%v count=%d", allowed, count)
+	}
+}
+
+func TestCacheRateLimitValidatesInput(t *testing.T) {
+	c := NewCache(NewMemoryStore(context.Background()))
+
+	if _, _, err := c.RateLimit("rl:k", 0, time.Second); err == nil {
+		t.Fatalf("expected error for non-positive limit")
+	}
+	if _, _, err := c.RateLimit("rl:k", 1, 0); err == nil {
+		t.Fatalf("expected error for non-positive window")
+	}
+}
+
+func TestCacheRateLimitPropagatesIncrementError(t *testing.T) {
+	c := NewCache(&spyStore{driver: DriverMemory, incErr: expectedErr})
+	if _, _, err := c.RateLimit("rl:k", 1, time.Second); !errors.Is(err, expectedErr) {
+		t.Fatalf("expected increment error, got %v", err)
+	}
+}
+
+func TestCacheRateLimitWindowResets(t *testing.T) {
+	c := NewCache(NewMemoryStore(context.Background()))
+	key := "rl:test:reset"
+	window := 120 * time.Millisecond
+
+	allowed, count, err := c.RateLimit(key, 1, window)
+	if err != nil || !allowed || count != 1 {
+		t.Fatalf("expected first call allowed, got allowed=%v count=%d err=%v", allowed, count, err)
+	}
+	allowed, count, err = c.RateLimit(key, 1, window)
+	if err != nil || allowed || count != 2 {
+		t.Fatalf("expected second call denied, got allowed=%v count=%d err=%v", allowed, count, err)
+	}
+
+	time.Sleep(250 * time.Millisecond)
+
+	allowed, count, err = c.RateLimit(key, 1, window)
+	if err != nil || !allowed || count != 1 {
+		t.Fatalf("expected window reset, got allowed=%v count=%d err=%v", allowed, count, err)
+	}
+}
