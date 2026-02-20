@@ -14,7 +14,7 @@
     <a href="https://goreportcard.com/report/github.com/goforj/cache"><img src="https://goreportcard.com/badge/github.com/goforj/cache" alt="Go Report Card"></a>
     <a href="https://codecov.io/gh/goforj/cache"><img src="https://codecov.io/gh/goforj/cache/graph/badge.svg?token=B6ROULLKWU"/></a>
 <!-- test-count:embed:start -->
-    <img src="https://img.shields.io/badge/tests-252-brightgreen" alt="Tests">
+    <img src="https://img.shields.io/badge/tests-261-brightgreen" alt="Tests">
 <!-- test-count:embed:end -->
 </p>
 
@@ -31,6 +31,7 @@ An explicit cache abstraction with a minimal Store interface and ergonomic Cache
 |              <img src="https://img.shields.io/badge/memory-5c5c5c?logo=cachet&logoColor=white" alt="Memory"> | In-process | - | - | ✓ | ✓ | Fastest; per-process only, best for single-node or short-lived data. |
 |        <img src="https://img.shields.io/badge/memcached-0198c4?logo=buffer&logoColor=white" alt="Memcached"> | Networked | ✓ | - | ✓ | ✓ | Millisecond access; TTL resolution is 1s; use multiple nodes via `WithMemcachedAddresses`. |
 |              <img src="https://img.shields.io/badge/redis-%23DC382D?logo=redis&logoColor=white" alt="Redis"> | Networked | ✓ | - | ✓ | ✓ | Full feature set; supports prefixing and counters with per-key TTL refresh. |
+|                <img src="https://img.shields.io/badge/nats-27AAE1?logo=natsdotio&logoColor=white" alt="NATS"> | Networked | ✓ | - | ✓ | ✓ | JetStream KeyValue-backed driver; inject an existing bucket via `WithNATSKeyValue`. |
 | <img src="https://img.shields.io/badge/dynamodb-4053D6?logo=amazon-dynamodb&logoColor=white" alt="DynamoDB"> | Networked | ✓ | ✓ | ✓ | ✓ | Backed by DynamoDB (supports localstack/dynamodb-local). |
 |    <img src="https://img.shields.io/badge/sql-336791?logo=postgresql&logoColor=white" alt="SQL"> | Networked / local | ✓ | ✓ | ✓ | ✓ | Postgres / MySQL / SQLite via database/sql; table schema managed automatically. |
 
@@ -76,11 +77,11 @@ func main() {
 
 StoreConfig keeps configuration explicit:
 
-- Driver: explicit backend (null, file, memory, memcached, redis, dynamodb, sql)
+- Driver: explicit backend (null, file, memory, memcached, redis, nats, dynamodb, sql)
 - DefaultTTL: fallback TTL when a call provides ttl <= 0
 - MemoryCleanupInterval: sweep interval for memory driver
 - Prefix: key prefix for shared backends
-- RedisClient / MemcachedAddresses / DynamoClient / SQLDriverName+DSN: driver-specific inputs
+- RedisClient / NATSKeyValue / MemcachedAddresses / DynamoClient / SQLDriverName+DSN: driver-specific inputs
 - Compression / MaxValueBytes / EncryptionKey: shaping and security controls
 
 ## Cache helpers
@@ -161,44 +162,137 @@ go test ./docs/bench -tags benchrender
 
 <!-- bench:embed:start -->
 
-### Set
+### Baseline
+
+#### Set
 
 | Driver | N | ns/op | B/op | allocs/op |
 |:------|---:|-----:|-----:|---------:|
-| dynamodb | 2512 | 449876 | 29868 | 372 |
-| file | 9112 | 131865 | 1497 | 18 |
-| memcached | 2692 | 417446 | 7819 | 64 |
-| memory | 12139999 | 94 | 26 | 3 |
-| redis | 16408 | 73982 | 272 | 10 |
-| sql_mysql | 860 | 1494412 | 980 | 24 |
-| sql_postgres | 1054 | 2845304 | 739 | 24 |
-| sql_sqlite | 94630 | 11759 | 1463 | 36 |
+| dynamodb | 4417 | 256557 | 30223 | 372 |
+| file | 9811 | 130031 | 1497 | 18 |
+| memcached | 2814 | 402003 | 7836 | 64 |
+| memory | 12521193 | 88 | 26 | 3 |
+| nats | 12660 | 97265 | 1195 | 27 |
+| redis | 16166 | 72973 | 272 | 10 |
+| sql_mysql | 790 | 1349158 | 980 | 24 |
+| sql_postgres | 2020 | 597224 | 737 | 24 |
+| sql_sqlite | 98822 | 12162 | 1464 | 36 |
 
-### Get
-
-| Driver | N | ns/op | B/op | allocs/op |
-|:------|---:|-----:|-----:|---------:|
-| dynamodb | 5661 | 185366 | 29819 | 363 |
-| file | 728103 | 1566 | 576 | 6 |
-| memcached | 2770 | 426913 | 7841 | 62 |
-| memory | 33221594 | 36 | 0 | 0 |
-| redis | 17300 | 70706 | 200 | 7 |
-| sql_mysql | 7320 | 173548 | 872 | 26 |
-| sql_postgres | 11616 | 90006 | 1024 | 28 |
-| sql_sqlite | 150517 | 7529 | 1465 | 40 |
-
-### Delete
+#### Get
 
 | Driver | N | ns/op | B/op | allocs/op |
 |:------|---:|-----:|-----:|---------:|
-| dynamodb | 5632 | 205296 | 30775 | 379 |
-| file | 495534 | 2342 | 736 | 7 |
-| memcached | 2679 | 410554 | 7824 | 62 |
-| memory | 31418409 | 38 | 0 | 0 |
-| redis | 16746 | 71320 | 200 | 8 |
-| sql_mysql | 8094 | 146640 | 352 | 15 |
-| sql_postgres | 12217 | 86500 | 304 | 11 |
-| sql_sqlite | 154840 | 7562 | 1056 | 25 |
+| dynamodb | 5666 | 199228 | 32353 | 395 |
+| file | 110668 | 10515 | 1608 | 16 |
+| memcached | 3171 | 420422 | 7931 | 67 |
+| memory | 17965136 | 67 | 1 | 1 |
+| nats | 12266 | 97435 | 2894 | 49 |
+| redis | 16857 | 70372 | 200 | 8 |
+| sql_mysql | 6638 | 172115 | 912 | 30 |
+| sql_postgres | 12987 | 92077 | 1080 | 33 |
+| sql_sqlite | 164103 | 7304 | 1465 | 40 |
+
+#### Delete
+
+| Driver | N | ns/op | B/op | allocs/op |
+|:------|---:|-----:|-----:|---------:|
+| dynamodb | 4711 | 223758 | 30847 | 379 |
+| file | 531180 | 2290 | 736 | 7 |
+| memcached | 2473 | 417538 | 7824 | 62 |
+| memory | 33270027 | 36 | 0 | 0 |
+| nats | 12151 | 96085 | 1243 | 27 |
+| redis | 17230 | 72760 | 200 | 8 |
+| sql_mysql | 8498 | 150401 | 352 | 15 |
+| sql_postgres | 14115 | 86978 | 304 | 11 |
+| sql_sqlite | 163540 | 7358 | 1056 | 25 |
+
+### With Compression
+
+#### Set
+
+| Driver | N | ns/op | B/op | allocs/op |
+|:------|---:|-----:|-----:|---------:|
+| dynamodb | 2324 | 456266 | 1260726 | 400 |
+| file | 6130 | 196016 | 1202435 | 37 |
+| memcached | 2424 | 494310 | 1208855 | 85 |
+| memory | 13695 | 89554 | 1200360 | 21 |
+| nats | 6073 | 194183 | 1203329 | 50 |
+| redis | 7454 | 182272 | 1200564 | 28 |
+| sql_mysql | 872 | 1709781 | 1201944 | 44 |
+| sql_postgres | 1220 | 990331 | 1201703 | 44 |
+| sql_sqlite | 10287 | 121611 | 1202488 | 60 |
+
+#### Get
+
+| Driver | N | ns/op | B/op | allocs/op |
+|:------|---:|-----:|-----:|---------:|
+| dynamodb | 5433 | 203523 | 75335 | 402 |
+| file | 75198 | 15950 | 43440 | 23 |
+| memcached | 3211 | 405932 | 49788 | 74 |
+| memory | 297781 | 4143 | 41792 | 8 |
+| nats | 10000 | 106283 | 44855 | 56 |
+| redis | 14416 | 83170 | 41993 | 15 |
+| sql_mysql | 5421 | 191732 | 42767 | 37 |
+| sql_postgres | 12432 | 101728 | 42988 | 40 |
+| sql_sqlite | 100470 | 12289 | 43363 | 47 |
+
+#### Delete
+
+| Driver | N | ns/op | B/op | allocs/op |
+|:------|---:|-----:|-----:|---------:|
+| dynamodb | 4404 | 230435 | 30653 | 379 |
+| file | 505227 | 2332 | 736 | 7 |
+| memcached | 2506 | 416930 | 7816 | 62 |
+| memory | 31981165 | 38 | 0 | 0 |
+| nats | 12444 | 95458 | 1243 | 27 |
+| redis | 17065 | 69577 | 200 | 8 |
+| sql_mysql | 7999 | 153310 | 352 | 15 |
+| sql_postgres | 13992 | 89875 | 304 | 11 |
+| sql_sqlite | 152194 | 7743 | 1056 | 25 |
+
+### With Encryption
+
+#### Set
+
+| Driver | N | ns/op | B/op | allocs/op |
+|:------|---:|-----:|-----:|---------:|
+| dynamodb | 4200 | 248319 | 30527 | 377 |
+| file | 10000 | 125876 | 1745 | 22 |
+| memcached | 2770 | 404683 | 7998 | 68 |
+| memory | 3044780 | 402 | 240 | 7 |
+| nats | 14478 | 85349 | 1459 | 31 |
+| redis | 16304 | 73266 | 440 | 14 |
+| sql_mysql | 856 | 1497102 | 1147 | 28 |
+| sql_postgres | 2008 | 625183 | 905 | 28 |
+| sql_sqlite | 5314 | 216946 | 3498 | 74 |
+
+#### Get
+
+| Driver | N | ns/op | B/op | allocs/op |
+|:------|---:|-----:|-----:|---------:|
+| dynamodb | 6200 | 185580 | 32047 | 396 |
+| file | 103719 | 11531 | 1704 | 17 |
+| memcached | 2812 | 409551 | 8010 | 68 |
+| memory | 32885721 | 37 | 0 | 0 |
+| nats | 14410 | 82684 | 3052 | 50 |
+| redis | 16378 | 72714 | 248 | 9 |
+| sql_mysql | 6765 | 179565 | 1008 | 31 |
+| sql_postgres | 13969 | 88706 | 1208 | 34 |
+| sql_sqlite | 158037 | 7442 | 1601 | 41 |
+
+#### Delete
+
+| Driver | N | ns/op | B/op | allocs/op |
+|:------|---:|-----:|-----:|---------:|
+| dynamodb | 5937 | 190951 | 30711 | 379 |
+| file | 498457 | 2361 | 736 | 7 |
+| memcached | 3044 | 402272 | 7820 | 62 |
+| memory | 30143968 | 39 | 0 | 0 |
+| nats | 14234 | 82798 | 1242 | 27 |
+| redis | 16833 | 72786 | 200 | 8 |
+| sql_mysql | 8337 | 150315 | 352 | 15 |
+| sql_postgres | 14322 | 82403 | 304 | 11 |
+| sql_sqlite | 158552 | 7601 | 1056 | 25 |
 
 <!-- bench:embed:end -->
 
@@ -233,9 +327,9 @@ The API section below is autogenerated; do not edit between the markers.
 |------:|:-----------|
 | **Cache** | [Add](#add) [BatchGet](#batchget) [BatchSet](#batchset) [Decrement](#decrement) [Delete](#delete) [DeleteMany](#deletemany) [Driver](#driver) [Flush](#flush) [Get](#get) [GetString](#getstring) [Increment](#increment) [Lock](#lock) [NewCache](#newcache) [NewCacheWithTTL](#newcachewithttl) [Pull](#pull) [RateLimit](#ratelimit) [RateLimitWithRemaining](#ratelimitwithremaining) [RefreshAhead](#refreshahead) [Remember](#remember) [RememberBytes](#rememberbytes) [RememberStale](#rememberstale) [RememberString](#rememberstring) [RememberValue](#remembervalue) [Set](#set) [SetString](#setstring) [Store](#store) [TryLock](#trylock) [Unlock](#unlock) |
 | **Cache JSON** | [GetJSON](#getjson) [RememberJSON](#rememberjson) [SetJSON](#setjson) |
-| **Constructors** | [NewDynamoStore](#newdynamostore) [NewFileStore](#newfilestore) [NewMemcachedStore](#newmemcachedstore) [NewMemoryStore](#newmemorystore) [NewNullStore](#newnullstore) [NewRedisStore](#newredisstore) [NewSQLStore](#newsqlstore) [NewStore](#newstore) [NewStoreWith](#newstorewith) |
+| **Constructors** | [NewDynamoStore](#newdynamostore) [NewFileStore](#newfilestore) [NewMemcachedStore](#newmemcachedstore) [NewMemoryStore](#newmemorystore) [NewNATSStore](#newnatsstore) [NewNullStore](#newnullstore) [NewRedisStore](#newredisstore) [NewSQLStore](#newsqlstore) [NewStore](#newstore) [NewStoreWith](#newstorewith) |
 | **Memoization** | [NewMemoStore](#newmemostore) |
-| **Options** | [WithCompression](#withcompression) [WithDefaultTTL](#withdefaultttl) [WithDynamoClient](#withdynamoclient) [WithDynamoEndpoint](#withdynamoendpoint) [WithDynamoRegion](#withdynamoregion) [WithDynamoTable](#withdynamotable) [WithEncryptionKey](#withencryptionkey) [WithFileDir](#withfiledir) [WithMaxValueBytes](#withmaxvaluebytes) [WithMemcachedAddresses](#withmemcachedaddresses) [WithMemoryCleanupInterval](#withmemorycleanupinterval) [WithPrefix](#withprefix) [WithRedisClient](#withredisclient) [WithSQL](#withsql) |
+| **Options** | [WithCompression](#withcompression) [WithDefaultTTL](#withdefaultttl) [WithDynamoClient](#withdynamoclient) [WithDynamoEndpoint](#withdynamoendpoint) [WithDynamoRegion](#withdynamoregion) [WithDynamoTable](#withdynamotable) [WithEncryptionKey](#withencryptionkey) [WithFileDir](#withfiledir) [WithMaxValueBytes](#withmaxvaluebytes) [WithMemcachedAddresses](#withmemcachedaddresses) [WithMemoryCleanupInterval](#withmemorycleanupinterval) [WithNATSKeyValue](#withnatskeyvalue) [WithPrefix](#withprefix) [WithRedisClient](#withredisclient) [WithSQL](#withsql) |
 | **Other** | [BatchGetCtx](#batchgetctx) [BatchSetCtx](#batchsetctx) [GetJSONCtx](#getjsonctx) [LockCtx](#lockctx) [RateLimitCtx](#ratelimitctx) [RateLimitWithRemainingCtx](#ratelimitwithremainingctx) [RefreshAheadCtx](#refreshaheadctx) [RefreshAheadValueWithCodec](#refreshaheadvaluewithcodec) [RememberStaleBytes](#rememberstalebytes) [RememberStaleBytesCtx](#rememberstalebytesctx) [RememberStaleCtx](#rememberstalectx) [RememberStaleValueWithCodec](#rememberstalevaluewithcodec) [RememberValueWithCodec](#remembervaluewithcodec) [SetJSONCtx](#setjsonctx) [TryLockCtx](#trylockctx) [UnlockCtx](#unlockctx) [WithObserver](#withobserver) |
 
 
@@ -618,6 +712,17 @@ store := cache.NewMemoryStore(ctx)
 fmt.Println(store.Driver()) // memory
 ```
 
+### <a id="newnatsstore"></a>NewNATSStore
+
+NewNATSStore is a convenience for a NATS JetStream KeyValue-backed store.
+
+```go
+ctx := context.Background()
+var kv cache.NATSKeyValue // provided by your NATS setup
+store := cache.NewNATSStore(ctx, kv, cache.WithPrefix("app"))
+fmt.Println(store.Driver()) // nats
+```
+
 ### <a id="newnullstore"></a>NewNullStore
 
 NewNullStore is a no-op store useful for tests where caching should be disabled.
@@ -839,6 +944,17 @@ WithMemoryCleanupInterval overrides the sweep interval for the memory driver.
 ctx := context.Background()
 store := cache.NewStoreWith(ctx, cache.DriverMemory, cache.WithMemoryCleanupInterval(5*time.Minute))
 fmt.Println(store.Driver()) // memory
+```
+
+### <a id="withnatskeyvalue"></a>WithNATSKeyValue
+
+WithNATSKeyValue sets the NATS JetStream KeyValue bucket; required when using DriverNATS.
+
+```go
+ctx := context.Background()
+var kv cache.NATSKeyValue // provided by your NATS setup
+store := cache.NewStoreWith(ctx, cache.DriverNATS, cache.WithNATSKeyValue(kv))
+fmt.Println(store.Driver()) // nats
 ```
 
 ### <a id="withprefix"></a>WithPrefix

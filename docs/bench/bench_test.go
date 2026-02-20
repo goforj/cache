@@ -7,6 +7,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 
 	"github.com/docker/go-connections/nat"
 	mysql "github.com/go-sql-driver/mysql"
+	"github.com/nats-io/nats.go"
 	testcontainers "github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 
@@ -66,6 +68,13 @@ func BenchmarkCacheSetGet(b *testing.B) {
 		cases = append(cases, memcachedCase(ctx, addr))
 	} else if c, cleanup, err := startMemcached(ctx); err == nil {
 		cases = append(cases, benchCase{name: "memcached", new: func(testing.TB) (*cache.Cache, func()) { return c, cleanup }})
+	}
+
+	// NATS (JetStream KV)
+	if url := os.Getenv("NATS_URL"); url != "" {
+		cases = append(cases, natsCase(ctx, url))
+	} else if c, cleanup, err := startNATS(ctx); err == nil {
+		cases = append(cases, benchCase{name: "nats", new: func(testing.TB) (*cache.Cache, func()) { return c, cleanup }})
 	}
 
 	// DynamoDB
@@ -166,6 +175,19 @@ func dynamoCase(ctx context.Context, endpoint string) benchCase {
 	}
 }
 
+func natsCase(ctx context.Context, natsURL string) benchCase {
+	return benchCase{
+		name: "nats",
+		new: func(tb testing.TB) (*cache.Cache, func()) {
+			c, cleanup, err := natsCacheForURL(ctx, natsURL)
+			if err != nil {
+				tb.Fatalf("nats benchmark setup failed: %v", err)
+			}
+			return c, cleanup
+		},
+	}
+}
+
 func postgresCase(ctx context.Context, dsn string) benchCase {
 	return benchCase{
 		name: "sql_postgres",
@@ -244,6 +266,28 @@ func startDynamo(ctx context.Context) (*cache.Cache, func(), error) {
 	return cache.NewCache(store), cleanup, nil
 }
 
+func startNATS(ctx context.Context) (*cache.Cache, func(), error) {
+	req := testcontainers.ContainerRequest{
+		Image:        "nats:2-alpine",
+		Cmd:          []string{"-js"},
+		ExposedPorts: []string{"4222/tcp"},
+		WaitingFor:   wait.ForListeningPort("4222/tcp").WithStartupTimeout(30 * time.Second),
+	}
+	c, addr, err := startContainer(ctx, req, "4222/tcp")
+	if err != nil {
+		return nil, nil, err
+	}
+	cacheValue, cleanup, err := natsCacheForURL(ctx, "nats://"+addr)
+	if err != nil {
+		_ = c.Terminate(context.Background())
+		return nil, nil, err
+	}
+	return cacheValue, func() {
+		cleanup()
+		_ = c.Terminate(context.Background())
+	}, nil
+}
+
 func startPostgres(ctx context.Context) (*cache.Cache, func(), error) {
 	req := testcontainers.ContainerRequest{
 		Image:        "postgres:16-alpine",
@@ -305,4 +349,29 @@ func startContainer(ctx context.Context, req testcontainers.ContainerRequest, po
 		return nil, "", err
 	}
 	return c, host + ":" + mapped.Port(), nil
+}
+
+func natsCacheForURL(ctx context.Context, natsURL string) (*cache.Cache, func(), error) {
+	nc, err := nats.Connect(natsURL)
+	if err != nil {
+		return nil, nil, err
+	}
+	js, err := nc.JetStream()
+	if err != nil {
+		nc.Close()
+		return nil, nil, err
+	}
+	bucket := "BENCH_" + strconv.FormatInt(time.Now().UnixNano()%1_000_000_000, 10)
+	kv, err := js.CreateKeyValue(&nats.KeyValueConfig{Bucket: bucket, History: 1})
+	if err != nil {
+		nc.Close()
+		return nil, nil, err
+	}
+	store := cache.NewNATSStore(ctx, kv)
+	cleanup := func() {
+		_ = js.DeleteKeyValue(bucket)
+		_ = nc.Drain()
+		nc.Close()
+	}
+	return cache.NewCache(store), cleanup, nil
 }

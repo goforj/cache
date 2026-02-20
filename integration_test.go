@@ -24,6 +24,7 @@ var integrationRedis struct {
 // Add new drivers here with a testcontainers-backed start function.
 var integrationBackends = map[string]func(context.Context) (testcontainers.Container, string, error){
 	"redis":        startRedisContainer,
+	"nats":         startNATSContainer,
 	"memcached":    startMemcachedContainer,
 	"dynamodb":     startDynamoContainer,
 	"sql_postgres": startPostgresContainer,
@@ -77,6 +78,7 @@ func selectedIntegrationDrivers() map[string]bool {
 		"null":         true,
 		"file":         true,
 		"memory":       true,
+		"nats":         true,
 		"memcached":    true,
 		"dynamodb":     true,
 		"sql_sqlite":   true,
@@ -132,6 +134,33 @@ func startRedisContainer(ctx context.Context) (testcontainers.Container, string,
 		return nil, "", err
 	}
 	port, err := container.MappedPort(ctx, "6379/tcp")
+	if err != nil {
+		_ = container.Terminate(ctx)
+		return nil, "", err
+	}
+	return container, net.JoinHostPort(host, port.Port()), nil
+}
+
+func startNATSContainer(ctx context.Context) (testcontainers.Container, string, error) {
+	req := testcontainers.ContainerRequest{
+		Image:        "nats:2-alpine",
+		Cmd:          []string{"-js"},
+		ExposedPorts: []string{"4222/tcp"},
+		WaitingFor:   wait.ForListeningPort("4222/tcp").WithStartupTimeout(30 * time.Second),
+	}
+	container, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
+		ContainerRequest: req,
+		Started:          true,
+	})
+	if err != nil {
+		return nil, "", err
+	}
+	host, err := container.Host(ctx)
+	if err != nil {
+		_ = container.Terminate(ctx)
+		return nil, "", err
+	}
+	port, err := container.MappedPort(ctx, "4222/tcp")
 	if err != nil {
 		_ = container.Terminate(ctx)
 		return nil, "", err

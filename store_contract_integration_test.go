@@ -5,9 +5,12 @@ package cache
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/nats-io/nats.go"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -164,7 +167,9 @@ func runStoreContractSuite(t *testing.T, store Store, tc contractCase) {
 	}
 
 	// Typed remember across drivers.
-	type payload struct{ Name string `json:"name"` }
+	type payload struct {
+		Name string `json:"name"`
+	}
 	cache := NewCache(store)
 	calls := 0
 	val, err := Remember[payload](cache, caseKey("remember:typed"), time.Minute, func() (payload, error) {
@@ -195,14 +200,14 @@ func runStoreContractSuite(t *testing.T, store Store, tc contractCase) {
 			t.Fatalf("set default ttl key failed: %v", err)
 		}
 		time.Sleep(defaultTTLWait(store.Driver()))
-			if _, ok, err := store.Get(ctx, caseKey("default_ttl")); err != nil || ok {
+		if _, ok, err := store.Get(ctx, caseKey("default_ttl")); err != nil || ok {
 			t.Fatalf("expected default ttl key expired; ok=%v err=%v", ok, err)
 		}
 	}
 
 	if tc.verifyMaxValueLimit {
 		tooLarge := []byte("abcdefghijklmnopqrstuvwxyz0123456789")
-			err := store.Set(ctx, caseKey("too-large"), tooLarge, time.Second)
+		err := store.Set(ctx, caseKey("too-large"), tooLarge, time.Second)
 		if !errors.Is(err, ErrValueTooLarge) {
 			t.Fatalf("expected ErrValueTooLarge, got %v", err)
 		}
@@ -244,13 +249,13 @@ func integrationContractCases() []contractCase {
 			opts: []StoreOption{WithEncryptionKey(encryptionKey)},
 		},
 		{
-			name: "with_max_value_bytes",
-			opts: []StoreOption{WithMaxValueBytes(16)},
+			name:                "with_max_value_bytes",
+			opts:                []StoreOption{WithMaxValueBytes(16)},
 			verifyMaxValueLimit: true,
 		},
 		{
-			name: "with_default_ttl",
-			opts: []StoreOption{WithDefaultTTL(60 * time.Millisecond)},
+			name:                   "with_default_ttl",
+			opts:                   []StoreOption{WithDefaultTTL(60 * time.Millisecond)},
 			verifyDefaultTTLExpiry: true,
 		},
 	}
@@ -331,6 +336,51 @@ func integrationFixtures(t *testing.T) []storeFactory {
 		})
 	}
 
+	if integrationDriverEnabled("nats") {
+		addr := integrationAddr("nats")
+		if addr == "" {
+			t.Fatalf("nats integration requested but no address available")
+		}
+		fixtures = append(fixtures, storeFactory{
+			name: "nats",
+			new: func(t *testing.T, opts ...StoreOption) (Store, func()) {
+				nc, err := nats.Connect("nats://" + addr)
+				if err != nil {
+					t.Fatalf("connect nats: %v", err)
+				}
+				js, err := nc.JetStream()
+				if err != nil {
+					_ = nc.Drain()
+					nc.Close()
+					t.Fatalf("jetstream nats: %v", err)
+				}
+				bucket := integrationNATSBucketName(t.Name())
+				kv, err := js.CreateKeyValue(&nats.KeyValueConfig{
+					Bucket:  bucket,
+					History: 1,
+				})
+				if err != nil {
+					_ = nc.Drain()
+					nc.Close()
+					t.Fatalf("create nats kv bucket: %v", err)
+				}
+				cfg := applyStoreOptions(StoreConfig{
+					Driver:       DriverNATS,
+					DefaultTTL:   2 * time.Second,
+					Prefix:       "itest",
+					NATSKeyValue: kv,
+				}, opts...)
+				store := NewStore(context.Background(), cfg)
+				cleanup := func() {
+					_ = js.DeleteKeyValue(bucket)
+					_ = nc.Drain()
+					nc.Close()
+				}
+				return store, cleanup
+			},
+		})
+	}
+
 	if integrationDriverEnabled("memcached") {
 		addr := integrationAddr("memcached")
 		if addr == "" {
@@ -360,12 +410,12 @@ func integrationFixtures(t *testing.T) []storeFactory {
 			name: "dynamodb",
 			new: func(t *testing.T, opts ...StoreOption) (Store, func()) {
 				cfg := applyStoreOptions(StoreConfig{
-					Driver:       DriverDynamo,
-					DefaultTTL:   2 * time.Second,
-					Prefix:       "itest",
+					Driver:         DriverDynamo,
+					DefaultTTL:     2 * time.Second,
+					Prefix:         "itest",
 					DynamoEndpoint: endpoint,
-					DynamoRegion: "us-east-1",
-					DynamoTable:  "cache_entries",
+					DynamoRegion:   "us-east-1",
+					DynamoTable:    "cache_entries",
 				}, opts...)
 				store := NewStore(context.Background(), cfg)
 				return store, func() {}
@@ -438,4 +488,26 @@ func integrationFixtures(t *testing.T) []storeFactory {
 	}
 
 	return fixtures
+}
+
+func integrationNATSBucketName(name string) string {
+	normalized := strings.ToUpper(name)
+	var b strings.Builder
+	for _, r := range normalized {
+		switch {
+		case r >= 'A' && r <= 'Z':
+			b.WriteRune(r)
+		case r >= '0' && r <= '9':
+			b.WriteRune(r)
+		case r == '_' || r == '-':
+			b.WriteRune(r)
+		default:
+			b.WriteByte('_')
+		}
+	}
+	base := b.String()
+	if len(base) > 36 {
+		base = base[len(base)-36:]
+	}
+	return fmt.Sprintf("CACHE_%s_%d", base, time.Now().UnixNano()%1_000_000)
 }

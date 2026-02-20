@@ -66,6 +66,22 @@ func WithRedisClient(client RedisClient) StoreOption {
 	}
 }
 
+// WithNATSKeyValue sets the NATS JetStream KeyValue bucket; required when using DriverNATS.
+// @group Options
+//
+// Example: inject NATS key-value bucket
+//
+//	ctx := context.Background()
+//	var kv cache.NATSKeyValue // provided by your NATS setup
+//	store := cache.NewStoreWith(ctx, cache.DriverNATS, cache.WithNATSKeyValue(kv))
+//	fmt.Println(store.Driver()) // nats
+func WithNATSKeyValue(kv NATSKeyValue) StoreOption {
+	return func(cfg StoreConfig) StoreConfig {
+		cfg.NATSKeyValue = kv
+		return cfg
+	}
+}
+
 // WithFileDir sets the directory used by the file driver.
 // @group Options
 //

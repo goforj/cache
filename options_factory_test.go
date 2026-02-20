@@ -43,11 +43,14 @@ func TestStoreOptionsMutateConfig(t *testing.T) {
 	cfg = WithSQL("sqlite", "file::memory:?cache=shared", "cache_entries")(cfg)
 	client := newStubRedisClient()
 	cfg = WithRedisClient(client)(cfg)
+	natsKV := newStubNATSKeyValue("bucket")
+	cfg = WithNATSKeyValue(natsKV)(cfg)
 
 	if cfg.DefaultTTL != time.Second ||
 		cfg.MemoryCleanupInterval != 2*time.Second ||
 		cfg.Prefix != "svc" ||
 		cfg.RedisClient != client ||
+		cfg.NATSKeyValue != natsKV ||
 		cfg.FileDir != "/tmp/opts" ||
 		len(cfg.MemcachedAddresses) != 1 ||
 		cfg.MemcachedAddresses[0] != "127.0.0.1:11211" ||
@@ -76,6 +79,10 @@ func TestFactoryHelpers(t *testing.T) {
 	rds := NewRedisStore(ctx, redisClient)
 	if rds.Driver() != DriverRedis {
 		t.Fatalf("expected redis driver")
+	}
+	natsStore := NewNATSStore(ctx, newStubNATSKeyValue("bucket"))
+	if natsStore.Driver() != DriverNATS {
+		t.Fatalf("expected nats driver")
 	}
 
 	file := NewFileStore(ctx, "/tmp/cache-file-test")

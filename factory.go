@@ -39,6 +39,8 @@ func NewStore(ctx context.Context, cfg StoreConfig) Store {
 		}
 	case DriverRedis:
 		store = newRedisStore(cfg.RedisClient, cfg.DefaultTTL, cfg.Prefix)
+	case DriverNATS:
+		store = newNATSStore(cfg.NATSKeyValue, cfg.DefaultTTL, cfg.Prefix)
 	default:
 		store = newMemoryStore(cfg.DefaultTTL, cfg.MemoryCleanupInterval)
 	}
@@ -100,6 +102,19 @@ func NewMemoryStore(ctx context.Context, opts ...StoreOption) Store {
 //	fmt.Println(store.Driver()) // redis
 func NewRedisStore(ctx context.Context, client RedisClient, opts ...StoreOption) Store {
 	return NewStoreWith(ctx, DriverRedis, append([]StoreOption{WithRedisClient(client)}, opts...)...)
+}
+
+// NewNATSStore is a convenience for a NATS JetStream KeyValue-backed store.
+// @group Constructors
+//
+// Example: NATS helper
+//
+//	ctx := context.Background()
+//	var kv cache.NATSKeyValue // provided by your NATS setup
+//	store := cache.NewNATSStore(ctx, kv, cache.WithPrefix("app"))
+//	fmt.Println(store.Driver()) // nats
+func NewNATSStore(ctx context.Context, kv NATSKeyValue, opts ...StoreOption) Store {
+	return NewStoreWith(ctx, DriverNATS, append([]StoreOption{WithNATSKeyValue(kv)}, opts...)...)
 }
 
 // NewFileStore is a convenience for a filesystem-backed store.

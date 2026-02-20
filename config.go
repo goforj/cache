@@ -31,6 +31,8 @@ type StoreConfig struct {
 
 	// RedisClient is required when DriverRedis is used.
 	RedisClient RedisClient
+	// NATSKeyValue is required when DriverNATS is used.
+	NATSKeyValue NATSKeyValue
 
 	// FileDir controls where file driver stores cache entries.
 	FileDir string

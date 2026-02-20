@@ -11,4 +11,5 @@ const (
 	DriverDynamo    Driver = "dynamodb"
 	DriverSQL       Driver = "sql"
 	DriverRedis     Driver = "redis"
+	DriverNATS      Driver = "nats"
 )
