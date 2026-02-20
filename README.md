@@ -86,7 +86,7 @@ StoreConfig keeps configuration explicit:
 
 ## Behavior Semantics
 
-For precise runtime semantics, see `docs/behavior-semantics.md`:
+For precise runtime semantics, see [Behavior Semantics](docs/behavior-semantics.md):
 
 - TTL/default-TTL matrix by operation/helper
 - stale and refresh-ahead behavior and edge cases
