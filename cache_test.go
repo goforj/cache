@@ -642,3 +642,81 @@ func TestCacheConvenienceWrappers(t *testing.T) {
 		t.Fatalf("remember json cache failed: calls=%d err=%v", callsJSON, err)
 	}
 }
+
+func TestRememberJSONWrapperErrors(t *testing.T) {
+	c := NewCache(NewMemoryStore(context.Background()))
+	if _, err := RememberJSON[testPayload](c, "k", time.Second, nil); err == nil {
+		t.Fatalf("expected nil callback error")
+	}
+
+	expected := errors.New("wrapper boom")
+	_, err := RememberJSON[testPayload](c, "k2", time.Second, func() (testPayload, error) {
+		return testPayload{}, expected
+	})
+	if !errors.Is(err, expected) {
+		t.Fatalf("expected callback error, got %v", err)
+	}
+}
+
+func TestRememberConvenienceErrorPaths(t *testing.T) {
+	c := NewCache(NewMemoryStore(context.Background()))
+
+	if _, err := c.RememberBytes("rb-nil", time.Second, nil); err == nil {
+		t.Fatalf("expected nil callback error for remember bytes")
+	}
+	if _, err := c.RememberString("rs-nil", time.Second, nil); err == nil {
+		t.Fatalf("expected nil callback error for remember string")
+	}
+
+	expected := errors.New("callback failed")
+	if _, err := c.RememberBytes("rb-err", time.Second, func() ([]byte, error) {
+		return nil, expected
+	}); !errors.Is(err, expected) {
+		t.Fatalf("expected remember bytes callback error, got %v", err)
+	}
+	if _, err := c.RememberString("rs-err", time.Second, func() (string, error) {
+		return "", expected
+	}); !errors.Is(err, expected) {
+		t.Fatalf("expected remember string callback error, got %v", err)
+	}
+}
+
+func TestRememberValueWithCodecBranches(t *testing.T) {
+	ctx := context.Background()
+
+	decodeErrCodec := ValueCodec[int]{
+		Encode: func(v int) ([]byte, error) { return []byte("1"), nil },
+		Decode: func(_ []byte) (int, error) { return 0, errors.New("decode boom") },
+	}
+	store := &spyStore{driver: DriverMemory, getOK: true, getBody: []byte("cached")}
+	cache := NewCache(store)
+	if _, err := RememberValueWithCodec[int](ctx, cache, "k", time.Second, func() (int, error) { return 1, nil }, decodeErrCodec); err == nil {
+		t.Fatalf("expected decode error")
+	}
+
+	getErrStore := &spyStore{driver: DriverMemory, getErr: expectedErr}
+	if _, err := RememberValueWithCodec[int](ctx, NewCache(getErrStore), "k", time.Second, func() (int, error) { return 1, nil }, defaultValueCodec[int]()); !errors.Is(err, expectedErr) {
+		t.Fatalf("expected get error, got %v", err)
+	}
+
+	missStore := &spyStore{driver: DriverMemory, getOK: false}
+	if _, err := RememberValueWithCodec[int](ctx, NewCache(missStore), "k", time.Second, nil, defaultValueCodec[int]()); err == nil {
+		t.Fatalf("expected nil callback error")
+	}
+
+	fnErrStore := &spyStore{driver: DriverMemory, getOK: false}
+	fnErr := errors.New("fn boom")
+	if _, err := RememberValueWithCodec[int](ctx, NewCache(fnErrStore), "k", time.Second, func() (int, error) { return 0, fnErr }, defaultValueCodec[int]()); !errors.Is(err, fnErr) {
+		t.Fatalf("expected fn error, got %v", err)
+	}
+
+	encodeErr := errors.New("encode boom")
+	encodeErrCodec := ValueCodec[int]{
+		Encode: func(v int) ([]byte, error) { return nil, encodeErr },
+		Decode: func(b []byte) (int, error) { return 0, nil },
+	}
+	encodeErrStore := &spyStore{driver: DriverMemory, getOK: false}
+	if _, err := RememberValueWithCodec[int](ctx, NewCache(encodeErrStore), "k", time.Second, func() (int, error) { return 5, nil }, encodeErrCodec); !errors.Is(err, encodeErr) {
+		t.Fatalf("expected encode error, got %v", err)
+	}
+}

@@ -36,4 +36,4 @@ mkdir -p "$(dirname "$OUTPUT_FILE")"
 go tool covdata textfmt -i="$MERGED_DIR" -o="$OUTPUT_FILE"
 
 echo "==> Combined coverage written to $OUTPUT_FILE"
-go tool cover -func="$OUTPUT_FILE" | tail -n 1
+go tool covdata percent -i="$MERGED_DIR"
