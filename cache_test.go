@@ -824,6 +824,45 @@ func TestCacheRateLimitWithRemainingValidationAndError(t *testing.T) {
 	}
 }
 
+func TestCacheBatchSetAndBatchGet(t *testing.T) {
+	c := NewCache(NewMemoryStore(context.Background()))
+	err := c.BatchSet(map[string][]byte{
+		"a": []byte("1"),
+		"b": []byte("2"),
+	}, time.Minute)
+	if err != nil {
+		t.Fatalf("batch set failed: %v", err)
+	}
+
+	values, err := c.BatchGet("a", "b", "missing")
+	if err != nil {
+		t.Fatalf("batch get failed: %v", err)
+	}
+	if got := string(values["a"]); got != "1" {
+		t.Fatalf("unexpected a value: %q", got)
+	}
+	if got := string(values["b"]); got != "2" {
+		t.Fatalf("unexpected b value: %q", got)
+	}
+	if _, ok := values["missing"]; ok {
+		t.Fatalf("missing key should be omitted")
+	}
+}
+
+func TestCacheBatchGetPropagatesError(t *testing.T) {
+	c := NewCache(&spyStore{driver: DriverMemory, getErr: expectedErr})
+	if _, err := c.BatchGet("a", "b"); !errors.Is(err, expectedErr) {
+		t.Fatalf("expected get error, got %v", err)
+	}
+}
+
+func TestCacheBatchSetPropagatesError(t *testing.T) {
+	c := NewCache(&spyStore{driver: DriverMemory, setErr: expectedErr})
+	if err := c.BatchSet(map[string][]byte{"a": []byte("1")}, time.Second); !errors.Is(err, expectedErr) {
+		t.Fatalf("expected set error, got %v", err)
+	}
+}
+
 func TestCacheTryLockAndUnlock(t *testing.T) {
 	c := NewCache(NewMemoryStore(context.Background()))
 	key := "lock:job:1"

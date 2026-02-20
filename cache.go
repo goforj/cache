@@ -93,6 +93,37 @@ func (c *Cache) GetCtx(ctx context.Context, key string) ([]byte, bool, error) {
 	return body, ok, err
 }
 
+// BatchGet returns all found values for the provided keys.
+// Missing keys are omitted from the returned map.
+// @group Cache
+//
+// Example: batch get keys
+//
+//	ctx := context.Background()
+//	c := cache.NewCache(cache.NewMemoryStore(ctx))
+//	_ = c.Set("a", []byte("1"), time.Minute)
+//	_ = c.Set("b", []byte("2"), time.Minute)
+//	values, err := c.BatchGet("a", "b", "missing")
+//	fmt.Println(err == nil, string(values["a"]), string(values["b"])) // true 1 2
+func (c *Cache) BatchGet(keys ...string) (map[string][]byte, error) {
+	return c.BatchGetCtx(context.Background(), keys...)
+}
+
+// BatchGetCtx is the context-aware variant of BatchGet.
+func (c *Cache) BatchGetCtx(ctx context.Context, keys ...string) (map[string][]byte, error) {
+	out := make(map[string][]byte, len(keys))
+	for _, key := range keys {
+		body, ok, err := c.GetCtx(ctx, key)
+		if err != nil {
+			return nil, err
+		}
+		if ok {
+			out[key] = body
+		}
+	}
+	return out, nil
+}
+
 // GetString returns a UTF-8 string value for key when present.
 // @group Cache
 //
@@ -160,6 +191,32 @@ func (c *Cache) SetCtx(ctx context.Context, key string, value []byte, ttl time.D
 	err := c.store.Set(ctx, key, value, c.resolveTTL(ttl))
 	c.observe(ctx, "set", key, false, err, start)
 	return err
+}
+
+// BatchSet writes many key/value pairs using a shared ttl.
+// @group Cache
+//
+// Example: batch set keys
+//
+//	ctx := context.Background()
+//	c := cache.NewCache(cache.NewMemoryStore(ctx))
+//	err := c.BatchSet(map[string][]byte{
+//		"a": []byte("1"),
+//		"b": []byte("2"),
+//	}, time.Minute)
+//	fmt.Println(err == nil) // true
+func (c *Cache) BatchSet(values map[string][]byte, ttl time.Duration) error {
+	return c.BatchSetCtx(context.Background(), values, ttl)
+}
+
+// BatchSetCtx is the context-aware variant of BatchSet.
+func (c *Cache) BatchSetCtx(ctx context.Context, values map[string][]byte, ttl time.Duration) error {
+	for key, value := range values {
+		if err := c.SetCtx(ctx, key, value, ttl); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // SetString writes a string value to key.
