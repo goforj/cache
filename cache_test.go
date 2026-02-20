@@ -791,7 +791,7 @@ func TestCacheRememberStaleFreshHit(t *testing.T) {
 	}
 
 	calls := 0
-	val, stale, err := c.RememberStale("stale:fresh", time.Minute, 2*time.Minute, func() ([]byte, error) {
+	val, stale, err := c.RememberStaleBytes("stale:fresh", time.Minute, 2*time.Minute, func() ([]byte, error) {
 		calls++
 		return []byte("new"), nil
 	})
@@ -804,7 +804,7 @@ func TestCacheRememberStaleFallsBackOnCallbackError(t *testing.T) {
 	c := NewCache(NewMemoryStore(context.Background()))
 	key := "stale:fallback"
 
-	val, stale, err := c.RememberStale(key, time.Minute, 5*time.Minute, func() ([]byte, error) {
+	val, stale, err := c.RememberStaleBytes(key, time.Minute, 5*time.Minute, func() ([]byte, error) {
 		return []byte("seed"), nil
 	})
 	if err != nil || stale || string(val) != "seed" {
@@ -815,7 +815,7 @@ func TestCacheRememberStaleFallsBackOnCallbackError(t *testing.T) {
 	}
 
 	expected := errors.New("upstream down")
-	val, stale, err = c.RememberStale(key, time.Minute, 5*time.Minute, func() ([]byte, error) {
+	val, stale, err = c.RememberStaleBytes(key, time.Minute, 5*time.Minute, func() ([]byte, error) {
 		return nil, expected
 	})
 	if err != nil || !stale || string(val) != "seed" {
@@ -826,7 +826,7 @@ func TestCacheRememberStaleFallsBackOnCallbackError(t *testing.T) {
 func TestCacheRememberStaleNoFallbackReturnsError(t *testing.T) {
 	c := NewCache(NewMemoryStore(context.Background()))
 	expected := errors.New("compute failed")
-	_, stale, err := c.RememberStale("stale:none", time.Minute, time.Minute, func() ([]byte, error) {
+	_, stale, err := c.RememberStaleBytes("stale:none", time.Minute, time.Minute, func() ([]byte, error) {
 		return nil, expected
 	})
 	if stale || !errors.Is(err, expected) {
@@ -836,7 +836,60 @@ func TestCacheRememberStaleNoFallbackReturnsError(t *testing.T) {
 
 func TestCacheRememberStaleNilCallback(t *testing.T) {
 	c := NewCache(NewMemoryStore(context.Background()))
-	if _, _, err := c.RememberStale("stale:nil", time.Minute, time.Minute, nil); err == nil {
+	if _, _, err := c.RememberStaleBytes("stale:nil", time.Minute, time.Minute, nil); err == nil {
 		t.Fatalf("expected nil callback error")
+	}
+}
+
+func TestRememberStaleTypedFreshAndFallback(t *testing.T) {
+	c := NewCache(NewMemoryStore(context.Background()))
+	type profile struct {
+		Name string `json:"name"`
+	}
+	key := "stale:typed"
+
+	val, stale, err := RememberStale[profile](c, key, time.Minute, 5*time.Minute, func() (profile, error) {
+		return profile{Name: "Ada"}, nil
+	})
+	if err != nil || stale || val.Name != "Ada" {
+		t.Fatalf("typed seed failed: val=%+v stale=%v err=%v", val, stale, err)
+	}
+
+	if err := c.Delete(key); err != nil {
+		t.Fatalf("delete fresh key failed: %v", err)
+	}
+
+	val, stale, err = RememberStale[profile](c, key, time.Minute, 5*time.Minute, func() (profile, error) {
+		return profile{}, errors.New("upstream failed")
+	})
+	if err != nil || !stale || val.Name != "Ada" {
+		t.Fatalf("typed stale fallback failed: val=%+v stale=%v err=%v", val, stale, err)
+	}
+}
+
+func TestRememberStaleValueWithCodecErrors(t *testing.T) {
+	c := NewCache(NewMemoryStore(context.Background()))
+	ctx := context.Background()
+
+	if _, _, err := RememberStaleValueWithCodec[int](ctx, c, "stale:codec:nil", time.Minute, time.Minute, nil, defaultValueCodec[int]()); err == nil {
+		t.Fatalf("expected nil callback error")
+	}
+
+	encodeErr := errors.New("encode boom")
+	codec := ValueCodec[int]{
+		Encode: func(v int) ([]byte, error) { return nil, encodeErr },
+		Decode: func(b []byte) (int, error) { return 0, nil },
+	}
+	if _, _, err := RememberStaleValueWithCodec[int](ctx, c, "stale:codec:encode", time.Minute, time.Minute, func() (int, error) { return 1, nil }, codec); !errors.Is(err, encodeErr) {
+		t.Fatalf("expected encode error, got %v", err)
+	}
+
+	decodeErr := errors.New("decode boom")
+	decodeCodec := ValueCodec[int]{
+		Encode: func(v int) ([]byte, error) { return []byte("1"), nil },
+		Decode: func(b []byte) (int, error) { return 0, decodeErr },
+	}
+	if _, _, err := RememberStaleValueWithCodec[int](ctx, c, "stale:codec:decode", time.Minute, time.Minute, func() (int, error) { return 1, nil }, decodeCodec); !errors.Is(err, decodeErr) {
+		t.Fatalf("expected decode error, got %v", err)
 	}
 }

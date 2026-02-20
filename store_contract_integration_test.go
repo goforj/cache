@@ -55,12 +55,13 @@ func runStoreContractSuite(t *testing.T, store Store, tc contractCase) {
 	}
 
 	ttl, wait := contractTTL(store.Driver())
+	caseKey := func(base string) string { return tc.name + ":" + base }
 
 	// Set/Get returns clone and round-trips.
-	if err := store.Set(ctx, "alpha", []byte("value"), 500*time.Millisecond); err != nil {
+	if err := store.Set(ctx, caseKey("alpha"), []byte("value"), 500*time.Millisecond); err != nil {
 		t.Fatalf("set failed: %v", err)
 	}
-	body, ok, err := store.Get(ctx, "alpha")
+	body, ok, err := store.Get(ctx, caseKey("alpha"))
 	if err != nil {
 		t.Fatalf("get failed: ok=%v err=%v", ok, err)
 	}
@@ -74,7 +75,7 @@ func runStoreContractSuite(t *testing.T, store Store, tc contractCase) {
 		}
 		if !skipCloneCheck {
 			body[0] = 'X'
-			body2, ok, err := store.Get(ctx, "alpha")
+			body2, ok, err := store.Get(ctx, caseKey("alpha"))
 			if err != nil || !ok || string(body2) != "value" {
 				t.Fatalf("expected stored value unchanged, got %q err=%v", string(body2), err)
 			}
@@ -82,20 +83,20 @@ func runStoreContractSuite(t *testing.T, store Store, tc contractCase) {
 	}
 
 	// TTL expiry.
-	if err := store.Set(ctx, "ttl", []byte("v"), ttl); err != nil {
+	if err := store.Set(ctx, caseKey("ttl"), []byte("v"), ttl); err != nil {
 		t.Fatalf("set ttl failed: %v", err)
 	}
 	time.Sleep(wait)
-	if _, ok, err := store.Get(ctx, "ttl"); err != nil || ok {
+	if _, ok, err := store.Get(ctx, caseKey("ttl")); err != nil || ok {
 		t.Fatalf("expected ttl key expired; ok=%v err=%v", ok, err)
 	}
 
 	// Add only when missing.
-	created, err := store.Add(ctx, "once", []byte("first"), time.Second)
+	created, err := store.Add(ctx, caseKey("once"), []byte("first"), time.Second)
 	if err != nil {
 		t.Fatalf("add first failed: created=%v err=%v", created, err)
 	}
-	created, err = store.Add(ctx, "once", []byte("second"), time.Second)
+	created, err = store.Add(ctx, caseKey("once"), []byte("second"), time.Second)
 	if err != nil {
 		t.Fatalf("add duplicate failed: %v", err)
 	}
@@ -108,7 +109,7 @@ func runStoreContractSuite(t *testing.T, store Store, tc contractCase) {
 	}
 
 	// Counters refresh TTL.
-	value, err := store.Increment(ctx, "counter", 3, time.Second)
+	value, err := store.Increment(ctx, caseKey("counter"), 3, time.Second)
 	if err != nil {
 		t.Fatalf("increment failed: value=%d err=%v", value, err)
 	}
@@ -119,7 +120,7 @@ func runStoreContractSuite(t *testing.T, store Store, tc contractCase) {
 	} else if value != 3 {
 		t.Fatalf("expected incremented value to be 3, got %d", value)
 	}
-	value, err = store.Decrement(ctx, "counter", 1, time.Second)
+	value, err = store.Decrement(ctx, caseKey("counter"), 1, time.Second)
 	if err != nil {
 		t.Fatalf("decrement failed: value=%d err=%v", value, err)
 	}
@@ -132,33 +133,33 @@ func runStoreContractSuite(t *testing.T, store Store, tc contractCase) {
 	}
 
 	// Delete & DeleteMany.
-	if err := store.Set(ctx, "a", []byte("1"), time.Second); err != nil {
+	if err := store.Set(ctx, caseKey("a"), []byte("1"), time.Second); err != nil {
 		t.Fatalf("set a failed: %v", err)
 	}
-	if err := store.Set(ctx, "b", []byte("2"), time.Second); err != nil {
+	if err := store.Set(ctx, caseKey("b"), []byte("2"), time.Second); err != nil {
 		t.Fatalf("set b failed: %v", err)
 	}
-	if err := store.Delete(ctx, "a"); err != nil {
+	if err := store.Delete(ctx, caseKey("a")); err != nil {
 		t.Fatalf("delete a failed: %v", err)
 	}
-	if err := store.DeleteMany(ctx, "b"); err != nil {
+	if err := store.DeleteMany(ctx, caseKey("b")); err != nil {
 		t.Fatalf("delete many failed: %v", err)
 	}
-	if _, ok, err := store.Get(ctx, "a"); err != nil || ok {
+	if _, ok, err := store.Get(ctx, caseKey("a")); err != nil || ok {
 		t.Fatalf("expected key a deleted")
 	}
-	if _, ok, err := store.Get(ctx, "b"); err != nil || ok {
+	if _, ok, err := store.Get(ctx, caseKey("b")); err != nil || ok {
 		t.Fatalf("expected key b deleted")
 	}
 
 	// Flush clears all keys.
-	if err := store.Set(ctx, "flush", []byte("x"), time.Second); err != nil {
+	if err := store.Set(ctx, caseKey("flush"), []byte("x"), time.Second); err != nil {
 		t.Fatalf("set flush failed: %v", err)
 	}
 	if err := store.Flush(ctx); err != nil {
 		t.Fatalf("flush failed: %v", err)
 	}
-	if _, ok, err := store.Get(ctx, "flush"); err != nil || ok {
+	if _, ok, err := store.Get(ctx, caseKey("flush")); err != nil || ok {
 		t.Fatalf("expected flush to clear key; ok=%v err=%v", ok, err)
 	}
 
@@ -166,7 +167,7 @@ func runStoreContractSuite(t *testing.T, store Store, tc contractCase) {
 	type payload struct{ Name string `json:"name"` }
 	cache := NewCache(store)
 	calls := 0
-	val, err := Remember[payload](cache, "remember:typed", time.Minute, func() (payload, error) {
+	val, err := Remember[payload](cache, caseKey("remember:typed"), time.Minute, func() (payload, error) {
 		calls++
 		return payload{Name: "Ada"}, nil
 	})
@@ -174,7 +175,7 @@ func runStoreContractSuite(t *testing.T, store Store, tc contractCase) {
 		t.Fatalf("remember typed failed: %+v err=%v", val, err)
 	}
 	// Cached path should bypass callback.
-	val, err = Remember[payload](cache, "remember:typed", time.Minute, func() (payload, error) {
+	val, err = Remember[payload](cache, caseKey("remember:typed"), time.Minute, func() (payload, error) {
 		calls++
 		return payload{Name: "Other"}, nil
 	})
@@ -190,18 +191,18 @@ func runStoreContractSuite(t *testing.T, store Store, tc contractCase) {
 	}
 
 	if tc.verifyDefaultTTLExpiry {
-		if err := store.Set(ctx, "default_ttl", []byte("v"), 0); err != nil {
+		if err := store.Set(ctx, caseKey("default_ttl"), []byte("v"), 0); err != nil {
 			t.Fatalf("set default ttl key failed: %v", err)
 		}
 		time.Sleep(defaultTTLWait(store.Driver()))
-		if _, ok, err := store.Get(ctx, "default_ttl"); err != nil || ok {
+			if _, ok, err := store.Get(ctx, caseKey("default_ttl")); err != nil || ok {
 			t.Fatalf("expected default ttl key expired; ok=%v err=%v", ok, err)
 		}
 	}
 
 	if tc.verifyMaxValueLimit {
 		tooLarge := []byte("abcdefghijklmnopqrstuvwxyz0123456789")
-		err := store.Set(ctx, "too-large", tooLarge, time.Second)
+			err := store.Set(ctx, caseKey("too-large"), tooLarge, time.Second)
 		if !errors.Is(err, ErrValueTooLarge) {
 			t.Fatalf("expected ErrValueTooLarge, got %v", err)
 		}

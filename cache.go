@@ -402,7 +402,7 @@ func (c *Cache) RememberBytes(key string, ttl time.Duration, fn func() ([]byte, 
 
 const staleSuffix = ":__stale"
 
-// RememberStale returns a fresh value when available, otherwise computes and caches it.
+// RememberStaleBytes returns a fresh value when available, otherwise computes and caches it.
 // If computing fails and a stale value exists, it returns the stale value.
 // The returned bool is true when a stale fallback was used.
 //
@@ -410,12 +410,12 @@ const staleSuffix = ":__stale"
 //
 //	ctx := context.Background()
 //	c := cache.NewCache(cache.NewMemoryStore(ctx))
-//	body, usedStale, err := c.RememberStale("profile:42", time.Minute, 10*time.Minute, func() ([]byte, error) {
+//	body, usedStale, err := c.RememberStaleBytes("profile:42", time.Minute, 10*time.Minute, func() ([]byte, error) {
 //		return []byte(`{"name":"Ada"}`), nil
 //	})
 //	fmt.Println(err == nil, usedStale, len(body) > 0)
-func (c *Cache) RememberStale(key string, ttl, staleTTL time.Duration, fn func() ([]byte, error)) ([]byte, bool, error) {
-	return c.RememberStaleCtx(context.Background(), key, ttl, staleTTL, func(ctx context.Context) ([]byte, error) {
+func (c *Cache) RememberStaleBytes(key string, ttl, staleTTL time.Duration, fn func() ([]byte, error)) ([]byte, bool, error) {
+	return c.RememberStaleBytesCtx(context.Background(), key, ttl, staleTTL, func(ctx context.Context) ([]byte, error) {
 		if fn == nil {
 			return nil, errors.New("cache remember stale requires a callback")
 		}
@@ -423,8 +423,8 @@ func (c *Cache) RememberStale(key string, ttl, staleTTL time.Duration, fn func()
 	})
 }
 
-// RememberStaleCtx is the context-aware variant of RememberStale.
-func (c *Cache) RememberStaleCtx(ctx context.Context, key string, ttl, staleTTL time.Duration, fn func(context.Context) ([]byte, error)) ([]byte, bool, error) {
+// RememberStaleBytesCtx is the context-aware variant of RememberStaleBytes.
+func (c *Cache) RememberStaleBytesCtx(ctx context.Context, key string, ttl, staleTTL time.Duration, fn func(context.Context) ([]byte, error)) ([]byte, bool, error) {
 	start := time.Now()
 	staleKey := key + staleSuffix
 
@@ -565,6 +565,28 @@ func RememberJSON[T any](cache *Cache, key string, ttl time.Duration, fn func() 
 	})
 }
 
+// RememberStale returns a typed value with stale fallback semantics using JSON encoding by default.
+// @group Cache
+//
+// Example: remember stale typed
+//
+//	type Profile struct { Name string `json:"name"` }
+//	ctx := context.Background()
+//	c := cache.NewCache(cache.NewMemoryStore(ctx))
+//	profile, usedStale, err := cache.RememberStale[Profile](c, "profile:42", time.Minute, 10*time.Minute, func() (Profile, error) {
+//		return Profile{Name: "Ada"}, nil
+//	})
+//	fmt.Println(err == nil, usedStale, profile.Name) // true false Ada
+func RememberStale[T any](cache *Cache, key string, ttl, staleTTL time.Duration, fn func() (T, error)) (T, bool, error) {
+	return RememberStaleCtx(context.Background(), cache, key, ttl, staleTTL, func(ctx context.Context) (T, error) {
+		if fn == nil {
+			var zero T
+			return zero, errors.New("cache remember stale requires a callback")
+		}
+		return fn()
+	})
+}
+
 // Remember is the ergonomic, typed remember helper using JSON encoding by default.
 // @group Cache
 func Remember[T any](cache *Cache, key string, ttl time.Duration, fn func() (T, error)) (T, error) {
@@ -622,6 +644,44 @@ func RememberValueWithCodec[T any](ctx context.Context, cache *Cache, key string
 	return val, nil
 }
 
+// RememberStaleValueWithCodec allows custom encoding/decoding for typed stale remember operations.
+// @group Other
+//
+// Example: remember stale with custom codec
+//
+//	type Profile struct { Name string }
+//	codec := cache.ValueCodec[Profile]{
+//		Encode: func(v Profile) ([]byte, error) { return []byte(v.Name), nil },
+//		Decode: func(b []byte) (Profile, error) { return Profile{Name: string(b)}, nil },
+//	}
+//	ctx := context.Background()
+//	c := cache.NewCache(cache.NewMemoryStore(ctx))
+//	profile, usedStale, err := cache.RememberStaleValueWithCodec(ctx, c, "profile:42", time.Minute, 10*time.Minute, func() (Profile, error) {
+//		return Profile{Name: "Ada"}, nil
+//	}, codec)
+//	fmt.Println(err == nil, usedStale, profile.Name) // true false Ada
+func RememberStaleValueWithCodec[T any](ctx context.Context, cache *Cache, key string, ttl, staleTTL time.Duration, fn func() (T, error), codec ValueCodec[T]) (T, bool, error) {
+	var zero T
+	body, stale, err := cache.RememberStaleBytesCtx(ctx, key, ttl, staleTTL, func(ctx context.Context) ([]byte, error) {
+		if fn == nil {
+			return nil, errors.New("cache remember stale requires a callback")
+		}
+		val, err := fn()
+		if err != nil {
+			return nil, err
+		}
+		return codec.Encode(val)
+	})
+	if err != nil {
+		return zero, stale, err
+	}
+	out, err := codec.Decode(body)
+	if err != nil {
+		return zero, stale, err
+	}
+	return out, stale, nil
+}
+
 func RememberJSONCtx[T any](ctx context.Context, cache *Cache, key string, ttl time.Duration, fn func(context.Context) (T, error)) (T, error) {
 	var zero T
 	out, ok, err := GetJSONCtx[T](ctx, cache, key)
@@ -642,6 +702,28 @@ func RememberJSONCtx[T any](ctx context.Context, cache *Cache, key string, ttl t
 		return zero, err
 	}
 	return value, nil
+}
+
+// RememberStaleCtx returns a typed value with stale fallback semantics using JSON encoding by default.
+// @group Other
+//
+// Example: remember stale typed with context
+//
+//	type Profile struct { Name string `json:"name"` }
+//	ctx := context.Background()
+//	c := cache.NewCache(cache.NewMemoryStore(ctx))
+//	profile, usedStale, err := cache.RememberStaleCtx[Profile](ctx, c, "profile:42", time.Minute, 10*time.Minute, func(ctx context.Context) (Profile, error) {
+//		return Profile{Name: "Ada"}, nil
+//	})
+//	fmt.Println(err == nil, usedStale, profile.Name) // true false Ada
+func RememberStaleCtx[T any](ctx context.Context, cache *Cache, key string, ttl, staleTTL time.Duration, fn func(context.Context) (T, error)) (T, bool, error) {
+	return RememberStaleValueWithCodec(ctx, cache, key, ttl, staleTTL, func() (T, error) {
+		if fn == nil {
+			var zero T
+			return zero, errors.New("cache remember stale requires a callback")
+		}
+		return fn(ctx)
+	}, defaultValueCodec[T]())
 }
 
 func (c *Cache) resolveTTL(ttl time.Duration) time.Duration {
