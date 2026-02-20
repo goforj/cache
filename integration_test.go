@@ -117,7 +117,7 @@ func integrationAddr(name string) string {
 
 func startRedisContainer(ctx context.Context) (testcontainers.Container, string, error) {
 	req := testcontainers.ContainerRequest{
-		Image:        "redis:7-alpine",
+		Image:        "redis:7-bookworm",
 		ExposedPorts: []string{"6379/tcp"},
 		WaitingFor:   wait.ForListeningPort("6379/tcp").WithStartupTimeout(30 * time.Second),
 	}
@@ -143,10 +143,10 @@ func startRedisContainer(ctx context.Context) (testcontainers.Container, string,
 
 func startNATSContainer(ctx context.Context) (testcontainers.Container, string, error) {
 	req := testcontainers.ContainerRequest{
-		Image:        "nats:2-alpine",
+		Image:        "nats:2",
 		Cmd:          []string{"-js"},
 		ExposedPorts: []string{"4222/tcp"},
-		WaitingFor:   wait.ForListeningPort("4222/tcp").WithStartupTimeout(30 * time.Second),
+		WaitingFor:   wait.ForLog("Server is ready").WithStartupTimeout(30 * time.Second),
 	}
 	container, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
 		ContainerRequest: req,
@@ -170,7 +170,7 @@ func startNATSContainer(ctx context.Context) (testcontainers.Container, string, 
 
 func startMemcachedContainer(ctx context.Context) (testcontainers.Container, string, error) {
 	req := testcontainers.ContainerRequest{
-		Image:        "memcached:alpine",
+		Image:        "memcached:1.6-bookworm",
 		ExposedPorts: []string{"11211/tcp"},
 		WaitingFor:   wait.ForListeningPort("11211/tcp").WithStartupTimeout(30 * time.Second),
 	}
@@ -222,7 +222,7 @@ func startDynamoContainer(ctx context.Context) (testcontainers.Container, string
 
 func startPostgresContainer(ctx context.Context) (testcontainers.Container, string, error) {
 	req := testcontainers.ContainerRequest{
-		Image:        "postgres:16-alpine",
+		Image:        "postgres:16-bookworm",
 		Env:          map[string]string{"POSTGRES_PASSWORD": "pass", "POSTGRES_USER": "user", "POSTGRES_DB": "app"},
 		ExposedPorts: []string{"5432/tcp"},
 		WaitingFor:   wait.ForListeningPort("5432/tcp").WithStartupTimeout(60 * time.Second),

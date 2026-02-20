@@ -29,13 +29,9 @@ const (
 )
 
 type benchRow struct {
-	Scenario string
-	Driver   string
-	Op       string
-	NsOp     float64
-	BytesOp  float64
-	AllocsOp float64
-	Ops      int64
+	Driver string
+	Op     string
+	NsOp   float64
 }
 
 // RenderBenchmarks is invoked by `go test -tags benchrender ./docs/bench` via TestRenderBenchmarks.
@@ -57,70 +53,39 @@ func RenderBenchmarks() {
 	fmt.Println("✔ Benchmarks table updated")
 }
 
-type benchScenario struct {
-	Name  string
-	Title string
-	Opts  []cache.StoreOption
-}
-
-func runBenchmarks(ctx context.Context) map[string]map[string][]benchRow {
-	drivers := []string{"memory", "file", "redis", "nats", "memcached", "dynamodb", "sql_postgres", "sql_mysql", "sql_sqlite"}
-	scenarios := []benchScenario{
-		{
-			Name:  "baseline",
-			Title: "Baseline",
-		},
-		{
-			Name:  "compression",
-			Title: "With Compression",
-			Opts:  []cache.StoreOption{cache.WithCompression(cache.CompressionGzip)},
-		},
-		{
-			Name:  "encryption",
-			Title: "With Encryption",
-			Opts:  []cache.StoreOption{cache.WithEncryptionKey([]byte("0123456789abcdef0123456789abcdef"))},
-		},
-	}
+func runBenchmarks(ctx context.Context) map[string][]benchRow {
+	drivers := []string{"memory", "file", "redis", "nats", "nats_bucket_ttl", "memcached", "dynamodb", "sql_postgres", "sql_mysql", "sql_sqlite"}
 	ops := map[string]func(context.Context, *cache.Cache){
 		"Set":    doSet,
 		"Get":    doGet,
 		"Delete": doDelete,
 	}
 
-	results := make(map[string]map[string][]benchRow)
+	results := make(map[string][]benchRow)
+	for _, driver := range drivers {
+		opts := []cache.StoreOption{}
+		baseDriver := driver
+		if driver == "nats_bucket_ttl" {
+			baseDriver = "nats"
+			opts = append(opts, cache.WithNATSBucketTTL(true))
+		}
 
-	for _, scenario := range scenarios {
-		results[scenario.Name] = map[string][]benchRow{}
-		for _, d := range drivers {
-			c, cleanup, ok := buildCache(ctx, d, scenario.Opts...)
-			if !ok {
-				continue
-			}
-			if cleanup != nil {
-				defer cleanup()
-			}
-			for opName, fn := range ops {
-				ns, bytesOp, allocsOp, ops := benchOp(ctx, c, fn)
-				results[scenario.Name][opName] = append(
-					results[scenario.Name][opName],
-					benchRow{
-						Scenario: scenario.Name,
-						Driver:   d,
-						Op:       opName,
-						NsOp:     ns,
-						BytesOp:  bytesOp,
-						AllocsOp: allocsOp,
-						Ops:      ops,
-					},
-				)
-			}
+		c, cleanup, ok := buildCache(ctx, baseDriver, opts...)
+		if !ok {
+			continue
+		}
+		if cleanup != nil {
+			defer cleanup()
+		}
+		for opName, fn := range ops {
+			ns, _, _, _ := benchOp(ctx, c, fn)
+			results[opName] = append(results[opName], benchRow{Driver: driver, Op: opName, NsOp: ns})
 		}
 	}
 	return results
 }
 
 func benchOp(ctx context.Context, c *cache.Cache, fn func(context.Context, *cache.Cache)) (nsPerOp, bytesPerOp, allocsPerOp float64, ops int64) {
-	// Use testing.Benchmark to gather ns/op and allocation metrics.
 	res := testing.Benchmark(func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			fn(ctx, c)
@@ -141,59 +106,70 @@ func doDelete(ctx context.Context, c *cache.Cache) {
 	_ = c.Delete("bench:key")
 }
 
-func renderTable(byScenario map[string]map[string][]benchRow) string {
-	if len(byScenario) == 0 {
+func renderTable(byOp map[string][]benchRow) string {
+	if len(byOp) == 0 {
 		return ""
 	}
 
-	scenarios := []benchScenario{
-		{Name: "baseline", Title: "Baseline"},
-		{Name: "compression", Title: "With Compression"},
-		{Name: "encryption", Title: "With Encryption"},
-	}
-	ops := []string{"Set", "Get", "Delete"}
+	ops := []string{"Get", "Set", "Delete"}
 
 	var buf bytes.Buffer
 	buf.WriteString(benchStart + "\n\n")
-	for _, scenario := range scenarios {
-		byOp, ok := byScenario[scenario.Name]
-		if !ok {
+	for _, op := range ops {
+		rows := byOp[op]
+		if len(rows) == 0 {
 			continue
 		}
-		buf.WriteString(fmt.Sprintf("### %s\n\n", scenario.Title))
-		for _, op := range ops {
-			rows := byOp[op]
-			if len(rows) == 0 {
-				continue
-			}
-			driverRows := make(map[string]benchRow, len(rows))
-			var drivers []string
-			for _, row := range rows {
-				driverRows[row.Driver] = row
-			}
-			for d := range driverRows {
-				drivers = append(drivers, d)
-			}
-			sort.Strings(drivers)
-			buf.WriteString(fmt.Sprintf("#### %s\n\n", op))
-			buf.WriteString("| Driver | N | ns/op | B/op | allocs/op |\n")
-			buf.WriteString("|:------|---:|-----:|-----:|---------:|\n")
-			for _, d := range drivers {
-				row := driverRows[d]
-				buf.WriteString(fmt.Sprintf("| %s | %d | %.0f | %.0f | %.0f |\n", d, row.Ops, row.NsOp, row.BytesOp, row.AllocsOp))
-			}
-			buf.WriteString("\n")
-		}
+		sort.Slice(rows, func(i, j int) bool {
+			return rows[i].Driver < rows[j].Driver
+		})
+		yMax := chartYMax(rows)
+
+		buf.WriteString("```mermaid\n")
+		buf.WriteString("xychart-beta\n")
+		buf.WriteString(fmt.Sprintf("    title \"%s() latency (ns)\"\n", op))
+		buf.WriteString(fmt.Sprintf("    x-axis [%s]\n", mermaidDriverList(rows)))
+		buf.WriteString(fmt.Sprintf("    y-axis \"ns\" 0 --> %d\n", yMax))
+		buf.WriteString(fmt.Sprintf("    bar \"latency\" [%s]\n", mermaidNsList(rows)))
+		buf.WriteString("```\n\n")
 	}
 	buf.WriteString(benchEnd + "\n")
 	return buf.String()
+}
+
+func chartYMax(rows []benchRow) int64 {
+	var max float64
+	for _, row := range rows {
+		if row.NsOp > max {
+			max = row.NsOp
+		}
+	}
+	if max < 1 {
+		return 1
+	}
+	return int64(max*1.1) + 1
+}
+
+func mermaidDriverList(rows []benchRow) string {
+	parts := make([]string, 0, len(rows))
+	for _, row := range rows {
+		parts = append(parts, fmt.Sprintf("%q", row.Driver))
+	}
+	return strings.Join(parts, ",")
+}
+
+func mermaidNsList(rows []benchRow) string {
+	parts := make([]string, 0, len(rows))
+	for _, row := range rows {
+		parts = append(parts, fmt.Sprintf("%.0f", row.NsOp))
+	}
+	return strings.Join(parts, ",")
 }
 
 func injectTable(readme, table string) string {
 	start := strings.Index(readme, benchStart)
 	end := strings.Index(readme, benchEnd)
 	if start == -1 || end == -1 || end < start {
-		// append if anchors missing
 		return readme + table
 	}
 	prefix := strings.TrimRight(readme[:start], "\n") + "\n\n"
@@ -293,7 +269,7 @@ func buildCache(ctx context.Context, name string, opts ...cache.StoreOption) (*c
 // --- container helpers (simplified; duplicated from bench_test) ---
 
 func startRedis(ctx context.Context, opts ...cache.StoreOption) (*cache.Cache, func(), error) {
-	req := testcontainers.ContainerRequest{Image: "redis:7-alpine", ExposedPorts: []string{"6379/tcp"}, WaitingFor: wait.ForListeningPort("6379/tcp").WithStartupTimeout(30 * time.Second)}
+	req := testcontainers.ContainerRequest{Image: "redis:7-bookworm", ExposedPorts: []string{"6379/tcp"}, WaitingFor: wait.ForListeningPort("6379/tcp").WithStartupTimeout(30 * time.Second)}
 	c, addr, err := startContainer(ctx, req, "6379/tcp")
 	if err != nil {
 		return nil, nil, err
@@ -305,7 +281,7 @@ func startRedis(ctx context.Context, opts ...cache.StoreOption) (*cache.Cache, f
 }
 
 func startMemcached(ctx context.Context, opts ...cache.StoreOption) (*cache.Cache, func(), error) {
-	req := testcontainers.ContainerRequest{Image: "memcached:alpine", ExposedPorts: []string{"11211/tcp"}, WaitingFor: wait.ForListeningPort("11211/tcp").WithStartupTimeout(30 * time.Second)}
+	req := testcontainers.ContainerRequest{Image: "memcached:1.6-bookworm", ExposedPorts: []string{"11211/tcp"}, WaitingFor: wait.ForListeningPort("11211/tcp").WithStartupTimeout(30 * time.Second)}
 	c, addr, err := startContainer(ctx, req, "11211/tcp")
 	if err != nil {
 		return nil, nil, err
@@ -334,7 +310,7 @@ func startDynamo(ctx context.Context, opts ...cache.StoreOption) (*cache.Cache, 
 }
 
 func startPostgres(ctx context.Context, opts ...cache.StoreOption) (*cache.Cache, func(), error) {
-	req := testcontainers.ContainerRequest{Image: "postgres:16-alpine", Env: map[string]string{"POSTGRES_PASSWORD": "pass", "POSTGRES_USER": "user", "POSTGRES_DB": "app"}, ExposedPorts: []string{"5432/tcp"}, WaitingFor: wait.ForListeningPort("5432/tcp").WithStartupTimeout(60 * time.Second)}
+	req := testcontainers.ContainerRequest{Image: "postgres:16-bookworm", Env: map[string]string{"POSTGRES_PASSWORD": "pass", "POSTGRES_USER": "user", "POSTGRES_DB": "app"}, ExposedPorts: []string{"5432/tcp"}, WaitingFor: wait.ForListeningPort("5432/tcp").WithStartupTimeout(60 * time.Second)}
 	c, addr, err := startContainer(ctx, req, "5432/tcp")
 	if err != nil {
 		return nil, nil, err
@@ -367,10 +343,10 @@ func startMySQL(ctx context.Context, opts ...cache.StoreOption) (*cache.Cache, f
 
 func startNATS(ctx context.Context, opts ...cache.StoreOption) (*cache.Cache, func(), error) {
 	req := testcontainers.ContainerRequest{
-		Image:        "nats:2-alpine",
+		Image:        "nats:2",
 		Cmd:          []string{"-js"},
 		ExposedPorts: []string{"4222/tcp"},
-		WaitingFor:   wait.ForListeningPort("4222/tcp").WithStartupTimeout(30 * time.Second),
+		WaitingFor:   wait.ForLog("Server is ready").WithStartupTimeout(30 * time.Second),
 	}
 	c, addr, err := startContainer(ctx, req, "4222/tcp")
 	if err != nil {

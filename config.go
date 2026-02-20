@@ -33,6 +33,8 @@ type StoreConfig struct {
 	RedisClient RedisClient
 	// NATSKeyValue is required when DriverNATS is used.
 	NATSKeyValue NATSKeyValue
+	// NATSBucketTTL uses raw values and bucket-level MaxAge (no per-key TTL envelope).
+	NATSBucketTTL bool
 
 	// FileDir controls where file driver stores cache entries.
 	FileDir string

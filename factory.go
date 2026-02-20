@@ -40,7 +40,7 @@ func NewStore(ctx context.Context, cfg StoreConfig) Store {
 	case DriverRedis:
 		store = newRedisStore(cfg.RedisClient, cfg.DefaultTTL, cfg.Prefix)
 	case DriverNATS:
-		store = newNATSStore(cfg.NATSKeyValue, cfg.DefaultTTL, cfg.Prefix)
+		store = newNATSStore(cfg.NATSKeyValue, cfg.DefaultTTL, cfg.Prefix, cfg.NATSBucketTTL)
 	default:
 		store = newMemoryStore(cfg.DefaultTTL, cfg.MemoryCleanupInterval)
 	}

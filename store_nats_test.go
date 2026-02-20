@@ -10,7 +10,7 @@ import (
 )
 
 func TestNATSStoreNilKeyValueErrors(t *testing.T) {
-	store := newNATSStore(nil, 0, "")
+	store := newNATSStore(nil, 0, "", false)
 	ctx := context.Background()
 
 	if _, _, err := store.Get(ctx, "k"); err == nil {
@@ -42,7 +42,7 @@ func TestNATSStoreNilKeyValueErrors(t *testing.T) {
 func TestNATSStoreOperationsWithStubKV(t *testing.T) {
 	ctx := context.Background()
 	kv := newStubNATSKeyValue("bucket")
-	store := newNATSStore(kv, 100*time.Millisecond, "pfx")
+	store := newNATSStore(kv, 100*time.Millisecond, "pfx", false)
 
 	if err := store.Set(ctx, "alpha", []byte("one"), 0); err != nil {
 		t.Fatalf("set failed: %v", err)
@@ -105,7 +105,7 @@ func TestNATSStoreOperationsWithStubKV(t *testing.T) {
 func TestNATSStoreExpiryAndDefaultTTL(t *testing.T) {
 	ctx := context.Background()
 	kv := newStubNATSKeyValue("bucket")
-	store := newNATSStore(kv, 25*time.Millisecond, "pfx")
+	store := newNATSStore(kv, 25*time.Millisecond, "pfx", false)
 
 	if err := store.Set(ctx, "exp", []byte("v"), 0); err != nil {
 		t.Fatalf("set failed: %v", err)
@@ -121,10 +121,34 @@ func TestNATSStoreExpiryAndDefaultTTL(t *testing.T) {
 	}
 }
 
+func TestNATSStoreBucketTTLModeStoresRawValues(t *testing.T) {
+	ctx := context.Background()
+	kv := newStubNATSKeyValue("bucket")
+	store := newNATSStore(kv, 10*time.Millisecond, "pfx", true)
+
+	if err := store.Set(ctx, "raw", []byte("value"), 5*time.Millisecond); err != nil {
+		t.Fatalf("set failed: %v", err)
+	}
+	body, ok, err := store.Get(ctx, "raw")
+	if err != nil || !ok || string(body) != "value" {
+		t.Fatalf("unexpected get result: ok=%v err=%v body=%q", ok, err, string(body))
+	}
+
+	created, err := store.Add(ctx, "addraw", []byte("x"), time.Millisecond)
+	if err != nil || !created {
+		t.Fatalf("add failed: created=%v err=%v", created, err)
+	}
+
+	val, err := store.Increment(ctx, "counter_raw", 2, time.Millisecond)
+	if err != nil || val != 2 {
+		t.Fatalf("increment failed: val=%d err=%v", val, err)
+	}
+}
+
 func TestNATSStoreIncrementOnNonNumericValue(t *testing.T) {
 	ctx := context.Background()
 	kv := newStubNATSKeyValue("bucket")
-	store := newNATSStore(kv, time.Second, "pfx")
+	store := newNATSStore(kv, time.Second, "pfx", false)
 	if err := store.Set(ctx, "badnum", []byte("not-a-number"), time.Second); err != nil {
 		t.Fatalf("set failed: %v", err)
 	}
@@ -136,7 +160,7 @@ func TestNATSStoreIncrementOnNonNumericValue(t *testing.T) {
 func TestNATSStoreFlushRespectsPrefix(t *testing.T) {
 	ctx := context.Background()
 	kv := newStubNATSKeyValue("bucket")
-	store := newNATSStore(kv, time.Second, "pfx")
+	store := newNATSStore(kv, time.Second, "pfx", false)
 	ns := store.(*natsStore)
 
 	inKey := ns.cacheKey("in")
@@ -162,7 +186,7 @@ func TestNATSStoreFlushRespectsPrefix(t *testing.T) {
 func TestNATSStoreErrorPropagation(t *testing.T) {
 	ctx := context.Background()
 	kv := newStubNATSKeyValue("bucket")
-	store := newNATSStore(kv, time.Second, "pfx")
+	store := newNATSStore(kv, time.Second, "pfx", false)
 
 	kv.getErr = errors.New("get")
 	if _, _, err := store.Get(ctx, "k"); err == nil {
@@ -205,7 +229,7 @@ func TestNATSStoreErrorPropagation(t *testing.T) {
 
 func mustEncodeNATSEnvelope(t *testing.T, value []byte, ttl time.Duration) []byte {
 	t.Helper()
-	store := &natsStore{defaultTTL: time.Second}
+	store := &natsStore{defaultTTL: time.Second, bucketTTL: false}
 	body, err := store.encodeNATSEnvelope(value, ttl)
 	if err != nil {
 		t.Fatalf("encode envelope: %v", err)

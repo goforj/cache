@@ -30,6 +30,7 @@ type natsStore struct {
 	kv         NATSKeyValue
 	defaultTTL time.Duration
 	prefix     string
+	bucketTTL  bool
 }
 
 type natsEnvelope struct {
@@ -38,7 +39,7 @@ type natsEnvelope struct {
 	ExpiresAt int64  `json:"ea"`
 }
 
-func newNATSStore(kv NATSKeyValue, defaultTTL time.Duration, prefix string) Store {
+func newNATSStore(kv NATSKeyValue, defaultTTL time.Duration, prefix string, bucketTTL bool) Store {
 	if defaultTTL <= 0 {
 		defaultTTL = defaultCacheTTL
 	}
@@ -49,6 +50,7 @@ func newNATSStore(kv NATSKeyValue, defaultTTL time.Duration, prefix string) Stor
 		kv:         kv,
 		defaultTTL: defaultTTL,
 		prefix:     prefix,
+		bucketTTL:  bucketTTL,
 	}
 }
 
@@ -69,6 +71,9 @@ func (s *natsStore) Get(_ context.Context, key string) ([]byte, bool, error) {
 	if entry.Operation() == nats.KeyValueDelete || entry.Operation() == nats.KeyValuePurge {
 		return nil, false, nil
 	}
+	if s.bucketTTL {
+		return cloneBytes(entry.Value()), true, nil
+	}
 	envelope, wrapped, err := decodeNATSEnvelope(entry.Value())
 	if err != nil {
 		return nil, false, err
@@ -87,11 +92,15 @@ func (s *natsStore) Set(_ context.Context, key string, value []byte, ttl time.Du
 	if s.kv == nil {
 		return errors.New("nats cache key-value unavailable")
 	}
-	body, err := s.encodeNATSEnvelope(value, ttl)
-	if err != nil {
-		return err
+	body := cloneBytes(value)
+	if !s.bucketTTL {
+		var err error
+		body, err = s.encodeNATSEnvelope(value, ttl)
+		if err != nil {
+			return err
+		}
 	}
-	_, err = s.kv.Put(s.cacheKey(key), body)
+	_, err := s.kv.Put(s.cacheKey(key), body)
 	return err
 }
 
@@ -106,9 +115,13 @@ func (s *natsStore) Add(ctx context.Context, key string, value []byte, ttl time.
 	if ok {
 		return false, nil
 	}
-	body, err := s.encodeNATSEnvelope(value, ttl)
-	if err != nil {
-		return false, err
+	body := cloneBytes(value)
+	if !s.bucketTTL {
+		var err error
+		body, err = s.encodeNATSEnvelope(value, ttl)
+		if err != nil {
+			return false, err
+		}
 	}
 	_, err = s.kv.Create(s.cacheKey(key), body)
 	if err == nil {
@@ -140,18 +153,22 @@ func (s *natsStore) Increment(_ context.Context, key string, delta int64, ttl ti
 			if entry.Operation() == nats.KeyValueDelete || entry.Operation() == nats.KeyValuePurge {
 				revision = 0
 			} else {
-				envelope, wrapped, decodeErr := decodeNATSEnvelope(entry.Value())
-				if decodeErr != nil {
-					return 0, decodeErr
-				}
 				raw := entry.Value()
-				if wrapped {
-					if envelope.ExpiresAt > 0 && time.Now().UnixMilli() > envelope.ExpiresAt {
-						_ = s.kv.Purge(cacheKey)
-						revision = 0
-						raw = nil
+				if !s.bucketTTL {
+					envelope, wrapped, decodeErr := decodeNATSEnvelope(entry.Value())
+					if decodeErr != nil {
+						return 0, decodeErr
+					}
+					if wrapped {
+						if envelope.ExpiresAt > 0 && time.Now().UnixMilli() > envelope.ExpiresAt {
+							_ = s.kv.Purge(cacheKey)
+							revision = 0
+							raw = nil
+						} else {
+							raw = envelope.Value
+							revision = entry.Revision()
+						}
 					} else {
-						raw = envelope.Value
 						revision = entry.Revision()
 					}
 				} else {
@@ -168,9 +185,13 @@ func (s *natsStore) Increment(_ context.Context, key string, delta int64, ttl ti
 		}
 
 		next := current + delta
-		body, err := s.encodeNATSEnvelope([]byte(strconv.FormatInt(next, 10)), ttl)
-		if err != nil {
-			return 0, err
+		body := []byte(strconv.FormatInt(next, 10))
+		if !s.bucketTTL {
+			var err error
+			body, err = s.encodeNATSEnvelope(body, ttl)
+			if err != nil {
+				return 0, err
+			}
 		}
 		if revision == 0 {
 			_, err = s.kv.Create(cacheKey, body)

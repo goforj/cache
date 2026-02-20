@@ -45,12 +45,14 @@ func TestStoreOptionsMutateConfig(t *testing.T) {
 	cfg = WithRedisClient(client)(cfg)
 	natsKV := newStubNATSKeyValue("bucket")
 	cfg = WithNATSKeyValue(natsKV)(cfg)
+	cfg = WithNATSBucketTTL(true)(cfg)
 
 	if cfg.DefaultTTL != time.Second ||
 		cfg.MemoryCleanupInterval != 2*time.Second ||
 		cfg.Prefix != "svc" ||
 		cfg.RedisClient != client ||
 		cfg.NATSKeyValue != natsKV ||
+		!cfg.NATSBucketTTL ||
 		cfg.FileDir != "/tmp/opts" ||
 		len(cfg.MemcachedAddresses) != 1 ||
 		cfg.MemcachedAddresses[0] != "127.0.0.1:11211" ||
