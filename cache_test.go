@@ -530,3 +530,115 @@ func TestCacheRememberPropagatesCallbackError(t *testing.T) {
 		t.Fatalf("expected callback error, got %v", err)
 	}
 }
+
+func TestCacheConvenienceWrappers(t *testing.T) {
+	store := NewMemoryStore(context.Background())
+	c := NewCache(store)
+
+	if err := c.Set("k", []byte("v"), time.Second); err != nil {
+		t.Fatalf("set failed: %v", err)
+	}
+	if body, ok, err := c.Get("k"); err != nil || !ok || string(body) != "v" {
+		t.Fatalf("get failed: ok=%v err=%v body=%q", ok, err, string(body))
+	}
+
+	if err := SetJSON(c, "json", testPayload{Name: "nina"}, time.Second); err != nil {
+		t.Fatalf("set json failed: %v", err)
+	}
+	gotJSON, ok, err := GetJSON[testPayload](c, "json")
+	if err != nil || !ok || gotJSON.Name != "nina" {
+		t.Fatalf("get json failed: ok=%v err=%v value=%+v", ok, err, gotJSON)
+	}
+
+	created, err := c.Add("once", []byte("1"), time.Second)
+	if err != nil || !created {
+		t.Fatalf("add first failed: created=%v err=%v", created, err)
+	}
+	created, err = c.Add("once", []byte("2"), time.Second)
+	if err != nil || created {
+		t.Fatalf("add second failed: created=%v err=%v", created, err)
+	}
+
+	val, err := c.Increment("counter", 3, time.Second)
+	if err != nil || val != 3 {
+		t.Fatalf("increment failed: val=%d err=%v", val, err)
+	}
+	val, err = c.Decrement("counter", 1, time.Second)
+	if err != nil || val != 2 {
+		t.Fatalf("decrement failed: val=%d err=%v", val, err)
+	}
+
+	if err := c.SetString("a", "1", time.Second); err != nil {
+		t.Fatalf("set string a failed: %v", err)
+	}
+	if err := c.SetString("b", "2", time.Second); err != nil {
+		t.Fatalf("set string b failed: %v", err)
+	}
+	if err := c.DeleteMany("a", "b"); err != nil {
+		t.Fatalf("delete many failed: %v", err)
+	}
+	if _, ok, err := c.Get("a"); err != nil || ok {
+		t.Fatalf("expected a deleted: ok=%v err=%v", ok, err)
+	}
+
+	if err := c.SetString("flush", "x", time.Second); err != nil {
+		t.Fatalf("set flush failed: %v", err)
+	}
+	if err := c.Flush(); err != nil {
+		t.Fatalf("flush failed: %v", err)
+	}
+	if _, ok, err := c.Get("flush"); err != nil || ok {
+		t.Fatalf("expected flush key removed: ok=%v err=%v", ok, err)
+	}
+
+	callsBytes := 0
+	body, err := c.RememberBytes("rb", time.Second, func() ([]byte, error) {
+		callsBytes++
+		return []byte("remembered"), nil
+	})
+	if err != nil || string(body) != "remembered" {
+		t.Fatalf("remember bytes first failed: body=%q err=%v", string(body), err)
+	}
+	_, err = c.RememberBytes("rb", time.Second, func() ([]byte, error) {
+		callsBytes++
+		return []byte("other"), nil
+	})
+	if err != nil || callsBytes != 1 {
+		t.Fatalf("remember bytes cache failed: calls=%d err=%v", callsBytes, err)
+	}
+
+	callsString := 0
+	s, err := c.RememberString("rs", time.Second, func() (string, error) {
+		callsString++
+		return "hello", nil
+	})
+	if err != nil || s != "hello" {
+		t.Fatalf("remember string first failed: val=%q err=%v", s, err)
+	}
+	_, err = c.RememberString("rs", time.Second, func() (string, error) {
+		callsString++
+		return "other", nil
+	})
+	if err != nil || callsString != 1 {
+		t.Fatalf("remember string cache failed: calls=%d err=%v", callsString, err)
+	}
+
+	callsJSON := 0
+	type profile struct {
+		Name string `json:"name"`
+	}
+	p, err := RememberJSON[profile](c, "rj", time.Second, func() (profile, error) {
+		callsJSON++
+		return profile{Name: "ada"}, nil
+	})
+	if err != nil || p.Name != "ada" {
+		t.Fatalf("remember json first failed: val=%+v err=%v", p, err)
+	}
+	_, err = RememberJSON[profile](c, "rj", time.Second, func() (profile, error) {
+		callsJSON++
+		return profile{Name: "other"}, nil
+	})
+	if err != nil || callsJSON != 1 {
+		t.Fatalf("remember json cache failed: calls=%d err=%v", callsJSON, err)
+	}
+}

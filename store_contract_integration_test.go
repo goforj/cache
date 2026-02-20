@@ -47,6 +47,12 @@ func runStoreContractSuite(t *testing.T, store Store, tc contractCase) {
 	ctx := context.Background()
 	noOp := store.Driver() == DriverNull
 
+	// Memcached flush_all semantics can briefly affect keys written in the same
+	// second as a prior flush in a previous subtest.
+	if store.Driver() == DriverMemcached && tc.name != "baseline" {
+		time.Sleep(1100 * time.Millisecond)
+	}
+
 	ttl, wait := contractTTL(store.Driver())
 
 	// Set/Get returns clone and round-trips.
