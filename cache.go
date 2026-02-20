@@ -290,6 +290,98 @@ func (c *Cache) RateLimitCtx(ctx context.Context, key string, limit int64, windo
 	return count <= limit, count, nil
 }
 
+// TryLock acquires a short-lived lock key when not already held.
+// @group Cache
+//
+// Example: try lock
+//
+//	ctx := context.Background()
+//	c := cache.NewCache(cache.NewMemoryStore(ctx))
+//	locked, _ := c.TryLock("job:sync", 10*time.Second)
+//	fmt.Println(locked) // true
+func (c *Cache) TryLock(key string, ttl time.Duration) (bool, error) {
+	return c.TryLockCtx(context.Background(), key, ttl)
+}
+
+// TryLockCtx is the context-aware variant of TryLock.
+func (c *Cache) TryLockCtx(ctx context.Context, key string, ttl time.Duration) (bool, error) {
+	if ttl <= 0 {
+		return false, errors.New("cache try lock requires ttl > 0")
+	}
+	start := time.Now()
+	created, err := c.store.Add(ctx, lockPrefix+key, []byte("1"), ttl)
+	c.observe(ctx, "try_lock", key, created, err, start)
+	return created, err
+}
+
+// Lock waits until the lock is acquired or timeout elapses.
+// @group Cache
+//
+// Example: lock with timeout
+//
+//	ctx := context.Background()
+//	c := cache.NewCache(cache.NewMemoryStore(ctx))
+//	locked, err := c.Lock("job:sync", 10*time.Second, time.Second)
+//	fmt.Println(err == nil, locked) // true true
+func (c *Cache) Lock(key string, ttl, timeout time.Duration) (bool, error) {
+	ctx := context.Background()
+	if timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, timeout)
+		defer cancel()
+	}
+	return c.LockCtx(ctx, key, ttl, defaultLockRetryInterval)
+}
+
+// LockCtx retries lock acquisition until success or context cancellation.
+func (c *Cache) LockCtx(ctx context.Context, key string, ttl, retryInterval time.Duration) (bool, error) {
+	if retryInterval <= 0 {
+		retryInterval = defaultLockRetryInterval
+	}
+	start := time.Now()
+	for {
+		locked, err := c.TryLockCtx(ctx, key, ttl)
+		if err != nil {
+			c.observe(ctx, "lock", key, false, err, start)
+			return false, err
+		}
+		if locked {
+			c.observe(ctx, "lock", key, true, nil, start)
+			return true, nil
+		}
+		select {
+		case <-ctx.Done():
+			err := ctx.Err()
+			c.observe(ctx, "lock", key, false, err, start)
+			return false, err
+		case <-time.After(retryInterval):
+		}
+	}
+}
+
+// Unlock releases a previously acquired lock key.
+// @group Cache
+//
+// Example: unlock key
+//
+//	ctx := context.Background()
+//	c := cache.NewCache(cache.NewMemoryStore(ctx))
+//	locked, _ := c.TryLock("job:sync", 10*time.Second)
+//	if locked {
+//		_ = c.Unlock("job:sync")
+//	}
+func (c *Cache) Unlock(key string) error {
+	return c.UnlockCtx(context.Background(), key)
+}
+
+// UnlockCtx is the context-aware variant of Unlock.
+func (c *Cache) UnlockCtx(ctx context.Context, key string) error {
+	start := time.Now()
+	err := c.store.Delete(ctx, lockPrefix+key)
+	c.observe(ctx, "unlock", key, err == nil, err, start)
+	return err
+}
+
 // Pull returns value and removes it from cache.
 // @group Cache
 //
@@ -401,6 +493,8 @@ func (c *Cache) RememberBytes(key string, ttl time.Duration, fn func() ([]byte, 
 }
 
 const staleSuffix = ":__stale"
+const lockPrefix = "__lock:"
+const defaultLockRetryInterval = 25 * time.Millisecond
 
 // RememberStaleBytes returns a fresh value when available, otherwise computes and caches it.
 // If computing fails and a stale value exists, it returns the stale value.

@@ -784,6 +784,69 @@ func TestCacheRateLimitWindowResets(t *testing.T) {
 	}
 }
 
+func TestCacheTryLockAndUnlock(t *testing.T) {
+	c := NewCache(NewMemoryStore(context.Background()))
+	key := "lock:job:1"
+
+	locked, err := c.TryLock(key, time.Second)
+	if err != nil || !locked {
+		t.Fatalf("expected first try lock success, locked=%v err=%v", locked, err)
+	}
+	locked, err = c.TryLock(key, time.Second)
+	if err != nil || locked {
+		t.Fatalf("expected second try lock miss, locked=%v err=%v", locked, err)
+	}
+	if err := c.Unlock(key); err != nil {
+		t.Fatalf("unlock failed: %v", err)
+	}
+	locked, err = c.TryLock(key, time.Second)
+	if err != nil || !locked {
+		t.Fatalf("expected try lock success after unlock, locked=%v err=%v", locked, err)
+	}
+}
+
+func TestCacheTryLockValidationAndError(t *testing.T) {
+	c := NewCache(NewMemoryStore(context.Background()))
+	if _, err := c.TryLock("lock:bad", 0); err == nil {
+		t.Fatalf("expected ttl validation error")
+	}
+
+	cErr := NewCache(&spyStore{driver: DriverMemory, addErr: expectedErr})
+	if _, err := cErr.TryLock("lock:err", time.Second); !errors.Is(err, expectedErr) {
+		t.Fatalf("expected add error, got %v", err)
+	}
+}
+
+func TestCacheLockWaitsAndTimesOut(t *testing.T) {
+	c := NewCache(NewMemoryStore(context.Background()))
+	key := "lock:wait"
+
+	locked, err := c.TryLock(key, 500*time.Millisecond)
+	if err != nil || !locked {
+		t.Fatalf("seed lock failed: locked=%v err=%v", locked, err)
+	}
+
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+		_ = c.Unlock(key)
+	}()
+
+	locked, err = c.Lock(key, time.Second, time.Second)
+	if err != nil || !locked {
+		t.Fatalf("expected lock to eventually acquire, locked=%v err=%v", locked, err)
+	}
+
+	timeoutKey := "lock:timeout"
+	locked, err = c.TryLock(timeoutKey, time.Second)
+	if err != nil || !locked {
+		t.Fatalf("seed timeout lock failed: locked=%v err=%v", locked, err)
+	}
+	locked, err = c.Lock(timeoutKey, time.Second, 80*time.Millisecond)
+	if err == nil || locked {
+		t.Fatalf("expected timeout lock failure, locked=%v err=%v", locked, err)
+	}
+}
+
 func TestCacheRememberStaleFreshHit(t *testing.T) {
 	c := NewCache(NewMemoryStore(context.Background()))
 	if err := c.Set("stale:fresh", []byte("cached"), time.Minute); err != nil {
