@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 )
 
@@ -280,7 +281,9 @@ func (c *Cache) RateLimitCtx(ctx context.Context, key string, limit int64, windo
 	if window <= 0 {
 		return false, 0, errors.New("cache rate limit requires window > 0")
 	}
-	count, err := c.IncrementCtx(ctx, key, 1, window)
+	bucket := time.Now().UnixNano() / window.Nanoseconds()
+	bucketKey := fmt.Sprintf("%s:%d", key, bucket)
+	count, err := c.IncrementCtx(ctx, bucketKey, 1, window)
 	if err != nil {
 		return false, 0, err
 	}
@@ -395,6 +398,77 @@ func (c *Cache) RememberBytes(key string, ttl time.Duration, fn func() ([]byte, 
         }
         return fn()
     })
+}
+
+const staleSuffix = ":__stale"
+
+// RememberStale returns a fresh value when available, otherwise computes and caches it.
+// If computing fails and a stale value exists, it returns the stale value.
+// The returned bool is true when a stale fallback was used.
+//
+// Example: stale fallback on upstream failure
+//
+//	ctx := context.Background()
+//	c := cache.NewCache(cache.NewMemoryStore(ctx))
+//	body, usedStale, err := c.RememberStale("profile:42", time.Minute, 10*time.Minute, func() ([]byte, error) {
+//		return []byte(`{"name":"Ada"}`), nil
+//	})
+//	fmt.Println(err == nil, usedStale, len(body) > 0)
+func (c *Cache) RememberStale(key string, ttl, staleTTL time.Duration, fn func() ([]byte, error)) ([]byte, bool, error) {
+	return c.RememberStaleCtx(context.Background(), key, ttl, staleTTL, func(ctx context.Context) ([]byte, error) {
+		if fn == nil {
+			return nil, errors.New("cache remember stale requires a callback")
+		}
+		return fn()
+	})
+}
+
+// RememberStaleCtx is the context-aware variant of RememberStale.
+func (c *Cache) RememberStaleCtx(ctx context.Context, key string, ttl, staleTTL time.Duration, fn func(context.Context) ([]byte, error)) ([]byte, bool, error) {
+	start := time.Now()
+	staleKey := key + staleSuffix
+
+	body, ok, err := c.GetCtx(ctx, key)
+	if err != nil {
+		c.observe(ctx, "remember_stale", key, false, err, start)
+		return nil, false, err
+	}
+	if ok {
+		c.observe(ctx, "remember_stale", key, true, nil, start)
+		return body, false, nil
+	}
+	if fn == nil {
+		err := errors.New("cache remember stale requires a callback")
+		c.observe(ctx, "remember_stale", key, false, err, start)
+		return nil, false, err
+	}
+
+	value, err := fn(ctx)
+	if err == nil {
+		if err := c.SetCtx(ctx, key, value, ttl); err != nil {
+			c.observe(ctx, "remember_stale", key, false, err, start)
+			return nil, false, err
+		}
+		if staleTTL <= 0 {
+			staleTTL = ttl
+		}
+		if staleTTL > 0 {
+			_ = c.SetCtx(ctx, staleKey, value, staleTTL)
+		}
+		c.observe(ctx, "remember_stale", key, true, nil, start)
+		return value, false, nil
+	}
+
+	staleBody, staleOK, staleErr := c.GetCtx(ctx, staleKey)
+	if staleErr == nil && staleOK {
+		c.observe(ctx, "remember_stale", key, true, nil, start)
+		return staleBody, true, nil
+	}
+	if staleErr != nil {
+		err = errors.Join(err, staleErr)
+	}
+	c.observe(ctx, "remember_stale", key, false, err, start)
+	return nil, false, err
 }
 
 func (c *Cache) RememberCtx(ctx context.Context, key string, ttl time.Duration, fn func(context.Context) ([]byte, error)) ([]byte, error) {

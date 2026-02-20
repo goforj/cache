@@ -783,3 +783,60 @@ func TestCacheRateLimitWindowResets(t *testing.T) {
 		t.Fatalf("expected window reset, got allowed=%v count=%d err=%v", allowed, count, err)
 	}
 }
+
+func TestCacheRememberStaleFreshHit(t *testing.T) {
+	c := NewCache(NewMemoryStore(context.Background()))
+	if err := c.Set("stale:fresh", []byte("cached"), time.Minute); err != nil {
+		t.Fatalf("seed set failed: %v", err)
+	}
+
+	calls := 0
+	val, stale, err := c.RememberStale("stale:fresh", time.Minute, 2*time.Minute, func() ([]byte, error) {
+		calls++
+		return []byte("new"), nil
+	})
+	if err != nil || stale || string(val) != "cached" || calls != 0 {
+		t.Fatalf("expected fresh hit, stale=%v val=%q calls=%d err=%v", stale, string(val), calls, err)
+	}
+}
+
+func TestCacheRememberStaleFallsBackOnCallbackError(t *testing.T) {
+	c := NewCache(NewMemoryStore(context.Background()))
+	key := "stale:fallback"
+
+	val, stale, err := c.RememberStale(key, time.Minute, 5*time.Minute, func() ([]byte, error) {
+		return []byte("seed"), nil
+	})
+	if err != nil || stale || string(val) != "seed" {
+		t.Fatalf("seed remember stale failed: stale=%v val=%q err=%v", stale, string(val), err)
+	}
+	if err := c.Delete(key); err != nil {
+		t.Fatalf("delete fresh key failed: %v", err)
+	}
+
+	expected := errors.New("upstream down")
+	val, stale, err = c.RememberStale(key, time.Minute, 5*time.Minute, func() ([]byte, error) {
+		return nil, expected
+	})
+	if err != nil || !stale || string(val) != "seed" {
+		t.Fatalf("expected stale fallback, stale=%v val=%q err=%v", stale, string(val), err)
+	}
+}
+
+func TestCacheRememberStaleNoFallbackReturnsError(t *testing.T) {
+	c := NewCache(NewMemoryStore(context.Background()))
+	expected := errors.New("compute failed")
+	_, stale, err := c.RememberStale("stale:none", time.Minute, time.Minute, func() ([]byte, error) {
+		return nil, expected
+	})
+	if stale || !errors.Is(err, expected) {
+		t.Fatalf("expected compute error without stale, stale=%v err=%v", stale, err)
+	}
+}
+
+func TestCacheRememberStaleNilCallback(t *testing.T) {
+	c := NewCache(NewMemoryStore(context.Background()))
+	if _, _, err := c.RememberStale("stale:nil", time.Minute, time.Minute, nil); err == nil {
+		t.Fatalf("expected nil callback error")
+	}
+}
