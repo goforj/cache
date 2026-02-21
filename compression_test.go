@@ -1,6 +1,8 @@
 package cache
 
 import (
+	"bytes"
+	"compress/gzip"
 	"errors"
 	"testing"
 )
@@ -61,5 +63,27 @@ func TestDecodeValueGzipSuccess(t *testing.T) {
 	}
 	if string(decoded) != "ok" {
 		t.Fatalf("unexpected decode value: %s", string(decoded))
+	}
+}
+
+func TestDecodeValueLegacyGzipFixture(t *testing.T) {
+	var gz bytes.Buffer
+	zw := gzip.NewWriter(&gz)
+	if _, err := zw.Write([]byte("legacy-compressed")); err != nil {
+		t.Fatalf("gzip write failed: %v", err)
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatalf("gzip close failed: %v", err)
+	}
+
+	fixture := append([]byte("CMP1"), 'g')
+	fixture = append(fixture, gz.Bytes()...)
+
+	decoded, err := decodeValue(fixture)
+	if err != nil {
+		t.Fatalf("decode legacy fixture failed: %v", err)
+	}
+	if string(decoded) != "legacy-compressed" {
+		t.Fatalf("unexpected decode value: %q", string(decoded))
 	}
 }

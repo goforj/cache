@@ -723,6 +723,33 @@ func TestRememberValueWithCodecBranches(t *testing.T) {
 	}
 }
 
+func TestRememberValueDecodesLegacyJSONPayload(t *testing.T) {
+	type profile struct {
+		Name string `json:"name"`
+	}
+
+	c := NewCache(NewMemoryStore(context.Background()))
+	legacyPayload := []byte(`{"name":"Ada","deprecated_field":"x"}`)
+	if err := c.Set("legacy:profile", legacyPayload, time.Minute); err != nil {
+		t.Fatalf("seed legacy payload failed: %v", err)
+	}
+
+	calls := 0
+	out, err := RememberValue[profile](c, "legacy:profile", time.Minute, func() (profile, error) {
+		calls++
+		return profile{Name: "new"}, nil
+	})
+	if err != nil {
+		t.Fatalf("remember value failed: %v", err)
+	}
+	if out.Name != "Ada" {
+		t.Fatalf("expected legacy cached decode, got %+v", out)
+	}
+	if calls != 0 {
+		t.Fatalf("expected callback not to run on cached legacy payload, got %d", calls)
+	}
+}
+
 func TestCacheRateLimitAllowsThenDenies(t *testing.T) {
 	c := NewCache(NewMemoryStore(context.Background()))
 	key := "rl:test:user:1"

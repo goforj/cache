@@ -3,6 +3,8 @@ package cache
 import (
 	"bytes"
 	"context"
+	"crypto/aes"
+	"crypto/cipher"
 	"testing"
 	"time"
 )
@@ -97,5 +99,34 @@ func TestEncryptingStoreDecryptPassthroughAndFailures(t *testing.T) {
 	badNonceLen := []byte("ENC1\x0f")
 	if _, err := es.decrypt(badNonceLen); err == nil {
 		t.Fatalf("expected decrypt failure for malformed nonce")
+	}
+}
+
+func TestEncryptingStoreDecryptsLegacyFixture(t *testing.T) {
+	key := []byte("01234567890123456789012345678901")
+	base := newMemoryStore(defaultCacheTTL, defaultMemoryCleanupInterval)
+	store, err := newEncryptingStore(base, key)
+	if err != nil {
+		t.Fatalf("encrypting store: %v", err)
+	}
+
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		t.Fatalf("new cipher failed: %v", err)
+	}
+	aead, err := cipher.NewGCM(block)
+	if err != nil {
+		t.Fatalf("new gcm failed: %v", err)
+	}
+	nonce := bytes.Repeat([]byte{0xAB}, aead.NonceSize())
+	ciphertext := aead.Seal(nil, nonce, []byte("legacy-encrypted"), nil)
+	fixture := append([]byte("ENC1"), byte(len(nonce)))
+	fixture = append(fixture, nonce...)
+	fixture = append(fixture, ciphertext...)
+
+	base.(*memoryStore).cache.Set("legacy", fixture, time.Minute)
+	got, ok, err := store.Get(context.Background(), "legacy")
+	if err != nil || !ok || string(got) != "legacy-encrypted" {
+		t.Fatalf("decrypt legacy fixture failed: ok=%v err=%v val=%q", ok, err, string(got))
 	}
 }
