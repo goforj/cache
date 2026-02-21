@@ -317,7 +317,7 @@ func writeDashboardSVG(root, fileName, title, yUnit, scale string, drivers []str
 	const (
 		width       = 1600
 		height      = 690
-		marginLeft  = 90
+		marginLeft  = 180
 		marginRight = 150
 		marginTop   = 90
 		marginBot   = 130
@@ -336,7 +336,7 @@ func writeDashboardSVG(root, fileName, title, yUnit, scale string, drivers []str
 	if scale == "log" {
 		scaleLabel = "log"
 	}
-	svg.WriteString(`<text x="` + strconv.Itoa(width/2) + `" y="72" text-anchor="middle" fill="#9ca3af" font-size="18" font-family="Arial, sans-serif">Grouped by operation (Get, Set, Delete), ` + scaleLabel + ` y-scale, ` + metricPreference(yUnit) + `</text>` + "\n")
+	svg.WriteString(`<text x="` + strconv.Itoa(width/2) + `" y="84" text-anchor="middle" fill="#9ca3af" font-size="36" font-family="Arial, sans-serif">Grouped by operation (Get, Set, Delete), ` + scaleLabel + ` y-scale, ` + metricPreference(yUnit) + `</text>` + "\n")
 
 	axisX0 := marginLeft
 	axisX1 := width - marginRight
@@ -380,7 +380,7 @@ func writeDashboardSVG(root, fileName, title, yUnit, scale string, drivers []str
 		y := axisY0 - int(p*float64(plotH))
 		v := int(unmapValue(p*maxMapped, scale))
 		svg.WriteString(`<line x1="` + strconv.Itoa(axisX0) + `" y1="` + strconv.Itoa(y) + `" x2="` + strconv.Itoa(axisX1) + `" y2="` + strconv.Itoa(y) + `" stroke="#374151" stroke-width="1"/>` + "\n")
-		svg.WriteString(`<text x="` + strconv.Itoa(axisX0-10) + `" y="` + strconv.Itoa(y+5) + `" text-anchor="end" fill="#d1d5db" font-size="13" font-family="Arial, sans-serif">` + strconv.Itoa(v) + `</text>` + "\n")
+		svg.WriteString(`<text x="` + strconv.Itoa(axisX0-10) + `" y="` + strconv.Itoa(y+10) + `" text-anchor="end" fill="#d1d5db" font-size="30" font-family="Arial, sans-serif">` + strconv.Itoa(v) + `</text>` + "\n")
 	}
 
 	svg.WriteString(`<line x1="` + strconv.Itoa(axisX0) + `" y1="` + strconv.Itoa(axisY0) + `" x2="` + strconv.Itoa(axisX1) + `" y2="` + strconv.Itoa(axisY0) + `" stroke="#e5e7eb" stroke-width="2"/>` + "\n")
@@ -419,8 +419,8 @@ func writeDashboardSVG(root, fileName, title, yUnit, scale string, drivers []str
 			svg.WriteString(`<rect x="` + strconv.Itoa(barX) + `" y="` + strconv.Itoa(y) + `" width="` + strconv.Itoa(barW) + `" height="` + strconv.Itoa(h) + `" fill="` + colors[op] + `"/>` + "\n")
 		}
 		labelX := axisX0 + i*groupW + groupW/2
-		labelY := axisY0 + 78
-		svg.WriteString(`<text x="` + strconv.Itoa(labelX) + `" y="` + strconv.Itoa(labelY) + `" text-anchor="middle" fill="#d1d5db" font-size="20" font-family="Arial, sans-serif">` + driver + `</text>` + "\n")
+		labelY := axisY0 + 82
+		svg.WriteString(`<text x="` + strconv.Itoa(labelX) + `" y="` + strconv.Itoa(labelY) + `" text-anchor="middle" fill="#d1d5db" font-size="30" font-family="Arial, sans-serif">` + displayDriverName(driver) + `</text>` + "\n")
 	}
 
 	legendX := axisX1 + 20
@@ -428,7 +428,7 @@ func writeDashboardSVG(root, fileName, title, yUnit, scale string, drivers []str
 	for i, op := range ops {
 		y := legendY + i*32
 		svg.WriteString(`<rect x="` + strconv.Itoa(legendX) + `" y="` + strconv.Itoa(y-14) + `" width="20" height="20" fill="` + colors[op] + `"/>` + "\n")
-		svg.WriteString(`<text x="` + strconv.Itoa(legendX+30) + `" y="` + strconv.Itoa(y+1) + `" fill="#f3f4f6" font-size="20" font-family="Arial, sans-serif">` + op + `</text>` + "\n")
+		svg.WriteString(`<text x="` + strconv.Itoa(legendX+30) + `" y="` + strconv.Itoa(y+1) + `" fill="#f3f4f6" font-size="28" font-family="Arial, sans-serif">` + op + `</text>` + "\n")
 	}
 
 	svg.WriteString(`</svg>` + "\n")
@@ -454,9 +454,9 @@ func writeDashboardSplitSVG(root, fileName, title, yUnit string, drivers []strin
 	const (
 		width       = 1600
 		height      = 825
-		marginLeft  = 90
+		marginLeft  = 180
 		marginRight = 150
-		marginTop   = 90
+		marginTop   = 150
 		marginBot   = 150
 		panelGap    = 80
 	)
@@ -491,15 +491,15 @@ func writeDashboardSplitSVG(root, fileName, title, yUnit string, drivers []strin
 	svg.WriteString(`<svg xmlns="http://www.w3.org/2000/svg" width="` + strconv.Itoa(width) + `" height="` + strconv.Itoa(height) + `" viewBox="0 0 ` + strconv.Itoa(width) + ` ` + strconv.Itoa(height) + `">` + "\n")
 	svg.WriteString(`<rect width="100%" height="100%" fill="#111827"/>` + "\n")
 	svg.WriteString(`<text x="` + strconv.Itoa(width/2) + `" y="44" text-anchor="middle" fill="#f9fafb" font-size="34" font-family="Arial, sans-serif">` + title + ` (` + yUnit + `)</text>` + "\n")
-	svg.WriteString(`<text x="` + strconv.Itoa(width/2) + `" y="72" text-anchor="middle" fill="#9ca3af" font-size="18" font-family="Arial, sans-serif">Linear split view (grouped bars): top outlier, bottom remaining drivers, ` + metricPreference(yUnit) + `</text>` + "\n")
+	svg.WriteString(`<text x="` + strconv.Itoa(width/2) + `" y="96" text-anchor="middle" fill="#9ca3af" font-size="36" font-family="Arial, sans-serif">Linear split view (grouped bars): top outlier, bottom remaining drivers, ` + metricPreference(yUnit) + `</text>` + "\n")
 
 	plotRight := width - marginRight
 	legendX := plotRight + 20
-	legendY := 95
+	legendY := 130
 	for i, op := range ops {
 		y := legendY + i*32
 		svg.WriteString(`<rect x="` + strconv.Itoa(legendX) + `" y="` + strconv.Itoa(y-14) + `" width="20" height="20" fill="` + colors[op] + `"/>` + "\n")
-		svg.WriteString(`<text x="` + strconv.Itoa(legendX+30) + `" y="` + strconv.Itoa(y+1) + `" fill="#f3f4f6" font-size="20" font-family="Arial, sans-serif">` + op + `</text>` + "\n")
+		svg.WriteString(`<text x="` + strconv.Itoa(legendX+30) + `" y="` + strconv.Itoa(y+1) + `" fill="#f3f4f6" font-size="28" font-family="Arial, sans-serif">` + op + `</text>` + "\n")
 	}
 
 	drawPanel := func(panelTitle string, panelDrivers []string, yTop int) {
@@ -530,7 +530,7 @@ func writeDashboardSplitSVG(root, fileName, title, yUnit string, drivers []strin
 			y := axisY0 - int(p*float64(panelH))
 			v := int(p * maxV)
 			svg.WriteString(`<line x1="` + strconv.Itoa(axisX0) + `" y1="` + strconv.Itoa(y) + `" x2="` + strconv.Itoa(axisX1) + `" y2="` + strconv.Itoa(y) + `" stroke="#374151" stroke-width="1"/>` + "\n")
-			svg.WriteString(`<text x="` + strconv.Itoa(axisX0-10) + `" y="` + strconv.Itoa(y+5) + `" text-anchor="end" fill="#d1d5db" font-size="13" font-family="Arial, sans-serif">` + strconv.Itoa(v) + `</text>` + "\n")
+			svg.WriteString(`<text x="` + strconv.Itoa(axisX0-10) + `" y="` + strconv.Itoa(y+10) + `" text-anchor="end" fill="#d1d5db" font-size="30" font-family="Arial, sans-serif">` + strconv.Itoa(v) + `</text>` + "\n")
 		}
 		svg.WriteString(`<line x1="` + strconv.Itoa(axisX0) + `" y1="` + strconv.Itoa(axisY0) + `" x2="` + strconv.Itoa(axisX1) + `" y2="` + strconv.Itoa(axisY0) + `" stroke="#e5e7eb" stroke-width="2"/>` + "\n")
 		svg.WriteString(`<line x1="` + strconv.Itoa(axisX0) + `" y1="` + strconv.Itoa(axisY0) + `" x2="` + strconv.Itoa(axisX0) + `" y2="` + strconv.Itoa(axisY1) + `" stroke="#e5e7eb" stroke-width="2"/>` + "\n")
@@ -568,8 +568,8 @@ func writeDashboardSplitSVG(root, fileName, title, yUnit string, drivers []strin
 				svg.WriteString(`<rect x="` + strconv.Itoa(barX) + `" y="` + strconv.Itoa(y) + `" width="` + strconv.Itoa(barW) + `" height="` + strconv.Itoa(h) + `" fill="` + colors[op] + `"/>` + "\n")
 			}
 			labelX := axisX0 + i*groupW + groupW/2
-			labelY := axisY0 + 78
-			svg.WriteString(`<text x="` + strconv.Itoa(labelX) + `" y="` + strconv.Itoa(labelY) + `" text-anchor="middle" fill="#d1d5db" font-size="20" font-family="Arial, sans-serif">` + d + `</text>` + "\n")
+			labelY := axisY0 + 82
+			svg.WriteString(`<text x="` + strconv.Itoa(labelX) + `" y="` + strconv.Itoa(labelY) + `" text-anchor="middle" fill="#d1d5db" font-size="30" font-family="Arial, sans-serif">` + displayDriverName(d) + `</text>` + "\n")
 		}
 	}
 
@@ -587,6 +587,19 @@ func metricPreference(yUnit string) string {
 		return "higher is better"
 	default:
 		return "lower is better"
+	}
+}
+
+func displayDriverName(name string) string {
+	switch name {
+	case "sql_sqlite":
+		return "sqlite"
+	case "sql_postgres":
+		return "postgres"
+	case "sql_mysql":
+		return "mysql"
+	default:
+		return name
 	}
 }
 
