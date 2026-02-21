@@ -92,6 +92,15 @@ For precise runtime semantics, see [Behavior Semantics](docs/behavior-semantics.
 - stale and refresh-ahead behavior and edge cases
 - lock and rate-limit guarantees (process-local vs distributed scope)
 
+## Production Guidance
+
+For deployment defaults and operational patterns, see [Production Guide](docs/production-guide.md):
+
+- recommended defaults and tuning
+- key naming/versioning conventions
+- TTL jitter and miss-storm mitigation
+- observability instrumentation patterns
+
 ## Cache helpers
 
 Cache wraps a Store with ergonomic helpers (context-free by default, `*Ctx` variants when you need a context). Store stays context-first because drivers perform I/O and should honor deadlines/cancellation; Cache gives you the convenience layer on top:
