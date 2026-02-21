@@ -970,6 +970,12 @@ func TestCacheRefreshAheadConcurrentHitTriggersSingleAsyncRefresh(t *testing.T) 
 	case <-time.After(2 * time.Second):
 		t.Fatalf("expected async refresh callback to start under contention")
 	}
+	// While the async refresh callback is blocked, additional callbacks should
+	// not start because refresh lock is held.
+	time.Sleep(80 * time.Millisecond)
+	if got := calls.Load(); got != 2 {
+		t.Fatalf("expected exactly one in-flight async refresh while lock is held, got %d callbacks", got)
+	}
 	close(releaseRefresh)
 
 	for len(errs) > 0 {
@@ -993,10 +999,6 @@ func TestCacheRefreshAheadConcurrentHitTriggersSingleAsyncRefresh(t *testing.T) 
 		time.Sleep(10 * time.Millisecond)
 	}
 
-	maxAllowed := int64(workers/3 + 2)
-	if got := calls.Load(); got < 2 || got > maxAllowed {
-		t.Fatalf("expected refresh contention to stay bounded (2..%d callbacks), got %d", maxAllowed, got)
-	}
 }
 
 func TestCacheRefreshAheadValidationAndErrors(t *testing.T) {
