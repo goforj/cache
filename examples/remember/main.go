@@ -11,17 +11,13 @@ import (
 )
 
 func main() {
-	// Remember returns key value or computes/stores it when missing.
+	// Remember is the ergonomic, typed remember helper using JSON encoding by default.
 
-	// Example: remember typed struct
+	// Example: remember typed value
+	type Profile struct { Name string `json:"name"` }
 	ctx := context.Background()
 	c := cache.NewCache(cache.NewMemoryStore(ctx))
-
-	type Profile struct {
-		Name string `json:"name"`
-	}
-
-	profile, err := cache.Remember[Profile](c, "user:42:profile", time.Minute, func() (Profile, error) {
+	profile, err := cache.Remember[Profile](c, "profile:42", time.Minute, func() (Profile, error) {
 		return Profile{Name: "Ada"}, nil
 	})
 	fmt.Println(err == nil, profile.Name) // true Ada

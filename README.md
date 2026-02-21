@@ -14,7 +14,7 @@
     <a href="https://goreportcard.com/report/github.com/goforj/cache"><img src="https://goreportcard.com/badge/github.com/goforj/cache" alt="Go Report Card"></a>
     <a href="https://codecov.io/gh/goforj/cache"><img src="https://codecov.io/gh/goforj/cache/graph/badge.svg?token=B6ROULLKWU"/></a>
 <!-- test-count:embed:start -->
-    <img src="https://img.shields.io/badge/tests-268-brightgreen" alt="Tests">
+    <img src="https://img.shields.io/badge/tests-269-brightgreen" alt="Tests">
 <!-- test-count:embed:end -->
 </p>
 
@@ -758,6 +758,16 @@ RateLimitWithRemainingCtx is the context-aware variant of RateLimitWithRemaining
 
 Remember is the ergonomic, typed remember helper using JSON encoding by default.
 
+```go
+type Profile struct { Name string `json:"name"` }
+ctx := context.Background()
+c := cache.NewCache(cache.NewMemoryStore(ctx))
+profile, err := cache.Remember[Profile](c, "profile:42", time.Minute, func() (Profile, error) {
+	return Profile{Name: "Ada"}, nil
+})
+fmt.Println(err == nil, profile.Name) // true Ada
+```
+
 ### <a id="rememberbytes"></a>RememberBytes
 
 RememberBytes returns key value or computes/stores it when missing.
@@ -879,6 +889,16 @@ RememberStringCtx is the context-aware variant of RememberString.
 
 RememberValue returns a typed value or computes/stores it when missing using JSON encoding by default.
 
+```go
+type Summary struct { Text string `json:"text"` }
+ctx := context.Background()
+c := cache.NewCache(cache.NewMemoryStore(ctx))
+s, err := cache.RememberValue[Summary](c, "dashboard:summary", time.Minute, func() (Summary, error) {
+	return Summary{Text: "ok"}, nil
+})
+fmt.Println(err == nil, s.Text) // true ok
+```
+
 ### <a id="remembervaluewithcodec"></a>RememberValueWithCodec
 
 RememberValueWithCodec allows custom encoding/decoding for typed remember operations.
@@ -920,6 +940,14 @@ GetCtx is the context-aware variant of Get.
 ### <a id="getjson"></a>GetJSON
 
 GetJSON decodes a JSON value into T when key exists, using background context.
+
+```go
+type Profile struct { Name string `json:"name"` }
+ctx := context.Background()
+c := cache.NewCache(cache.NewMemoryStore(ctx))
+profile, ok, err := cache.GetJSON[Profile](c, "profile:42")
+fmt.Println(err == nil, ok, profile.Name) // true true Ada
+```
 
 ### <a id="getjsonctx"></a>GetJSONCtx
 
@@ -1060,6 +1088,14 @@ SetCtx is the context-aware variant of Set.
 ### <a id="setjson"></a>SetJSON
 
 SetJSON encodes value as JSON and writes it to key using background context.
+
+```go
+type Settings struct { Enabled bool `json:"enabled"` }
+ctx := context.Background()
+c := cache.NewCache(cache.NewMemoryStore(ctx))
+err := cache.SetJSON(c, "settings:alerts", Settings{Enabled: true}, time.Minute)
+fmt.Println(err == nil) // true
+```
 
 ### <a id="setjsonctx"></a>SetJSONCtx
 

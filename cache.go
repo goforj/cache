@@ -159,6 +159,15 @@ func (c *Cache) GetStringCtx(ctx context.Context, key string) (string, bool, err
 
 // GetJSON decodes a JSON value into T when key exists, using background context.
 // @group Reads
+//
+// Example: get typed JSON
+//
+//	type Profile struct { Name string `json:"name"` }
+//	ctx := context.Background()
+//	c := cache.NewCache(cache.NewMemoryStore(ctx))
+//	_ = cache.SetJSON(c, "profile:42", Profile{Name: "Ada"}, time.Minute)
+//	profile, ok, err := cache.GetJSON[Profile](c, "profile:42")
+//	fmt.Println(err == nil, ok, profile.Name) // true true Ada
 func GetJSON[T any](cache *Cache, key string) (T, bool, error) {
 	return GetJSONCtx[T](context.Background(), cache, key)
 }
@@ -409,6 +418,14 @@ func (c *Cache) SetStringCtx(ctx context.Context, key string, value string, ttl 
 
 // SetJSON encodes value as JSON and writes it to key using background context.
 // @group Writes
+//
+// Example: set typed JSON
+//
+//	type Settings struct { Enabled bool `json:"enabled"` }
+//	ctx := context.Background()
+//	c := cache.NewCache(cache.NewMemoryStore(ctx))
+//	err := cache.SetJSON(c, "settings:alerts", Settings{Enabled: true}, time.Minute)
+//	fmt.Println(err == nil) // true
 func SetJSON[T any](cache *Cache, key string, value T, ttl time.Duration) error {
 	return SetJSONCtx[T](context.Background(), cache, key, value, ttl)
 }
@@ -963,6 +980,16 @@ func RememberStale[T any](cache *Cache, key string, ttl, staleTTL time.Duration,
 
 // Remember is the ergonomic, typed remember helper using JSON encoding by default.
 // @group Read Through
+//
+// Example: remember typed value
+//
+//	type Profile struct { Name string `json:"name"` }
+//	ctx := context.Background()
+//	c := cache.NewCache(cache.NewMemoryStore(ctx))
+//	profile, err := cache.Remember[Profile](c, "profile:42", time.Minute, func() (Profile, error) {
+//		return Profile{Name: "Ada"}, nil
+//	})
+//	fmt.Println(err == nil, profile.Name) // true Ada
 func Remember[T any](cache *Cache, key string, ttl time.Duration, fn func() (T, error)) (T, error) {
 	return RememberValue(cache, key, ttl, fn)
 }
@@ -987,6 +1014,16 @@ func defaultValueCodec[T any]() ValueCodec[T] {
 
 // RememberValue returns a typed value or computes/stores it when missing using JSON encoding by default.
 // @group Read Through
+//
+// Example: remember typed value (codec default)
+//
+//	type Summary struct { Text string `json:"text"` }
+//	ctx := context.Background()
+//	c := cache.NewCache(cache.NewMemoryStore(ctx))
+//	s, err := cache.RememberValue[Summary](c, "dashboard:summary", time.Minute, func() (Summary, error) {
+//		return Summary{Text: "ok"}, nil
+//	})
+//	fmt.Println(err == nil, s.Text) // true ok
 func RememberValue[T any](cache *Cache, key string, ttl time.Duration, fn func() (T, error)) (T, error) {
 	return RememberValueWithCodec(context.Background(), cache, key, ttl, fn, defaultValueCodec[T]())
 }

@@ -7,18 +7,17 @@ import (
 	"context"
 	"fmt"
 	"github.com/goforj/cache"
+	"time"
 )
 
 func main() {
-	// GetJSON decodes a JSON value into T when key exists.
+	// GetJSON decodes a JSON value into T when key exists, using background context.
 
-	// Example: get JSON
-	type Profile struct {
-		Name string `json:"name"`
-	}
+	// Example: get typed JSON
+	type Profile struct { Name string `json:"name"` }
 	ctx := context.Background()
 	c := cache.NewCache(cache.NewMemoryStore(ctx))
-	_ = cache.SetJSON(c, "profile:42", Profile{Name: "Ada"}, 0)
-	profile, ok, _ := cache.GetJSON[Profile](c, "profile:42")
-	fmt.Println(ok, profile.Name) // true Ada
+	_ = cache.SetJSON(c, "profile:42", Profile{Name: "Ada"}, time.Minute)
+	profile, ok, err := cache.GetJSON[Profile](c, "profile:42")
+	fmt.Println(err == nil, ok, profile.Name) // true true Ada
 }

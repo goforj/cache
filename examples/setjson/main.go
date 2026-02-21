@@ -11,13 +11,12 @@ import (
 )
 
 func main() {
-	// SetJSON encodes value as JSON and writes it to key.
+	// SetJSON encodes value as JSON and writes it to key using background context.
 
-	// Example: set JSON
-	type Profile struct {
-		Name string `json:"name"`
-	}
+	// Example: set typed JSON
+	type Settings struct { Enabled bool `json:"enabled"` }
 	ctx := context.Background()
 	c := cache.NewCache(cache.NewMemoryStore(ctx))
-	fmt.Println(cache.SetJSON(c, "profile:42", Profile{Name: "Ada"}, time.Minute) == nil) // true
+	err := cache.SetJSON(c, "settings:alerts", Settings{Enabled: true}, time.Minute)
+	fmt.Println(err == nil) // true
 }
