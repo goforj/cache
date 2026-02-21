@@ -9,6 +9,7 @@ import (
 	"net"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -21,6 +22,14 @@ type memcachedStore struct {
 	addrs      []string
 	defaultTTL time.Duration
 	prefix     string
+	pools      map[string]chan *memcachedConn
+	rr         uint32
+}
+
+type memcachedConn struct {
+	addr   string
+	conn   net.Conn
+	reader *bufio.Reader
 }
 
 func newMemcachedStore(addrs []string, defaultTTL time.Duration, prefix string) Store {
@@ -33,26 +42,31 @@ func newMemcachedStore(addrs []string, defaultTTL time.Duration, prefix string) 
 	if prefix == "" {
 		prefix = defaultCachePrefix
 	}
-	return &memcachedStore{addrs: addrs, defaultTTL: defaultTTL, prefix: prefix}
+	pools := make(map[string]chan *memcachedConn, len(addrs))
+	for _, addr := range addrs {
+		pools[addr] = make(chan *memcachedConn, 16)
+	}
+	return &memcachedStore{addrs: addrs, defaultTTL: defaultTTL, prefix: prefix, pools: pools}
 }
 
 func (s *memcachedStore) Driver() Driver { return DriverMemcached }
 
 func (s *memcachedStore) Get(ctx context.Context, key string) ([]byte, bool, error) {
-	conn, err := s.dial(ctx)
+	mc, err := s.acquire(ctx)
 	if err != nil {
 		return nil, false, err
 	}
-	defer conn.Close()
+	bad := false
+	defer func() { s.release(mc, bad) }()
 
 	full := s.cacheKey(key)
-	if _, err := fmt.Fprintf(conn, "get %s\r\n", full); err != nil {
+	if _, err := fmt.Fprintf(mc.conn, "get %s\r\n", full); err != nil {
+		bad = true
 		return nil, false, err
 	}
-
-	reader := bufio.NewReader(conn)
-	line, err := reader.ReadString('\n')
+	line, err := mc.reader.ReadString('\n')
 	if err != nil {
+		bad = true
 		return nil, false, err
 	}
 	if line == "END\r\n" {
@@ -68,15 +82,18 @@ func (s *memcachedStore) Get(ctx context.Context, key string) ([]byte, bool, err
 		return nil, false, fmt.Errorf("parse length: %w", err)
 	}
 	value := make([]byte, bytesLen)
-	if _, err := reader.Read(value); err != nil {
+	if _, err := mc.reader.Read(value); err != nil {
+		bad = true
 		return nil, false, err
 	}
 	// consume trailing \r\n
-	if _, err := reader.ReadString('\n'); err != nil {
+	if _, err := mc.reader.ReadString('\n'); err != nil {
+		bad = true
 		return nil, false, err
 	}
 	// consume END
-	if _, err := reader.ReadString('\n'); err != nil {
+	if _, err := mc.reader.ReadString('\n'); err != nil {
+		bad = true
 		return nil, false, err
 	}
 	return cloneBytes(value), true, nil
@@ -86,32 +103,37 @@ func (s *memcachedStore) Set(ctx context.Context, key string, value []byte, ttl 
 	if ttl <= 0 {
 		ttl = s.defaultTTL
 	}
-	conn, err := s.dial(ctx)
+	mc, err := s.acquire(ctx)
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
+	bad := false
+	defer func() { s.release(mc, bad) }()
 
 	full := s.cacheKey(key)
 	seconds := int(ttl.Seconds())
 	if seconds < 1 {
 		seconds = 1
 	}
-	if _, err := fmt.Fprintf(conn, "set %s 0 %d %d\r\n", full, seconds, len(value)); err != nil {
+	if _, err := fmt.Fprintf(mc.conn, "set %s 0 %d %d\r\n", full, seconds, len(value)); err != nil {
+		bad = true
 		return err
 	}
-	if _, err := conn.Write(value); err != nil {
+	if _, err := mc.conn.Write(value); err != nil {
+		bad = true
 		return err
 	}
-	if _, err := conn.Write([]byte("\r\n")); err != nil {
+	if _, err := mc.conn.Write([]byte("\r\n")); err != nil {
+		bad = true
 		return err
 	}
-	reader := bufio.NewReader(conn)
-	line, err := reader.ReadString('\n')
+	line, err := mc.reader.ReadString('\n')
 	if err != nil {
+		bad = true
 		return err
 	}
 	if !strings.HasPrefix(line, "STORED") {
+		bad = true
 		return fmt.Errorf("memcached set failed: %s", strings.TrimSpace(line))
 	}
 	return nil
@@ -121,29 +143,33 @@ func (s *memcachedStore) Add(ctx context.Context, key string, value []byte, ttl 
 	if ttl <= 0 {
 		ttl = s.defaultTTL
 	}
-	conn, err := s.dial(ctx)
+	mc, err := s.acquire(ctx)
 	if err != nil {
 		return false, err
 	}
-	defer conn.Close()
+	bad := false
+	defer func() { s.release(mc, bad) }()
 
 	full := s.cacheKey(key)
 	seconds := int(ttl.Seconds())
 	if seconds < 1 {
 		seconds = 1
 	}
-	if _, err := fmt.Fprintf(conn, "add %s 0 %d %d\r\n", full, seconds, len(value)); err != nil {
+	if _, err := fmt.Fprintf(mc.conn, "add %s 0 %d %d\r\n", full, seconds, len(value)); err != nil {
+		bad = true
 		return false, err
 	}
-	if _, err := conn.Write(value); err != nil {
+	if _, err := mc.conn.Write(value); err != nil {
+		bad = true
 		return false, err
 	}
-	if _, err := conn.Write([]byte("\r\n")); err != nil {
+	if _, err := mc.conn.Write([]byte("\r\n")); err != nil {
+		bad = true
 		return false, err
 	}
-	reader := bufio.NewReader(conn)
-	line, err := reader.ReadString('\n')
+	line, err := mc.reader.ReadString('\n')
 	if err != nil {
+		bad = true
 		return false, err
 	}
 	switch {
@@ -152,6 +178,7 @@ func (s *memcachedStore) Add(ctx context.Context, key string, value []byte, ttl 
 	case strings.HasPrefix(line, "NOT_STORED"):
 		return false, nil
 	default:
+		bad = true
 		return false, fmt.Errorf("memcached add failed: %s", strings.TrimSpace(line))
 	}
 }
@@ -179,19 +206,21 @@ func (s *memcachedStore) incr(ctx context.Context, key string, delta int64, ttl 
 	if ttl <= 0 {
 		ttl = s.defaultTTL
 	}
-	conn, err := s.dial(ctx)
+	mc, err := s.acquire(ctx)
 	if err != nil {
 		return 0, err
 	}
-	defer conn.Close()
+	bad := false
+	defer func() { s.release(mc, bad) }()
 
 	full := s.cacheKey(key)
-	if _, err := fmt.Fprintf(conn, "%s %s %d\r\n", verb, full, delta); err != nil {
+	if _, err := fmt.Fprintf(mc.conn, "%s %s %d\r\n", verb, full, delta); err != nil {
+		bad = true
 		return 0, err
 	}
-	reader := bufio.NewReader(conn)
-	line, err := reader.ReadString('\n')
+	line, err := mc.reader.ReadString('\n')
 	if err != nil {
+		bad = true
 		return 0, err
 	}
 	line = strings.TrimSpace(line)
@@ -203,27 +232,33 @@ func (s *memcachedStore) incr(ctx context.Context, key string, delta int64, ttl 
 		return s.incr(ctx, key, delta, ttl, verb)
 	}
 	if strings.HasPrefix(line, "ERROR") {
+		bad = true
 		return 0, errors.New(line)
 	}
 	val, err := strconv.ParseInt(line, 10, 64)
 	if err != nil {
+		bad = true
 		return 0, err
 	}
 	return val, nil
 }
 
-func (s *memcachedStore) Delete(_ context.Context, key string) error {
-	conn, err := s.dial(context.Background())
+func (s *memcachedStore) Delete(ctx context.Context, key string) error {
+	mc, err := s.acquire(ctx)
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
+	bad := false
+	defer func() { s.release(mc, bad) }()
 	full := s.cacheKey(key)
-	if _, err := fmt.Fprintf(conn, "delete %s\r\n", full); err != nil {
+	if _, err := fmt.Fprintf(mc.conn, "delete %s\r\n", full); err != nil {
+		bad = true
 		return err
 	}
-	reader := bufio.NewReader(conn)
-	_, _ = reader.ReadString('\n') // DELETED or NOT_FOUND; both considered success
+	if _, err := mc.reader.ReadString('\n'); err != nil {
+		bad = true
+		return err
+	}
 	return nil
 }
 
@@ -236,39 +271,77 @@ func (s *memcachedStore) DeleteMany(ctx context.Context, keys ...string) error {
 	return nil
 }
 
-func (s *memcachedStore) Flush(_ context.Context) error {
-	conn, err := s.dial(context.Background())
+func (s *memcachedStore) Flush(ctx context.Context) error {
+	mc, err := s.acquire(ctx)
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
-	if _, err := fmt.Fprintf(conn, "flush_all\r\n"); err != nil {
+	bad := false
+	defer func() { s.release(mc, bad) }()
+	if _, err := fmt.Fprintf(mc.conn, "flush_all\r\n"); err != nil {
+		bad = true
 		return err
 	}
-	reader := bufio.NewReader(conn)
-	line, err := reader.ReadString('\n')
+	line, err := mc.reader.ReadString('\n')
 	if err != nil {
+		bad = true
 		return err
 	}
 	if !strings.HasPrefix(line, "OK") {
+		bad = true
 		return fmt.Errorf("memcached flush failed: %s", strings.TrimSpace(line))
 	}
 	return nil
 }
 
-func (s *memcachedStore) dial(ctx context.Context) (net.Conn, error) {
+func (s *memcachedStore) acquire(ctx context.Context) (*memcachedConn, error) {
 	if len(s.addrs) == 0 {
 		return nil, errors.New("memcached: no addresses configured")
 	}
 	var errs bytes.Buffer
-	for _, addr := range s.addrs {
+	start := int(atomic.AddUint32(&s.rr, 1)-1) % len(s.addrs)
+	for i := 0; i < len(s.addrs); i++ {
+		addr := s.addrs[(start+i)%len(s.addrs)]
+		if pool, ok := s.pools[addr]; ok {
+			select {
+			case mc := <-pool:
+				if mc != nil {
+					return mc, nil
+				}
+			default:
+			}
+		}
 		conn, err := dialMemcached(ctx, "tcp", addr)
 		if err == nil {
-			return conn, nil
+			return &memcachedConn{
+				addr:   addr,
+				conn:   conn,
+				reader: bufio.NewReader(conn),
+			}, nil
 		}
 		fmt.Fprintf(&errs, "%s: %v; ", addr, err)
 	}
 	return nil, fmt.Errorf("memcached dial failed: %s", errs.String())
+}
+
+func (s *memcachedStore) release(mc *memcachedConn, bad bool) {
+	if mc == nil || mc.conn == nil {
+		return
+	}
+	if bad {
+		_ = mc.conn.Close()
+		return
+	}
+	pool, ok := s.pools[mc.addr]
+	if !ok {
+		_ = mc.conn.Close()
+		return
+	}
+	select {
+	case pool <- mc:
+	default:
+		_ = mc.conn.Close()
+	}
 }
 
 func (s *memcachedStore) cacheKey(key string) string {

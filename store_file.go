@@ -1,8 +1,10 @@
 package cache
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -17,6 +19,8 @@ var (
 	createTempFile = os.CreateTemp
 	renameFile     = os.Rename
 )
+
+var fileRecordMagic = []byte("CFR1")
 
 type fileRecord struct {
 	ExpiresAt int64  `json:"expires_at"`
@@ -56,39 +60,42 @@ func (s *fileStore) Get(_ context.Context, key string) ([]byte, bool, error) {
 		return nil, false, err
 	}
 
-	var rec fileRecord
-	if err := json.Unmarshal(data, &rec); err != nil {
+	expiresAt, value, err := decodeFileRecord(data)
+	if err != nil {
 		_ = os.Remove(path)
 		return nil, false, err
 	}
 
-	if rec.ExpiresAt > 0 && time.Now().UnixNano() > rec.ExpiresAt {
+	if expiresAt > 0 && time.Now().UnixNano() > expiresAt {
 		_ = os.Remove(path)
 		return nil, false, nil
 	}
 
-	return cloneBytes(rec.Value), true, nil
+	return value, true, nil
 }
 
 func (s *fileStore) Set(_ context.Context, key string, value []byte, ttl time.Duration) error {
 	if ttl <= 0 {
 		ttl = s.defaultTTL
 	}
-	rec := fileRecord{
-		ExpiresAt: time.Now().Add(ttl).UnixNano(),
-		Value:     cloneBytes(value),
-	}
-	data, err := json.Marshal(rec)
-	if err != nil {
-		return err
-	}
+	expiresAt := time.Now().Add(ttl).UnixNano()
 
 	tmp, err := createTempFile(s.dir, "cache-*")
 	if err != nil {
 		return err
 	}
 	tmpPath := tmp.Name()
-	if _, err := tmp.Write(data); err != nil {
+
+	var header [12]byte
+	copy(header[:4], fileRecordMagic)
+	binary.BigEndian.PutUint64(header[4:], uint64(expiresAt))
+
+	if _, err := tmp.Write(header[:]); err != nil {
+		tmp.Close()
+		_ = os.Remove(tmpPath)
+		return err
+	}
+	if _, err := tmp.Write(value); err != nil {
 		tmp.Close()
 		_ = os.Remove(tmpPath)
 		return err
@@ -167,4 +174,17 @@ func (s *fileStore) path(key string) string {
 	sum := sha256.Sum256([]byte(key))
 	name := hex.EncodeToString(sum[:])
 	return filepath.Join(s.dir, name+".cache")
+}
+
+func decodeFileRecord(data []byte) (int64, []byte, error) {
+	if len(data) >= 12 && bytes.Equal(data[:4], fileRecordMagic) {
+		expiresAt := int64(binary.BigEndian.Uint64(data[4:12]))
+		return expiresAt, data[12:], nil
+	}
+
+	var rec fileRecord
+	if err := json.Unmarshal(data, &rec); err != nil {
+		return 0, nil, err
+	}
+	return rec.ExpiresAt, rec.Value, nil
 }

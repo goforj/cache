@@ -2,6 +2,7 @@ package cache
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -142,6 +143,30 @@ func TestNATSStoreBucketTTLModeStoresRawValues(t *testing.T) {
 	val, err := store.Increment(ctx, "counter_raw", 2, time.Millisecond)
 	if err != nil || val != 2 {
 		t.Fatalf("increment failed: val=%d err=%v", val, err)
+	}
+}
+
+func TestNATSStoreReadsLegacyJSONEnvelope(t *testing.T) {
+	ctx := context.Background()
+	kv := newStubNATSKeyValue("bucket")
+	store := newNATSStore(kv, time.Second, "pfx", false)
+
+	legacy := natsEnvelope{
+		Marker:    natsEnvelopeMarker,
+		Value:     []byte("legacy"),
+		ExpiresAt: time.Now().Add(time.Minute).UnixMilli(),
+	}
+	body, err := json.Marshal(legacy)
+	if err != nil {
+		t.Fatalf("marshal legacy envelope: %v", err)
+	}
+	if _, err := kv.Put(store.(*natsStore).cacheKey("legacy"), body); err != nil {
+		t.Fatalf("seed legacy envelope: %v", err)
+	}
+
+	got, ok, err := store.Get(ctx, "legacy")
+	if err != nil || !ok || string(got) != "legacy" {
+		t.Fatalf("expected legacy envelope read, ok=%v err=%v val=%q", ok, err, string(got))
 	}
 }
 

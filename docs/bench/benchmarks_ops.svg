@@ -1,78 +1,78 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1100" viewBox="0 0 1600 1100">
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="825" viewBox="0 0 1600 825">
 <rect width="100%" height="100%" fill="#111827"/>
 <text x="800" y="44" text-anchor="middle" fill="#f9fafb" font-size="34" font-family="Arial, sans-serif">Cache Benchmark Iterations (N)</text>
-<text x="800" y="72" text-anchor="middle" fill="#9ca3af" font-size="18" font-family="Arial, sans-serif">Linear split view: top outlier, bottom remaining drivers</text>
-<rect x="1250" y="81" width="20" height="20" fill="#4e79a7"/>
-<text x="1280" y="96" fill="#f3f4f6" font-size="20" font-family="Arial, sans-serif">Get</text>
-<rect x="1250" y="113" width="20" height="20" fill="#59a14f"/>
-<text x="1280" y="128" fill="#f3f4f6" font-size="20" font-family="Arial, sans-serif">Set</text>
-<rect x="1250" y="145" width="20" height="20" fill="#e15759"/>
-<text x="1280" y="160" fill="#f3f4f6" font-size="20" font-family="Arial, sans-serif">Delete</text>
+<text x="800" y="72" text-anchor="middle" fill="#9ca3af" font-size="18" font-family="Arial, sans-serif">Linear split view (grouped bars): top outlier, bottom remaining drivers, higher is better</text>
+<rect x="1470" y="81" width="20" height="20" fill="#4e79a7"/>
+<text x="1500" y="96" fill="#f3f4f6" font-size="20" font-family="Arial, sans-serif">Get</text>
+<rect x="1470" y="113" width="20" height="20" fill="#59a14f"/>
+<text x="1500" y="128" fill="#f3f4f6" font-size="20" font-family="Arial, sans-serif">Set</text>
+<rect x="1470" y="145" width="20" height="20" fill="#e15759"/>
+<text x="1500" y="160" fill="#f3f4f6" font-size="20" font-family="Arial, sans-serif">Delete</text>
 <text x="90" y="78" fill="#f3f4f6" font-size="22" font-family="Arial, sans-serif">Outlier: memory</text>
-<line x1="90" y1="445" x2="1550" y2="445" stroke="#374151" stroke-width="1"/>
-<text x="80" y="450" text-anchor="end" fill="#d1d5db" font-size="13" font-family="Arial, sans-serif">0</text>
-<line x1="90" y1="374" x2="1550" y2="374" stroke="#374151" stroke-width="1"/>
-<text x="80" y="379" text-anchor="end" fill="#d1d5db" font-size="13" font-family="Arial, sans-serif">12928757</text>
-<line x1="90" y1="303" x2="1550" y2="303" stroke="#374151" stroke-width="1"/>
-<text x="80" y="308" text-anchor="end" fill="#d1d5db" font-size="13" font-family="Arial, sans-serif">25857515</text>
-<line x1="90" y1="232" x2="1550" y2="232" stroke="#374151" stroke-width="1"/>
-<text x="80" y="237" text-anchor="end" fill="#d1d5db" font-size="13" font-family="Arial, sans-serif">38786272</text>
-<line x1="90" y1="161" x2="1550" y2="161" stroke="#374151" stroke-width="1"/>
-<text x="80" y="166" text-anchor="end" fill="#d1d5db" font-size="13" font-family="Arial, sans-serif">51715030</text>
-<line x1="90" y1="90" x2="1550" y2="90" stroke="#374151" stroke-width="1"/>
-<text x="80" y="95" text-anchor="end" fill="#d1d5db" font-size="13" font-family="Arial, sans-serif">64643788</text>
-<line x1="90" y1="445" x2="1550" y2="445" stroke="#e5e7eb" stroke-width="2"/>
-<line x1="90" y1="445" x2="90" y2="90" stroke="#e5e7eb" stroke-width="2"/>
-<rect x="455" y="350" width="730" height="95" fill="#4e79a7"/>
-<rect x="455" y="282" width="730" height="68" fill="#59a14f"/>
-<rect x="455" y="124" width="730" height="158" fill="#e15759"/>
-<text x="820" y="547" text-anchor="middle" fill="#d1d5db" font-size="20" font-family="Arial, sans-serif" transform="rotate(-28,820,547)">memory</text>
-<text x="90" y="513" fill="#f3f4f6" font-size="22" font-family="Arial, sans-serif">Remaining drivers</text>
-<line x1="90" y1="880" x2="1550" y2="880" stroke="#374151" stroke-width="1"/>
-<text x="80" y="885" text-anchor="end" fill="#d1d5db" font-size="13" font-family="Arial, sans-serif">0</text>
-<line x1="90" y1="809" x2="1550" y2="809" stroke="#374151" stroke-width="1"/>
-<text x="80" y="814" text-anchor="end" fill="#d1d5db" font-size="13" font-family="Arial, sans-serif">142911</text>
-<line x1="90" y1="738" x2="1550" y2="738" stroke="#374151" stroke-width="1"/>
-<text x="80" y="743" text-anchor="end" fill="#d1d5db" font-size="13" font-family="Arial, sans-serif">285822</text>
-<line x1="90" y1="667" x2="1550" y2="667" stroke="#374151" stroke-width="1"/>
-<text x="80" y="672" text-anchor="end" fill="#d1d5db" font-size="13" font-family="Arial, sans-serif">428734</text>
-<line x1="90" y1="596" x2="1550" y2="596" stroke="#374151" stroke-width="1"/>
-<text x="80" y="601" text-anchor="end" fill="#d1d5db" font-size="13" font-family="Arial, sans-serif">571645</text>
-<line x1="90" y1="525" x2="1550" y2="525" stroke="#374151" stroke-width="1"/>
-<text x="80" y="530" text-anchor="end" fill="#d1d5db" font-size="13" font-family="Arial, sans-serif">714556</text>
-<line x1="90" y1="880" x2="1550" y2="880" stroke="#e5e7eb" stroke-width="2"/>
-<line x1="90" y1="880" x2="90" y2="525" stroke="#e5e7eb" stroke-width="2"/>
-<rect x="135" y="827" width="91" height="53" fill="#4e79a7"/>
-<rect x="135" y="823" width="91" height="4" fill="#59a14f"/>
-<rect x="135" y="559" width="91" height="264" fill="#e15759"/>
-<text x="181" y="982" text-anchor="middle" fill="#d1d5db" font-size="20" font-family="Arial, sans-serif" transform="rotate(-28,181,982)">file</text>
-<rect x="317" y="855" width="91" height="25" fill="#4e79a7"/>
-<rect x="317" y="811" width="91" height="44" fill="#59a14f"/>
-<rect x="317" y="790" width="91" height="21" fill="#e15759"/>
-<text x="363" y="982" text-anchor="middle" fill="#d1d5db" font-size="20" font-family="Arial, sans-serif" transform="rotate(-28,363,982)">sql_sqlite</text>
-<rect x="499" y="873" width="91" height="7" fill="#4e79a7"/>
-<rect x="499" y="872" width="91" height="1" fill="#59a14f"/>
-<rect x="499" y="865" width="91" height="7" fill="#e15759"/>
-<text x="545" y="982" text-anchor="middle" fill="#d1d5db" font-size="20" font-family="Arial, sans-serif" transform="rotate(-28,545,982)">sql_postgres</text>
-<rect x="681" y="877" width="91" height="3" fill="#4e79a7"/>
-<rect x="681" y="876" width="91" height="1" fill="#59a14f"/>
-<rect x="681" y="872" width="91" height="4" fill="#e15759"/>
-<text x="727" y="982" text-anchor="middle" fill="#d1d5db" font-size="20" font-family="Arial, sans-serif" transform="rotate(-28,727,982)">sql_mysql</text>
-<rect x="863" y="872" width="91" height="8" fill="#4e79a7"/>
-<rect x="863" y="864" width="91" height="8" fill="#59a14f"/>
-<rect x="863" y="856" width="91" height="8" fill="#e15759"/>
-<text x="909" y="982" text-anchor="middle" fill="#d1d5db" font-size="20" font-family="Arial, sans-serif" transform="rotate(-28,909,982)">redis</text>
-<rect x="1045" y="879" width="91" height="1" fill="#4e79a7"/>
-<rect x="1045" y="878" width="91" height="1" fill="#59a14f"/>
-<rect x="1045" y="877" width="91" height="1" fill="#e15759"/>
-<text x="1091" y="982" text-anchor="middle" fill="#d1d5db" font-size="20" font-family="Arial, sans-serif" transform="rotate(-28,1091,982)">memcached</text>
-<rect x="1227" y="874" width="91" height="6" fill="#4e79a7"/>
-<rect x="1227" y="869" width="91" height="5" fill="#59a14f"/>
-<rect x="1227" y="863" width="91" height="6" fill="#e15759"/>
-<text x="1273" y="982" text-anchor="middle" fill="#d1d5db" font-size="20" font-family="Arial, sans-serif" transform="rotate(-28,1273,982)">nats</text>
-<rect x="1409" y="877" width="91" height="3" fill="#4e79a7"/>
-<rect x="1409" y="876" width="91" height="1" fill="#59a14f"/>
-<rect x="1409" y="873" width="91" height="3" fill="#e15759"/>
-<text x="1455" y="982" text-anchor="middle" fill="#d1d5db" font-size="20" font-family="Arial, sans-serif" transform="rotate(-28,1455,982)">dynamodb</text>
+<line x1="90" y1="342" x2="1450" y2="342" stroke="#374151" stroke-width="1"/>
+<text x="80" y="347" text-anchor="end" fill="#d1d5db" font-size="13" font-family="Arial, sans-serif">0</text>
+<line x1="90" y1="292" x2="1450" y2="292" stroke="#374151" stroke-width="1"/>
+<text x="80" y="297" text-anchor="end" fill="#d1d5db" font-size="13" font-family="Arial, sans-serif">7334929</text>
+<line x1="90" y1="242" x2="1450" y2="242" stroke="#374151" stroke-width="1"/>
+<text x="80" y="247" text-anchor="end" fill="#d1d5db" font-size="13" font-family="Arial, sans-serif">14669858</text>
+<line x1="90" y1="191" x2="1450" y2="191" stroke="#374151" stroke-width="1"/>
+<text x="80" y="196" text-anchor="end" fill="#d1d5db" font-size="13" font-family="Arial, sans-serif">22004787</text>
+<line x1="90" y1="141" x2="1450" y2="141" stroke="#374151" stroke-width="1"/>
+<text x="80" y="146" text-anchor="end" fill="#d1d5db" font-size="13" font-family="Arial, sans-serif">29339716</text>
+<line x1="90" y1="90" x2="1450" y2="90" stroke="#374151" stroke-width="1"/>
+<text x="80" y="95" text-anchor="end" fill="#d1d5db" font-size="13" font-family="Arial, sans-serif">36674645</text>
+<line x1="90" y1="342" x2="1450" y2="342" stroke="#e5e7eb" stroke-width="2"/>
+<line x1="90" y1="342" x2="90" y2="90" stroke="#e5e7eb" stroke-width="2"/>
+<rect x="332" y="221" width="251" height="121" fill="#4e79a7"/>
+<rect x="644" y="255" width="251" height="87" fill="#59a14f"/>
+<rect x="956" y="113" width="251" height="229" fill="#e15759"/>
+<text x="770" y="420" text-anchor="middle" fill="#d1d5db" font-size="20" font-family="Arial, sans-serif">memory</text>
+<text x="90" y="410" fill="#f3f4f6" font-size="22" font-family="Arial, sans-serif">Remaining drivers</text>
+<line x1="90" y1="674" x2="1450" y2="674" stroke="#374151" stroke-width="1"/>
+<text x="80" y="679" text-anchor="end" fill="#d1d5db" font-size="13" font-family="Arial, sans-serif">0</text>
+<line x1="90" y1="624" x2="1450" y2="624" stroke="#374151" stroke-width="1"/>
+<text x="80" y="629" text-anchor="end" fill="#d1d5db" font-size="13" font-family="Arial, sans-serif">114710</text>
+<line x1="90" y1="574" x2="1450" y2="574" stroke="#374151" stroke-width="1"/>
+<text x="80" y="579" text-anchor="end" fill="#d1d5db" font-size="13" font-family="Arial, sans-serif">229420</text>
+<line x1="90" y1="523" x2="1450" y2="523" stroke="#374151" stroke-width="1"/>
+<text x="80" y="528" text-anchor="end" fill="#d1d5db" font-size="13" font-family="Arial, sans-serif">344130</text>
+<line x1="90" y1="473" x2="1450" y2="473" stroke="#374151" stroke-width="1"/>
+<text x="80" y="478" text-anchor="end" fill="#d1d5db" font-size="13" font-family="Arial, sans-serif">458840</text>
+<line x1="90" y1="422" x2="1450" y2="422" stroke="#374151" stroke-width="1"/>
+<text x="80" y="427" text-anchor="end" fill="#d1d5db" font-size="13" font-family="Arial, sans-serif">573551</text>
+<line x1="90" y1="674" x2="1450" y2="674" stroke="#e5e7eb" stroke-width="2"/>
+<line x1="90" y1="674" x2="90" y2="422" stroke="#e5e7eb" stroke-width="2"/>
+<rect x="120" y="622" width="32" height="52" fill="#4e79a7"/>
+<rect x="159" y="670" width="32" height="4" fill="#59a14f"/>
+<rect x="198" y="445" width="32" height="229" fill="#e15759"/>
+<text x="175" y="752" text-anchor="middle" fill="#d1d5db" font-size="20" font-family="Arial, sans-serif">file</text>
+<rect x="290" y="609" width="32" height="65" fill="#4e79a7"/>
+<rect x="329" y="639" width="32" height="35" fill="#59a14f"/>
+<rect x="368" y="605" width="32" height="69" fill="#e15759"/>
+<text x="345" y="752" text-anchor="middle" fill="#d1d5db" font-size="20" font-family="Arial, sans-serif">sql_sqlite</text>
+<rect x="460" y="668" width="32" height="6" fill="#4e79a7"/>
+<rect x="499" y="673" width="32" height="1" fill="#59a14f"/>
+<rect x="538" y="668" width="32" height="6" fill="#e15759"/>
+<text x="515" y="752" text-anchor="middle" fill="#d1d5db" font-size="20" font-family="Arial, sans-serif">sql_postgres</text>
+<rect x="630" y="671" width="32" height="3" fill="#4e79a7"/>
+<rect x="669" y="673" width="32" height="1" fill="#59a14f"/>
+<rect x="708" y="671" width="32" height="3" fill="#e15759"/>
+<text x="685" y="752" text-anchor="middle" fill="#d1d5db" font-size="20" font-family="Arial, sans-serif">sql_mysql</text>
+<rect x="800" y="667" width="32" height="7" fill="#4e79a7"/>
+<rect x="839" y="667" width="32" height="7" fill="#59a14f"/>
+<rect x="878" y="667" width="32" height="7" fill="#e15759"/>
+<text x="855" y="752" text-anchor="middle" fill="#d1d5db" font-size="20" font-family="Arial, sans-serif">redis</text>
+<rect x="970" y="667" width="32" height="7" fill="#4e79a7"/>
+<rect x="1009" y="667" width="32" height="7" fill="#59a14f"/>
+<rect x="1048" y="667" width="32" height="7" fill="#e15759"/>
+<text x="1025" y="752" text-anchor="middle" fill="#d1d5db" font-size="20" font-family="Arial, sans-serif">memcached</text>
+<rect x="1140" y="671" width="32" height="3" fill="#4e79a7"/>
+<rect x="1179" y="673" width="32" height="1" fill="#59a14f"/>
+<rect x="1218" y="672" width="32" height="2" fill="#e15759"/>
+<text x="1195" y="752" text-anchor="middle" fill="#d1d5db" font-size="20" font-family="Arial, sans-serif">nats</text>
+<rect x="1310" y="673" width="32" height="1" fill="#4e79a7"/>
+<rect x="1349" y="670" width="32" height="4" fill="#59a14f"/>
+<rect x="1388" y="673" width="32" height="1" fill="#e15759"/>
+<text x="1365" y="752" text-anchor="middle" fill="#d1d5db" font-size="20" font-family="Arial, sans-serif">nats_bucket_ttl</text>
 </svg>

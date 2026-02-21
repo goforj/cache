@@ -14,7 +14,7 @@
     <a href="https://goreportcard.com/report/github.com/goforj/cache"><img src="https://goreportcard.com/badge/github.com/goforj/cache" alt="Go Report Card"></a>
     <a href="https://codecov.io/gh/goforj/cache"><img src="https://codecov.io/gh/goforj/cache/graph/badge.svg?token=B6ROULLKWU"/></a>
 <!-- test-count:embed:start -->
-    <img src="https://img.shields.io/badge/tests-272-brightgreen" alt="Tests">
+    <img src="https://img.shields.io/badge/tests-274-brightgreen" alt="Tests">
 <!-- test-count:embed:end -->
 </p>
 
@@ -131,6 +131,13 @@ go test ./docs/bench -tags benchrender
 Note: NATS numbers can look slower than Redis/memory because the NATS driver preserves per-operation TTL semantics by storing per-key expiry metadata (envelope encode/decode) and may do extra compare/update steps for some operations.
 
 <!-- bench:embed:start -->
+
+Note: DynamoDB is intentionally omitted from these local charts because emulator-based numbers are not representative of real AWS latency.
+
+NATS variants in these charts:
+
+- `nats`: per-key TTL semantics using a binary envelope (`magic/expiresAt/value`). This preserves per-key expiry parity with other drivers, with modest metadata overhead.
+- `nats_bucket_ttl`: bucket-level TTL mode (`WithNATSBucketTTL(true)`), raw value path; faster but different expiry semantics.
 
 ### Latency (ns/op)
 

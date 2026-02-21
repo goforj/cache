@@ -1,0 +1,224 @@
+{
+  "Delete": [
+    {
+      "Driver": "memory",
+      "Op": "Delete",
+      "NsOp": 36,
+      "BytesOp": 0,
+      "AllocsOp": 0,
+      "Ops": 33340587
+    },
+    {
+      "Driver": "file",
+      "Op": "Delete",
+      "NsOp": 2243,
+      "BytesOp": 736,
+      "AllocsOp": 7,
+      "Ops": 521410
+    },
+    {
+      "Driver": "redis",
+      "Op": "Delete",
+      "NsOp": 71003,
+      "BytesOp": 200,
+      "AllocsOp": 8,
+      "Ops": 16858
+    },
+    {
+      "Driver": "memcached",
+      "Op": "Delete",
+      "NsOp": 70680,
+      "BytesOp": 96,
+      "AllocsOp": 4,
+      "Ops": 16500
+    },
+    {
+      "Driver": "sql_postgres",
+      "Op": "Delete",
+      "NsOp": 82474,
+      "BytesOp": 304,
+      "AllocsOp": 11,
+      "Ops": 14673
+    },
+    {
+      "Driver": "sql_mysql",
+      "Op": "Delete",
+      "NsOp": 151265,
+      "BytesOp": 352,
+      "AllocsOp": 15,
+      "Ops": 7002
+    },
+    {
+      "Driver": "sql_sqlite",
+      "Op": "Delete",
+      "NsOp": 7262,
+      "BytesOp": 1056,
+      "AllocsOp": 25,
+      "Ops": 158421
+    },
+    {
+      "Driver": "nats",
+      "Op": "Delete",
+      "NsOp": 674962,
+      "BytesOp": 1234,
+      "AllocsOp": 25,
+      "Ops": 5179
+    },
+    {
+      "Driver": "nats_bucket_ttl",
+      "Op": "Delete",
+      "NsOp": 553095,
+      "BytesOp": 1234,
+      "AllocsOp": 25,
+      "Ops": 2534
+    }
+  ],
+  "Get": [
+    {
+      "Driver": "memory",
+      "Op": "Get",
+      "NsOp": 67,
+      "BytesOp": 1,
+      "AllocsOp": 1,
+      "Ops": 17641146
+    },
+    {
+      "Driver": "file",
+      "Op": "Get",
+      "NsOp": 10222,
+      "BytesOp": 1352,
+      "AllocsOp": 9,
+      "Ops": 118470
+    },
+    {
+      "Driver": "redis",
+      "Op": "Get",
+      "NsOp": 69747,
+      "BytesOp": 200,
+      "AllocsOp": 8,
+      "Ops": 17074
+    },
+    {
+      "Driver": "memcached",
+      "Op": "Get",
+      "NsOp": 70650,
+      "BytesOp": 192,
+      "AllocsOp": 9,
+      "Ops": 17366
+    },
+    {
+      "Driver": "sql_postgres",
+      "Op": "Get",
+      "NsOp": 85424,
+      "BytesOp": 1081,
+      "AllocsOp": 33,
+      "Ops": 13951
+    },
+    {
+      "Driver": "sql_mysql",
+      "Op": "Get",
+      "NsOp": 167155,
+      "BytesOp": 872,
+      "AllocsOp": 26,
+      "Ops": 7066
+    },
+    {
+      "Driver": "sql_sqlite",
+      "Op": "Get",
+      "NsOp": 7461,
+      "BytesOp": 1465,
+      "AllocsOp": 40,
+      "Ops": 149444
+    },
+    {
+      "Driver": "nats",
+      "Op": "Get",
+      "NsOp": 128949,
+      "BytesOp": 2059,
+      "AllocsOp": 31,
+      "Ops": 8610
+    },
+    {
+      "Driver": "nats_bucket_ttl",
+      "Op": "Get",
+      "NsOp": 612345,
+      "BytesOp": 2060,
+      "AllocsOp": 31,
+      "Ops": 2214
+    }
+  ],
+  "Set": [
+    {
+      "Driver": "memory",
+      "Op": "Set",
+      "NsOp": 92,
+      "BytesOp": 26,
+      "AllocsOp": 3,
+      "Ops": 12806083
+    },
+    {
+      "Driver": "file",
+      "Op": "Set",
+      "NsOp": 126832,
+      "BytesOp": 1400,
+      "AllocsOp": 15,
+      "Ops": 9866
+    },
+    {
+      "Driver": "redis",
+      "Op": "Set",
+      "NsOp": 70839,
+      "BytesOp": 272,
+      "AllocsOp": 10,
+      "Ops": 16034
+    },
+    {
+      "Driver": "memcached",
+      "Op": "Set",
+      "NsOp": 73536,
+      "BytesOp": 96,
+      "AllocsOp": 6,
+      "Ops": 16263
+    },
+    {
+      "Driver": "sql_postgres",
+      "Op": "Set",
+      "NsOp": 589529,
+      "BytesOp": 737,
+      "AllocsOp": 24,
+      "Ops": 2049
+    },
+    {
+      "Driver": "sql_mysql",
+      "Op": "Set",
+      "NsOp": 1324328,
+      "BytesOp": 978,
+      "AllocsOp": 24,
+      "Ops": 994
+    },
+    {
+      "Driver": "sql_sqlite",
+      "Op": "Set",
+      "NsOp": 16837,
+      "BytesOp": 1470,
+      "AllocsOp": 36,
+      "Ops": 80739
+    },
+    {
+      "Driver": "nats",
+      "Op": "Set",
+      "NsOp": 780568,
+      "BytesOp": 1115,
+      "AllocsOp": 23,
+      "Ops": 1462
+    },
+    {
+      "Driver": "nats_bucket_ttl",
+      "Op": "Set",
+      "NsOp": 95452,
+      "BytesOp": 1097,
+      "AllocsOp": 23,
+      "Ops": 10898
+    }
+  ]
+}

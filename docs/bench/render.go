@@ -6,6 +6,8 @@ package bench
 import (
 	"bytes"
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"os"
@@ -27,6 +29,7 @@ import (
 const (
 	benchStart = "<!-- bench:embed:start -->"
 	benchEnd   = "<!-- bench:embed:end -->"
+	benchRows  = "benchmarks_rows.json"
 )
 
 type benchRow struct {
@@ -42,7 +45,21 @@ type benchRow struct {
 func RenderBenchmarks() {
 	root := findRoot()
 	ctx := context.Background()
-	rows := runBenchmarks(ctx)
+	rowsPath := filepath.Join(root, "docs", "bench", benchRows)
+
+	var rows map[string][]benchRow
+	if os.Getenv("BENCH_RENDER_ONLY") == "1" {
+		loaded, err := loadBenchmarkRows(rowsPath)
+		if err != nil {
+			panic(fmt.Errorf("render-only mode requires snapshot at %s: %w", rowsPath, err))
+		}
+		rows = loaded
+	} else {
+		rows = runBenchmarks(ctx)
+		if err := saveBenchmarkRows(rowsPath, rows); err != nil {
+			panic(err)
+		}
+	}
 
 	if err := writeDashboard(root, rows); err != nil {
 		panic(err)
@@ -62,7 +79,7 @@ func RenderBenchmarks() {
 }
 
 func runBenchmarks(ctx context.Context) map[string][]benchRow {
-	drivers := []string{"memory", "file", "redis", "nats", "nats_bucket_ttl", "memcached", "dynamodb", "sql_postgres", "sql_mysql", "sql_sqlite"}
+	drivers := []string{"memory", "file", "redis", "memcached", "sql_postgres", "sql_mysql", "sql_sqlite"}
 	ops := map[string]func(context.Context, *cache.Cache){
 		"Set":    doSet,
 		"Get":    doGet,
@@ -71,14 +88,7 @@ func runBenchmarks(ctx context.Context) map[string][]benchRow {
 
 	results := make(map[string][]benchRow)
 	for _, driver := range drivers {
-		opts := []cache.StoreOption{}
-		baseDriver := driver
-		if driver == "nats_bucket_ttl" {
-			baseDriver = "nats"
-			opts = append(opts, cache.WithNATSBucketTTL(true))
-		}
-
-		c, cleanup, ok := buildCache(ctx, baseDriver, opts...)
+		c, cleanup, ok := buildCache(ctx, driver)
 		if !ok {
 			continue
 		}
@@ -97,6 +107,55 @@ func runBenchmarks(ctx context.Context) map[string][]benchRow {
 			})
 		}
 	}
+
+	// Run NATS variants as a paired benchmark from one shared server URL so
+	// nats and nats_bucket_ttl appear together in rendered charts.
+	natsURL, natsServerCleanup, ok := natsBenchURL(ctx)
+	if ok {
+		if natsServerCleanup != nil {
+			defer natsServerCleanup()
+		}
+		variants := []struct {
+			name string
+			opts []cache.StoreOption
+		}{
+			{name: "nats"},
+			{name: "nats_bucket_ttl", opts: []cache.StoreOption{cache.WithNATSBucketTTL(true)}},
+		}
+		var pairRows []benchRow
+		pairOK := true
+		for _, variant := range variants {
+			c, cleanup, err := newNATSBenchCache(ctx, natsURL, variant.opts...)
+			if err != nil {
+				pairOK = false
+				if cleanup != nil {
+					cleanup()
+				}
+				fmt.Fprintln(os.Stderr, "benchrender: skip nats pair:", err)
+				break
+			}
+			if cleanup != nil {
+				defer cleanup()
+			}
+			for opName, fn := range ops {
+				ns, bytes, allocs, opCount := benchOp(ctx, c, fn)
+				pairRows = append(pairRows, benchRow{
+					Driver:   variant.name,
+					Op:       opName,
+					NsOp:     ns,
+					BytesOp:  bytes,
+					AllocsOp: allocs,
+					Ops:      opCount,
+				})
+			}
+		}
+		if pairOK {
+			for _, row := range pairRows {
+				results[row.Op] = append(results[row.Op], row)
+			}
+		}
+	}
+
 	return results
 }
 
@@ -121,9 +180,39 @@ func doDelete(ctx context.Context, c *cache.Cache) {
 	_ = c.Delete("bench:key")
 }
 
+func natsBenchURL(ctx context.Context) (string, func(), bool) {
+	if addr := os.Getenv("NATS_URL"); addr != "" {
+		return addr, func() {}, true
+	}
+	req := testcontainers.ContainerRequest{
+		Image:        "nats:2",
+		Cmd:          []string{"-js"},
+		ExposedPorts: []string{"4222/tcp"},
+	}
+	c, addr, err := startContainer(ctx, req, "4222/tcp")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "benchrender: skip nats pair:", err)
+		return "", nil, false
+	}
+	url := "nats://" + addr
+	nc, err := connectNATSWithRetry(url, 15*time.Second)
+	if err != nil {
+		_ = c.Terminate(context.Background())
+		fmt.Fprintln(os.Stderr, "benchrender: skip nats pair:", err)
+		return "", nil, false
+	}
+	nc.Close()
+	cleanup := func() { _ = c.Terminate(context.Background()) }
+	return url, cleanup, true
+}
+
 func renderTable(byOp map[string][]benchRow) string {
 	var buf bytes.Buffer
 	buf.WriteString(benchStart + "\n\n")
+	buf.WriteString("Note: DynamoDB is intentionally omitted from these local charts because emulator-based numbers are not representative of real AWS latency.\n\n")
+	buf.WriteString("NATS variants in these charts:\n\n")
+	buf.WriteString("- `nats`: per-key TTL semantics using a binary envelope (`magic/expiresAt/value`). This preserves per-key expiry parity with other drivers, with modest metadata overhead.\n")
+	buf.WriteString("- `nats_bucket_ttl`: bucket-level TTL mode (`WithNATSBucketTTL(true)`), raw value path; faster but different expiry semantics.\n\n")
 	buf.WriteString("### Latency (ns/op)\n\n")
 	buf.WriteString("![Cache benchmark latency chart](docs/bench/benchmarks_ns.svg)\n\n")
 	buf.WriteString("### Iterations (N)\n\n")
@@ -156,7 +245,7 @@ func writeDashboard(root string, byOp map[string][]benchRow) error {
 	if len(drivers) == 0 {
 		return nil
 	}
-	if err := writeDashboardSVG(root, "benchmarks_ns.svg", "Cache Benchmark Latency", "ns/op", "linear", drivers, byDriver); err != nil {
+	if err := writeDashboardSVG(root, "benchmarks_ns.svg", "Cache Benchmark Latency", "ns/op", "split", drivers, byDriver); err != nil {
 		return err
 	}
 	if err := writeMetricSVG(root, "benchmarks_ops.svg", "Cache Benchmark Iterations", "N", "split", drivers, byOp, func(r benchRow) float64 {
@@ -227,11 +316,11 @@ func writeDashboardSVG(root, fileName, title, yUnit, scale string, drivers []str
 	}
 	const (
 		width       = 1600
-		height      = 920
+		height      = 690
 		marginLeft  = 90
-		marginRight = 50
+		marginRight = 150
 		marginTop   = 90
-		marginBot   = 210
+		marginBot   = 130
 	)
 	ops := []string{"Get", "Set", "Delete"}
 	colors := map[string]string{"Get": "#4e79a7", "Set": "#59a14f", "Delete": "#e15759"}
@@ -247,7 +336,7 @@ func writeDashboardSVG(root, fileName, title, yUnit, scale string, drivers []str
 	if scale == "log" {
 		scaleLabel = "log"
 	}
-	svg.WriteString(`<text x="` + strconv.Itoa(width/2) + `" y="72" text-anchor="middle" fill="#9ca3af" font-size="18" font-family="Arial, sans-serif">Stacked by operation (Get, Set, Delete), ` + scaleLabel + ` y-scale</text>` + "\n")
+	svg.WriteString(`<text x="` + strconv.Itoa(width/2) + `" y="72" text-anchor="middle" fill="#9ca3af" font-size="18" font-family="Arial, sans-serif">Grouped by operation (Get, Set, Delete), ` + scaleLabel + ` y-scale, ` + metricPreference(yUnit) + `</text>` + "\n")
 
 	axisX0 := marginLeft
 	axisX1 := width - marginRight
@@ -256,12 +345,10 @@ func writeDashboardSVG(root, fileName, title, yUnit, scale string, drivers []str
 
 	maxV := 0.0
 	for _, driver := range drivers {
-		total := 0.0
 		for _, op := range ops {
-			total += byDriver[driver][op]
-		}
-		if total > maxV {
-			maxV = total
+			if byDriver[driver][op] > maxV {
+				maxV = byDriver[driver][op]
+			}
 		}
 	}
 	if maxV <= 0 {
@@ -300,31 +387,43 @@ func writeDashboardSVG(root, fileName, title, yUnit, scale string, drivers []str
 	svg.WriteString(`<line x1="` + strconv.Itoa(axisX0) + `" y1="` + strconv.Itoa(axisY0) + `" x2="` + strconv.Itoa(axisX0) + `" y2="` + strconv.Itoa(axisY1) + `" stroke="#e5e7eb" stroke-width="2"/>` + "\n")
 
 	groupW := plotW / len(drivers)
-	barW := groupW / 2
-	if barW < 4 {
-		barW = 4
+	groupGap := groupW / 6
+	if groupGap < 10 {
+		groupGap = 10
+	}
+	innerGap := groupW / 22
+	if innerGap < 2 {
+		innerGap = 2
+	}
+	usableW := groupW - groupGap
+	if usableW < len(ops)*3+innerGap*4 {
+		usableW = len(ops)*3 + innerGap*4
+	}
+	barW := (usableW - innerGap*4) / len(ops)
+	barW = (barW * 85) / 100
+	if barW < 3 {
+		barW = 3
 	}
 	for i, driver := range drivers {
-		barX := axisX0 + i*groupW + (groupW-barW)/2
-		cumulative := 0.0
-		for _, op := range ops {
+		groupX := axisX0 + i*groupW
+		clusterW := len(ops)*barW + (len(ops)-1)*innerGap
+		groupStart := groupX + (groupW-clusterW)/2
+		for j, op := range ops {
 			v := byDriver[driver][op]
-			y0 := mapToY(cumulative)
-			cumulative += v
-			y1 := mapToY(cumulative)
-			y := y1
-			h := y0 - y1
+			y := mapToY(v)
+			h := axisY0 - y
 			if h < 1 && v > 0 {
 				h = 1
 			}
+			barX := groupStart + j*(barW+innerGap)
 			svg.WriteString(`<rect x="` + strconv.Itoa(barX) + `" y="` + strconv.Itoa(y) + `" width="` + strconv.Itoa(barW) + `" height="` + strconv.Itoa(h) + `" fill="` + colors[op] + `"/>` + "\n")
 		}
 		labelX := axisX0 + i*groupW + groupW/2
-		labelY := axisY0 + 102
-		svg.WriteString(`<text x="` + strconv.Itoa(labelX) + `" y="` + strconv.Itoa(labelY) + `" text-anchor="middle" fill="#d1d5db" font-size="20" font-family="Arial, sans-serif" transform="rotate(-28,` + strconv.Itoa(labelX) + `,` + strconv.Itoa(labelY) + `)">` + driver + `</text>` + "\n")
+		labelY := axisY0 + 78
+		svg.WriteString(`<text x="` + strconv.Itoa(labelX) + `" y="` + strconv.Itoa(labelY) + `" text-anchor="middle" fill="#d1d5db" font-size="20" font-family="Arial, sans-serif">` + driver + `</text>` + "\n")
 	}
 
-	legendX := axisX1 - 300
+	legendX := axisX1 + 20
 	legendY := 95
 	for i, op := range ops {
 		y := legendY + i*32
@@ -354,11 +453,11 @@ func unmapValue(v float64, scale string) float64 {
 func writeDashboardSplitSVG(root, fileName, title, yUnit string, drivers []string, byDriver map[string]map[string]float64) error {
 	const (
 		width       = 1600
-		height      = 1100
+		height      = 825
 		marginLeft  = 90
-		marginRight = 50
+		marginRight = 150
 		marginTop   = 90
-		marginBot   = 220
+		marginBot   = 150
 		panelGap    = 80
 	)
 	ops := []string{"Get", "Set", "Delete"}
@@ -392,9 +491,10 @@ func writeDashboardSplitSVG(root, fileName, title, yUnit string, drivers []strin
 	svg.WriteString(`<svg xmlns="http://www.w3.org/2000/svg" width="` + strconv.Itoa(width) + `" height="` + strconv.Itoa(height) + `" viewBox="0 0 ` + strconv.Itoa(width) + ` ` + strconv.Itoa(height) + `">` + "\n")
 	svg.WriteString(`<rect width="100%" height="100%" fill="#111827"/>` + "\n")
 	svg.WriteString(`<text x="` + strconv.Itoa(width/2) + `" y="44" text-anchor="middle" fill="#f9fafb" font-size="34" font-family="Arial, sans-serif">` + title + ` (` + yUnit + `)</text>` + "\n")
-	svg.WriteString(`<text x="` + strconv.Itoa(width/2) + `" y="72" text-anchor="middle" fill="#9ca3af" font-size="18" font-family="Arial, sans-serif">Linear split view: top outlier, bottom remaining drivers</text>` + "\n")
+	svg.WriteString(`<text x="` + strconv.Itoa(width/2) + `" y="72" text-anchor="middle" fill="#9ca3af" font-size="18" font-family="Arial, sans-serif">Linear split view (grouped bars): top outlier, bottom remaining drivers, ` + metricPreference(yUnit) + `</text>` + "\n")
 
-	legendX := width - 350
+	plotRight := width - marginRight
+	legendX := plotRight + 20
 	legendY := 95
 	for i, op := range ops {
 		y := legendY + i*32
@@ -407,14 +507,16 @@ func writeDashboardSplitSVG(root, fileName, title, yUnit string, drivers []strin
 			return
 		}
 		axisX0 := marginLeft
-		axisX1 := width - marginRight
+		axisX1 := plotRight
 		axisY1 := yTop
 		axisY0 := yTop + panelH
 
 		maxV := 0.0
 		for _, d := range panelDrivers {
-			if totals[d] > maxV {
-				maxV = totals[d]
+			for _, op := range ops {
+				if byDriver[d][op] > maxV {
+					maxV = byDriver[d][op]
+				}
 			}
 		}
 		if maxV <= 0 {
@@ -434,26 +536,40 @@ func writeDashboardSplitSVG(root, fileName, title, yUnit string, drivers []strin
 		svg.WriteString(`<line x1="` + strconv.Itoa(axisX0) + `" y1="` + strconv.Itoa(axisY0) + `" x2="` + strconv.Itoa(axisX0) + `" y2="` + strconv.Itoa(axisY1) + `" stroke="#e5e7eb" stroke-width="2"/>` + "\n")
 
 		groupW := plotW / len(panelDrivers)
-		barW := groupW / 2
-		if barW < 8 {
-			barW = 8
+		groupGap := groupW / 6
+		if groupGap < 10 {
+			groupGap = 10
+		}
+		innerGap := groupW / 22
+		if innerGap < 2 {
+			innerGap = 2
+		}
+		usableW := groupW - groupGap
+		if usableW < len(ops)*3+innerGap*4 {
+			usableW = len(ops)*3 + innerGap*4
+		}
+		barW := (usableW - innerGap*4) / len(ops)
+		barW = (barW * 85) / 100
+		if barW < 3 {
+			barW = 3
 		}
 		for i, d := range panelDrivers {
-			barX := axisX0 + i*groupW + (groupW-barW)/2
-			stackTop := axisY0
-			for _, op := range ops {
+			groupX := axisX0 + i*groupW
+			clusterW := len(ops)*barW + (len(ops)-1)*innerGap
+			groupStart := groupX + (groupW-clusterW)/2
+			for j, op := range ops {
 				v := byDriver[d][op]
 				h := int((v / maxV) * float64(panelH))
 				if h < 1 && v > 0 {
 					h = 1
 				}
-				y := stackTop - h
+				y := axisY0 - h
+				barX := groupStart + j*(barW+innerGap)
 				svg.WriteString(`<rect x="` + strconv.Itoa(barX) + `" y="` + strconv.Itoa(y) + `" width="` + strconv.Itoa(barW) + `" height="` + strconv.Itoa(h) + `" fill="` + colors[op] + `"/>` + "\n")
-				stackTop = y
 			}
 			labelX := axisX0 + i*groupW + groupW/2
-			labelY := axisY0 + 102
-			svg.WriteString(`<text x="` + strconv.Itoa(labelX) + `" y="` + strconv.Itoa(labelY) + `" text-anchor="middle" fill="#d1d5db" font-size="20" font-family="Arial, sans-serif" transform="rotate(-28,` + strconv.Itoa(labelX) + `,` + strconv.Itoa(labelY) + `)">` + d + `</text>` + "\n")
+			labelY := axisY0 + 78
+			svg.WriteString(`<text x="` + strconv.Itoa(labelX) + `" y="` + strconv.Itoa(labelY) + `" text-anchor="middle" fill="#d1d5db" font-size="20" font-family="Arial, sans-serif">` + d + `</text>` + "\n")
 		}
 	}
 
@@ -463,6 +579,35 @@ func writeDashboardSplitSVG(root, fileName, title, yUnit string, drivers []strin
 	svg.WriteString(`</svg>` + "\n")
 	outPath := filepath.Join(root, "docs", "bench", fileName)
 	return os.WriteFile(outPath, svg.Bytes(), 0o644)
+}
+
+func metricPreference(yUnit string) string {
+	switch yUnit {
+	case "N":
+		return "higher is better"
+	default:
+		return "lower is better"
+	}
+}
+
+func saveBenchmarkRows(path string, rows map[string][]benchRow) error {
+	body, err := json.MarshalIndent(rows, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, body, 0o644)
+}
+
+func loadBenchmarkRows(path string) (map[string][]benchRow, error) {
+	body, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var rows map[string][]benchRow
+	if err := json.Unmarshal(body, &rows); err != nil {
+		return nil, err
+	}
+	return rows, nil
 }
 
 func injectTable(readme, table string) string {
@@ -645,13 +790,18 @@ func startNATS(ctx context.Context, opts ...cache.StoreOption) (*cache.Cache, fu
 		Image:        "nats:2",
 		Cmd:          []string{"-js"},
 		ExposedPorts: []string{"4222/tcp"},
-		WaitingFor:   wait.ForLog("Server is ready").WithStartupTimeout(30 * time.Second),
 	}
 	c, addr, err := startContainer(ctx, req, "4222/tcp")
 	if err != nil {
 		return nil, nil, err
 	}
 	natsURL := "nats://" + addr
+	nc, err := connectNATSWithRetry(natsURL, 15*time.Second)
+	if err != nil {
+		_ = c.Terminate(context.Background())
+		return nil, nil, err
+	}
+	nc.Close()
 	cacheValue, cacheCleanup, err := newNATSBenchCache(ctx, natsURL, opts...)
 	if err != nil {
 		_ = c.Terminate(context.Background())
@@ -665,7 +815,7 @@ func startNATS(ctx context.Context, opts ...cache.StoreOption) (*cache.Cache, fu
 }
 
 func newNATSBenchCache(ctx context.Context, natsURL string, opts ...cache.StoreOption) (*cache.Cache, func(), error) {
-	nc, err := nats.Connect(natsURL)
+	nc, err := connectNATSWithRetry(natsURL, 5*time.Second)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -687,6 +837,23 @@ func newNATSBenchCache(ctx context.Context, natsURL string, opts ...cache.StoreO
 		nc.Close()
 	}
 	return cache.NewCache(store), cleanup, nil
+}
+
+func connectNATSWithRetry(url string, timeout time.Duration) (*nats.Conn, error) {
+	deadline := time.Now().Add(timeout)
+	var lastErr error
+	for time.Now().Before(deadline) {
+		nc, err := nats.Connect(url)
+		if err == nil {
+			return nc, nil
+		}
+		lastErr = err
+		time.Sleep(100 * time.Millisecond)
+	}
+	if lastErr == nil {
+		lastErr = errors.New("nats connect timeout")
+	}
+	return nil, lastErr
 }
 
 func startContainer(ctx context.Context, req testcontainers.ContainerRequest, port string) (testcontainers.Container, string, error) {

@@ -2,6 +2,7 @@ package cache
 
 import (
 	"context"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"os"
@@ -176,11 +177,14 @@ func TestFileStoreSetUsesDefaultTTLWhenZero(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read file: %v", err)
 	}
-	var rec fileRecord
-	if err := json.Unmarshal(data, &rec); err != nil {
-		t.Fatalf("unmarshal: %v", err)
+	if len(data) < 12 {
+		t.Fatalf("expected binary record header")
 	}
-	if rec.ExpiresAt <= time.Now().UnixNano() {
+	if string(data[:4]) != string(fileRecordMagic) {
+		t.Fatalf("expected binary record magic")
+	}
+	expiresAt := int64(binary.BigEndian.Uint64(data[4:12]))
+	if expiresAt <= time.Now().UnixNano() {
 		t.Fatalf("expected future expiration")
 	}
 }
@@ -209,6 +213,29 @@ func TestFileStoreGetRemovesExpiredAndCorrupt(t *testing.T) {
 	}
 	if _, err := os.Stat(fs.path("bad")); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("expected corrupt file removed")
+	}
+}
+
+func TestFileStoreGetReadsLegacyJSONRecord(t *testing.T) {
+	dir := t.TempDir()
+	store := newFileStore(dir, time.Minute)
+	fs := store.(*fileStore)
+
+	legacy := fileRecord{
+		ExpiresAt: time.Now().Add(time.Minute).UnixNano(),
+		Value:     []byte("legacy"),
+	}
+	body, err := json.Marshal(legacy)
+	if err != nil {
+		t.Fatalf("marshal legacy: %v", err)
+	}
+	if err := os.WriteFile(fs.path("legacy"), body, 0o644); err != nil {
+		t.Fatalf("write legacy: %v", err)
+	}
+
+	got, ok, err := store.Get(context.Background(), "legacy")
+	if err != nil || !ok || string(got) != "legacy" {
+		t.Fatalf("expected legacy read, ok=%v err=%v val=%q", ok, err, string(got))
 	}
 }
 

@@ -38,78 +38,128 @@ func init() {
 
 func BenchmarkCacheSetGet(b *testing.B) {
 	ctx := context.Background()
+	wantedDriver := os.Getenv("BENCH_DRIVER")
+	include := func(name string) bool {
+		return wantedDriver == "" || wantedDriver == name
+	}
 
 	var cases []benchCase
 
-	cases = append(cases, benchCase{
-		name: "memory",
-		new: func(testing.TB) (*cache.Cache, func()) {
-			return cache.NewCache(cache.NewMemoryStore(ctx)), func() {}
-		},
-	})
+	if include("memory") {
+		cases = append(cases, benchCase{
+			name: "memory",
+			new: func(testing.TB) (*cache.Cache, func()) {
+				return cache.NewCache(cache.NewMemoryStore(ctx)), func() {}
+			},
+		})
+	}
 
-	cases = append(cases, benchCase{
-		name: "file",
-		new: func(tb testing.TB) (*cache.Cache, func()) {
-			dir := tb.TempDir()
-			return cache.NewCache(cache.NewFileStore(ctx, dir)), func() {}
-		},
-	})
+	if include("file") {
+		cases = append(cases, benchCase{
+			name: "file",
+			new: func(tb testing.TB) (*cache.Cache, func()) {
+				dir := tb.TempDir()
+				return cache.NewCache(cache.NewFileStore(ctx, dir)), func() {}
+			},
+		})
+	}
 
 	// Redis
-	if addr := os.Getenv("REDIS_ADDR"); addr != "" {
-		cases = append(cases, redisCase(ctx, addr))
-	} else if c, cleanup, err := startRedis(ctx); err == nil {
-		cases = append(cases, benchCase{name: "redis", new: func(testing.TB) (*cache.Cache, func()) { return c, cleanup }})
+	if include("redis") {
+		if addr := os.Getenv("REDIS_ADDR"); addr != "" {
+			cases = append(cases, redisCase(ctx, addr))
+		} else if c, cleanup, err := startRedis(ctx); err == nil {
+			cases = append(cases, benchCase{name: "redis", new: func(testing.TB) (*cache.Cache, func()) { return c, cleanup }})
+		} else if wantedDriver == "redis" {
+			b.Fatalf("redis benchmark setup failed: %v", err)
+		}
 	}
 
 	// Memcached
-	if addr := os.Getenv("MEMCACHED_ADDR"); addr != "" {
-		cases = append(cases, memcachedCase(ctx, addr))
-	} else if c, cleanup, err := startMemcached(ctx); err == nil {
-		cases = append(cases, benchCase{name: "memcached", new: func(testing.TB) (*cache.Cache, func()) { return c, cleanup }})
+	if include("memcached") {
+		if addr := os.Getenv("MEMCACHED_ADDR"); addr != "" {
+			cases = append(cases, memcachedCase(ctx, addr))
+		} else if c, cleanup, err := startMemcached(ctx); err == nil {
+			cases = append(cases, benchCase{name: "memcached", new: func(testing.TB) (*cache.Cache, func()) { return c, cleanup }})
+		} else if wantedDriver == "memcached" {
+			b.Fatalf("memcached benchmark setup failed: %v", err)
+		}
 	}
 
 	// NATS (JetStream KV)
-	if url := os.Getenv("NATS_URL"); url != "" {
-		cases = append(cases, natsCase(ctx, url))
-		cases = append(cases, natsBucketTTLCase(ctx, url))
-	} else if c, cleanup, err := startNATS(ctx); err == nil {
-		cases = append(cases, benchCase{name: "nats", new: func(testing.TB) (*cache.Cache, func()) { return c, cleanup }})
-		if c2, cleanup2, err2 := startNATS(ctx, cache.WithNATSBucketTTL(true)); err2 == nil {
-			cases = append(cases, benchCase{name: "nats_bucket_ttl", new: func(testing.TB) (*cache.Cache, func()) { return c2, cleanup2 }})
+	if include("nats") || include("nats_bucket_ttl") {
+		if url := os.Getenv("NATS_URL"); url != "" {
+			if include("nats") {
+				cases = append(cases, natsCase(ctx, url))
+			}
+			if include("nats_bucket_ttl") {
+				cases = append(cases, natsBucketTTLCase(ctx, url))
+			}
+		} else {
+			if include("nats") {
+				if c, cleanup, err := startNATS(ctx); err == nil {
+					cases = append(cases, benchCase{name: "nats", new: func(testing.TB) (*cache.Cache, func()) { return c, cleanup }})
+				} else if wantedDriver == "nats" {
+					b.Fatalf("nats benchmark setup failed: %v", err)
+				}
+			}
+			if include("nats_bucket_ttl") {
+				if c2, cleanup2, err2 := startNATS(ctx, cache.WithNATSBucketTTL(true)); err2 == nil {
+					cases = append(cases, benchCase{name: "nats_bucket_ttl", new: func(testing.TB) (*cache.Cache, func()) { return c2, cleanup2 }})
+				} else if wantedDriver == "nats_bucket_ttl" {
+					b.Fatalf("nats_bucket_ttl benchmark setup failed: %v", err2)
+				}
+			}
 		}
 	}
 
 	// DynamoDB
-	if endpoint := os.Getenv("DYNAMO_ENDPOINT"); endpoint != "" {
-		cases = append(cases, dynamoCase(ctx, endpoint))
-	} else if c, cleanup, err := startDynamo(ctx); err == nil {
-		cases = append(cases, benchCase{name: "dynamodb", new: func(testing.TB) (*cache.Cache, func()) { return c, cleanup }})
+	if include("dynamodb") {
+		if endpoint := os.Getenv("DYNAMO_ENDPOINT"); endpoint != "" {
+			cases = append(cases, dynamoCase(ctx, endpoint))
+		} else if c, cleanup, err := startDynamo(ctx); err == nil {
+			cases = append(cases, benchCase{name: "dynamodb", new: func(testing.TB) (*cache.Cache, func()) { return c, cleanup }})
+		} else if wantedDriver == "dynamodb" {
+			b.Fatalf("dynamodb benchmark setup failed: %v", err)
+		}
 	}
 
 	// SQL: Postgres and MySQL
-	if dsn := os.Getenv("BENCH_PG_DSN"); dsn != "" {
-		cases = append(cases, postgresCase(ctx, dsn))
-	} else if c, cleanup, err := startPostgres(ctx); err == nil {
-		cases = append(cases, benchCase{name: "sql_postgres", new: func(testing.TB) (*cache.Cache, func()) { return c, cleanup }})
+	if include("sql_postgres") {
+		if dsn := os.Getenv("BENCH_PG_DSN"); dsn != "" {
+			cases = append(cases, postgresCase(ctx, dsn))
+		} else if c, cleanup, err := startPostgres(ctx); err == nil {
+			cases = append(cases, benchCase{name: "sql_postgres", new: func(testing.TB) (*cache.Cache, func()) { return c, cleanup }})
+		} else if wantedDriver == "sql_postgres" {
+			b.Fatalf("sql_postgres benchmark setup failed: %v", err)
+		}
 	}
 
-	if dsn := os.Getenv("BENCH_MYSQL_DSN"); dsn != "" {
-		cases = append(cases, mysqlCase(ctx, dsn))
-	} else if c, cleanup, err := startMySQL(ctx); err == nil {
-		cases = append(cases, benchCase{name: "sql_mysql", new: func(testing.TB) (*cache.Cache, func()) { return c, cleanup }})
+	if include("sql_mysql") {
+		if dsn := os.Getenv("BENCH_MYSQL_DSN"); dsn != "" {
+			cases = append(cases, mysqlCase(ctx, dsn))
+		} else if c, cleanup, err := startMySQL(ctx); err == nil {
+			cases = append(cases, benchCase{name: "sql_mysql", new: func(testing.TB) (*cache.Cache, func()) { return c, cleanup }})
+		} else if wantedDriver == "sql_mysql" {
+			b.Fatalf("sql_mysql benchmark setup failed: %v", err)
+		}
 	}
 
 	// SQLite in-memory is always available.
-	cases = append(cases, benchCase{
-		name: "sql_sqlite",
-		new: func(tb testing.TB) (*cache.Cache, func()) {
-			dsn := "file:" + filepath.Join(tb.TempDir(), "bench.sqlite") + "?cache=shared&mode=rwc"
-			store := cache.NewSQLStore(ctx, "sqlite", dsn, "cache_entries", cache.WithPrefix("bench"))
-			return cache.NewCache(store), func() {}
-		},
-	})
+	if include("sql_sqlite") {
+		cases = append(cases, benchCase{
+			name: "sql_sqlite",
+			new: func(tb testing.TB) (*cache.Cache, func()) {
+				dsn := "file:" + filepath.Join(tb.TempDir(), "bench.sqlite") + "?cache=shared&mode=rwc"
+				store := cache.NewSQLStore(ctx, "sqlite", dsn, "cache_entries", cache.WithPrefix("bench"))
+				return cache.NewCache(store), func() {}
+			},
+		})
+	}
+
+	if len(cases) == 0 {
+		b.Fatalf("no benchmark cases selected; BENCH_DRIVER=%q", wantedDriver)
+	}
 
 	for _, bc := range cases {
 		bc := bc
