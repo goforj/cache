@@ -468,6 +468,7 @@ func runCacheHelperInvariantSuite(t *testing.T, store Store, caseKey func(string
 	runBatchHelperInvariantSuite(t, cache, store.Driver(), caseKey, noOp)
 	runCounterHelperInvariantSuite(t, cache, store.Driver(), caseKey, noOp)
 	runContextCancellationHelperInvariantSuite(t, cache, store.Driver(), caseKey, noOp)
+	runLatencyAndTransientFaultHelperInvariantSuite(t, store, caseKey, noOp)
 }
 
 func runLockHelperInvariantSuite(t *testing.T, cache *Cache, driver Driver, caseKey func(string) string, noOp bool) {
@@ -705,6 +706,197 @@ func runContextCancellationHelperInvariantSuite(t *testing.T, cache *Cache, driv
 	if noOp {
 		return
 	}
+}
+
+func runLatencyAndTransientFaultHelperInvariantSuite(t *testing.T, base Store, caseKey func(string) string, noOp bool) {
+	t.Helper()
+	if noOp {
+		t.Skip("null store is not meaningful for backend latency/fault injection semantics")
+	}
+
+	t.Run("slow_get_timeout_short_circuits_refreshahead_and_remember", func(t *testing.T) {
+		slow := &latencyInjectStore{
+			inner: base,
+			get:   150 * time.Millisecond,
+		}
+		cache := NewCache(slow)
+
+		check := func(name string, run func(ctx context.Context, calls *atomic.Int64) error) {
+			t.Helper()
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
+			defer cancel()
+			var calls atomic.Int64
+			start := time.Now()
+			err := run(ctx, &calls)
+			elapsed := time.Since(start)
+			if !errors.Is(err, context.DeadlineExceeded) {
+				t.Fatalf("%s expected context deadline exceeded, got %v", name, err)
+			}
+			if elapsed > 350*time.Millisecond {
+				t.Fatalf("%s returned too slowly after ctx timeout: %v", name, elapsed)
+			}
+			if calls.Load() != 0 {
+				t.Fatalf("%s callback should not run on timed-out GetCtx path, got %d", name, calls.Load())
+			}
+		}
+
+		check("RefreshAheadCtx", func(ctx context.Context, calls *atomic.Int64) error {
+			_, err := cache.RefreshAheadCtx(ctx, caseKey("net:slow:refresh"), time.Minute, 10*time.Second, func(context.Context) ([]byte, error) {
+				calls.Add(1)
+				return []byte("v"), nil
+			})
+			return err
+		})
+		check("RememberCtx", func(ctx context.Context, calls *atomic.Int64) error {
+			_, err := cache.RememberCtx(ctx, caseKey("net:slow:remember"), time.Minute, func(context.Context) ([]byte, error) {
+				calls.Add(1)
+				return []byte("v"), nil
+			})
+			return err
+		})
+		check("RememberStringCtx", func(ctx context.Context, calls *atomic.Int64) error {
+			_, err := cache.RememberStringCtx(ctx, caseKey("net:slow:remember_string"), time.Minute, func(context.Context) (string, error) {
+				calls.Add(1)
+				return "v", nil
+			})
+			return err
+		})
+		check("RememberJSONCtx", func(ctx context.Context, calls *atomic.Int64) error {
+			type payload struct {
+				Name string `json:"name"`
+			}
+			_, err := RememberJSONCtx[payload](ctx, cache, caseKey("net:slow:remember_json"), time.Minute, func(context.Context) (payload, error) {
+				calls.Add(1)
+				return payload{Name: "Ada"}, nil
+			})
+			return err
+		})
+
+		if slow.getCalls.Load() < 4 {
+			t.Fatalf("expected multiple get calls through slow wrapper, got %d", slow.getCalls.Load())
+		}
+	})
+
+	t.Run("slow_add_timeout_returns_promptly_without_lock_retries", func(t *testing.T) {
+		slow := &latencyInjectStore{
+			inner: base,
+			add:   150 * time.Millisecond,
+		}
+		cache := NewCache(slow)
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
+		defer cancel()
+
+		start := time.Now()
+		locked, err := cache.LockCtx(ctx, caseKey("net:slow:lock"), time.Second, 10*time.Millisecond)
+		elapsed := time.Since(start)
+		if locked || !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("expected lock timeout via ctx deadline, locked=%v err=%v", locked, err)
+		}
+		if elapsed > 350*time.Millisecond {
+			t.Fatalf("LockCtx returned too slowly after timeout: %v", elapsed)
+		}
+		if got := slow.addCalls.Load(); got != 1 {
+			t.Fatalf("expected single Add call (no hidden retries after backend error), got %d", got)
+		}
+		time.Sleep(20 * time.Millisecond)
+		if got := slow.addCalls.Load(); got != 1 {
+			t.Fatalf("expected no post-return Add retries, got %d", got)
+		}
+	})
+
+	t.Run("slow_increment_timeout_returns_promptly_for_rate_limit", func(t *testing.T) {
+		slow := &latencyInjectStore{
+			inner:     base,
+			increment: 150 * time.Millisecond,
+		}
+		cache := NewCache(slow)
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
+		defer cancel()
+
+		start := time.Now()
+		allowed, count, err := cache.RateLimitCtx(ctx, caseKey("net:slow:rl"), 5, time.Minute)
+		elapsed := time.Since(start)
+		if err == nil || allowed || count != 0 {
+			t.Fatalf("expected rate limit timeout error, allowed=%v count=%d err=%v", allowed, count, err)
+		}
+		if !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("expected context deadline exceeded, got %v", err)
+		}
+		if elapsed > 350*time.Millisecond {
+			t.Fatalf("RateLimitCtx returned too slowly after timeout: %v", elapsed)
+		}
+		if got := slow.incrementCalls.Load(); got != 1 {
+			t.Fatalf("expected one increment call, got %d", got)
+		}
+	})
+
+	t.Run("intermittent_backend_errors_return_without_hidden_retries", func(t *testing.T) {
+		injected := errors.New("injected backend timeout")
+		flaky := &transientOpErrorStore{
+			inner:       base,
+			getErrsLeft: 2, // refresh + remember
+			addErrsLeft: 1, // lock
+			incErrsLeft: 1, // rate limit
+			err:         injected,
+		}
+		cache := NewCache(flaky)
+
+		var refreshCalls atomic.Int64
+		_, err := cache.RefreshAheadCtx(context.Background(), caseKey("net:flaky:refresh"), time.Minute, 10*time.Second, func(context.Context) ([]byte, error) {
+			refreshCalls.Add(1)
+			return []byte("v"), nil
+		})
+		if !errors.Is(err, injected) {
+			t.Fatalf("expected injected refresh error, got %v", err)
+		}
+		if refreshCalls.Load() != 0 {
+			t.Fatalf("refresh callback should not run on get error, got %d", refreshCalls.Load())
+		}
+
+		var rememberCalls atomic.Int64
+		_, err = cache.RememberCtx(context.Background(), caseKey("net:flaky:remember"), time.Minute, func(context.Context) ([]byte, error) {
+			rememberCalls.Add(1)
+			return []byte("v"), nil
+		})
+		if !errors.Is(err, injected) {
+			t.Fatalf("expected injected remember error, got %v", err)
+		}
+		if rememberCalls.Load() != 0 {
+			t.Fatalf("remember callback should not run on get error, got %d", rememberCalls.Load())
+		}
+
+		locked, err := cache.LockCtx(context.Background(), caseKey("net:flaky:lock"), time.Second, 10*time.Millisecond)
+		if !errors.Is(err, injected) || locked {
+			t.Fatalf("expected injected lock error without retries, locked=%v err=%v", locked, err)
+		}
+
+		allowed, count, err := cache.RateLimitCtx(context.Background(), caseKey("net:flaky:rl"), 5, time.Minute)
+		if !errors.Is(err, injected) || allowed || count != 0 {
+			t.Fatalf("expected injected rate-limit error, allowed=%v count=%d err=%v", allowed, count, err)
+		}
+
+		if got := flaky.getCalls.Load(); got != 2 {
+			t.Fatalf("expected two get calls total (refresh+remember), got %d", got)
+		}
+		if got := flaky.addCalls.Load(); got != 1 {
+			t.Fatalf("expected one add call for lock, got %d", got)
+		}
+		if got := flaky.incrementCalls.Load(); got != 1 {
+			t.Fatalf("expected one increment call for rate limit, got %d", got)
+		}
+
+		// Subsequent explicit calls should succeed once transient errors are exhausted.
+		if _, err := cache.RememberCtx(context.Background(), caseKey("net:flaky:remember"), time.Minute, func(context.Context) ([]byte, error) {
+			return []byte("ok"), nil
+		}); err != nil {
+			t.Fatalf("expected remember success after transient error exhausted, got %v", err)
+		}
+		if _, err := cache.RefreshAheadCtx(context.Background(), caseKey("net:flaky:refresh"), time.Minute, 10*time.Second, func(context.Context) ([]byte, error) {
+			return []byte("ok"), nil
+		}); err != nil {
+			t.Fatalf("expected refresh ahead success after transient error exhausted, got %v", err)
+		}
+	})
 }
 
 func driverPropagatesCanceledContext(driver Driver) bool {
@@ -1393,6 +1585,133 @@ func (s *getErrorInjectStore) DeleteMany(ctx context.Context, keys ...string) er
 }
 
 func (s *getErrorInjectStore) Flush(ctx context.Context) error { return s.inner.Flush(ctx) }
+
+type latencyInjectStore struct {
+	inner Store
+
+	get       time.Duration
+	add       time.Duration
+	increment time.Duration
+
+	getCalls       atomic.Int64
+	addCalls       atomic.Int64
+	incrementCalls atomic.Int64
+}
+
+func (s *latencyInjectStore) Driver() Driver { return s.inner.Driver() }
+
+func (s *latencyInjectStore) Get(ctx context.Context, key string) ([]byte, bool, error) {
+	s.getCalls.Add(1)
+	if err := sleepWithContext(ctx, s.get); err != nil {
+		return nil, false, err
+	}
+	return s.inner.Get(ctx, key)
+}
+
+func (s *latencyInjectStore) Set(ctx context.Context, key string, value []byte, ttl time.Duration) error {
+	return s.inner.Set(ctx, key, value, ttl)
+}
+
+func (s *latencyInjectStore) Add(ctx context.Context, key string, value []byte, ttl time.Duration) (bool, error) {
+	s.addCalls.Add(1)
+	if err := sleepWithContext(ctx, s.add); err != nil {
+		return false, err
+	}
+	return s.inner.Add(ctx, key, value, ttl)
+}
+
+func (s *latencyInjectStore) Increment(ctx context.Context, key string, delta int64, ttl time.Duration) (int64, error) {
+	s.incrementCalls.Add(1)
+	if err := sleepWithContext(ctx, s.increment); err != nil {
+		return 0, err
+	}
+	return s.inner.Increment(ctx, key, delta, ttl)
+}
+
+func (s *latencyInjectStore) Decrement(ctx context.Context, key string, delta int64, ttl time.Duration) (int64, error) {
+	return s.inner.Decrement(ctx, key, delta, ttl)
+}
+
+func (s *latencyInjectStore) Delete(ctx context.Context, key string) error {
+	return s.inner.Delete(ctx, key)
+}
+
+func (s *latencyInjectStore) DeleteMany(ctx context.Context, keys ...string) error {
+	return s.inner.DeleteMany(ctx, keys...)
+}
+
+func (s *latencyInjectStore) Flush(ctx context.Context) error { return s.inner.Flush(ctx) }
+
+type transientOpErrorStore struct {
+	inner Store
+
+	getErrsLeft int64
+	addErrsLeft int64
+	incErrsLeft int64
+	err         error
+
+	getCalls       atomic.Int64
+	addCalls       atomic.Int64
+	incrementCalls atomic.Int64
+}
+
+func (s *transientOpErrorStore) Driver() Driver { return s.inner.Driver() }
+
+func (s *transientOpErrorStore) Get(ctx context.Context, key string) ([]byte, bool, error) {
+	s.getCalls.Add(1)
+	if atomic.AddInt64(&s.getErrsLeft, -1) >= 0 {
+		return nil, false, s.err
+	}
+	return s.inner.Get(ctx, key)
+}
+
+func (s *transientOpErrorStore) Set(ctx context.Context, key string, value []byte, ttl time.Duration) error {
+	return s.inner.Set(ctx, key, value, ttl)
+}
+
+func (s *transientOpErrorStore) Add(ctx context.Context, key string, value []byte, ttl time.Duration) (bool, error) {
+	s.addCalls.Add(1)
+	if atomic.AddInt64(&s.addErrsLeft, -1) >= 0 {
+		return false, s.err
+	}
+	return s.inner.Add(ctx, key, value, ttl)
+}
+
+func (s *transientOpErrorStore) Increment(ctx context.Context, key string, delta int64, ttl time.Duration) (int64, error) {
+	s.incrementCalls.Add(1)
+	if atomic.AddInt64(&s.incErrsLeft, -1) >= 0 {
+		return 0, s.err
+	}
+	return s.inner.Increment(ctx, key, delta, ttl)
+}
+
+func (s *transientOpErrorStore) Decrement(ctx context.Context, key string, delta int64, ttl time.Duration) (int64, error) {
+	return s.inner.Decrement(ctx, key, delta, ttl)
+}
+
+func (s *transientOpErrorStore) Delete(ctx context.Context, key string) error {
+	return s.inner.Delete(ctx, key)
+}
+
+func (s *transientOpErrorStore) DeleteMany(ctx context.Context, keys ...string) error {
+	return s.inner.DeleteMany(ctx, keys...)
+}
+
+func (s *transientOpErrorStore) Flush(ctx context.Context) error { return s.inner.Flush(ctx) }
+
+func sleepWithContext(ctx context.Context, d time.Duration) error {
+	if d <= 0 {
+		return nil
+	}
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
+}
 
 func lockTTLFor(driver Driver) time.Duration {
 	if driver == DriverMemcached {
