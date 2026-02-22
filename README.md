@@ -1118,5 +1118,7 @@ SetStringCtx is the context-aware variant of SetString.
 | Payload size limits | large binary payload round-trips; backend-specific near/over-limit checks (Memcached, DynamoDB) | Driver-specific where meaningful |
 | Cross-store scope | shared vs local semantics across store instances (e.g. rate-limit counters) | Driver-specific expectations |
 | Backend fault / recovery | backend restart mid-suite, outage errors, post-recovery round-trip/lock/refresh/stale flows | Container-backed drivers (`INTEGRATION_FAULT=1`) |
+| Observer metadata | op names, hit/miss flags, propagated errors, driver labels | Unit contract tests (integration helper paths exercise emissions indirectly) |
+| Memo store caveats | per-process memoization, local-only invalidation, cross-process staleness behavior | Unit tests |
 
 Default integration runs cover the contract suite above. Fault/recovery restart tests are opt-in because they restart shared testcontainers and are slower/flakier by nature.
