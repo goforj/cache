@@ -36,21 +36,6 @@ An explicit cache abstraction with a minimal Store interface and ergonomic Cache
 | <img src="https://img.shields.io/badge/dynamodb-4053D6?logo=amazon-dynamodb&logoColor=white" alt="DynamoDB"> | Networked | ✓ | ✓ | ✓ | ✓ | Backed by DynamoDB (supports localstack/dynamodb-local). |
 |    <img src="https://img.shields.io/badge/sql-336791?logo=postgresql&logoColor=white" alt="SQL"> | Networked / local | ✓ | ✓ | ✓ | ✓ | Postgres / MySQL / SQLite via database/sql; table schema managed automatically. |
 
-### Payload size caps (effective bytes written)
-
-| Driver | Hard / default cap | Configurable | Notes |
-| :--- | :--- | :---: | :--- |
-| `null` | N/A | N/A | No persistence. |
-| `memory` | Process memory | - | No backend hard cap. |
-| `file` | Disk / filesystem | - | No backend hard cap. |
-| `redis` | Backend practical (memory/SLO) | Server-side | No commonly hit low per-value hard cap in app use. |
-| `nats` | Server/bucket payload limits | Server-side | Depends on NATS/JetStream config. |
-| `memcached` | ~`1 MiB` per item (default) | ✓ (`memcached -I`) | Backend-enforced item limit. |
-| `dynamodb` | `400 KB` item hard cap | No | Includes key/metadata overhead, so usable value bytes are lower. |
-| `sql` (`sqlite`/`postgres`/`mysql`) | DB/engine config dependent | Server-side | Blob/row/packet limits vary by engine and deployment. |
-
-`WithMaxValueBytes` is the only uniform application-level cap across all drivers, and it applies to post-shaping bytes (after compression/encryption overhead).
-
 ## Installation
 
 ```bash
@@ -1098,6 +1083,21 @@ fmt.Println(c.SetString("user:42:name", "Ada", time.Minute) == nil) // true
 
 SetStringCtx is the context-aware variant of SetString.
 <!-- api:embed:end -->
+
+### Payload size caps (effective bytes written)
+
+| Driver | Hard / default cap | Configurable | Notes |
+| ---: | :--- | :---: | :--- |
+| **Null** | N/A | N/A | No persistence. |
+| **Memory** | Process memory | - | No backend hard cap. |
+| **File** | Disk / filesystem | - | No backend hard cap. |
+| **Redis** | Backend practical (memory/SLO) | Server-side | No commonly hit low per-value hard cap in app use. |
+| **NATS** | Server/bucket payload limits | Server-side | Depends on NATS/JetStream config. |
+| **Memcached** | ~1 MiB per item (default) | ✓ (server `-I`) | Backend-enforced item limit. |
+| **DynamoDB** | 400 KB item hard cap | No | Includes key/metadata overhead, so usable value bytes are lower. |
+| **SQL** | DB/engine config dependent | Server-side | Blob/row/packet limits vary by engine and deployment. |
+
+`WithMaxValueBytes` is the only uniform application-level cap across all drivers, and it applies to post-shaping bytes (after compression/encryption overhead).
 
 ## Integration Coverage
 
