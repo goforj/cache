@@ -3,9 +3,11 @@
 package cache
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"math/rand"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -416,6 +418,45 @@ func runCacheHelperInvariantSuite(t *testing.T, store Store, caseKey func(string
 			time.Sleep(150 * time.Millisecond)
 			if got := calls.Load(); got != 0 {
 				t.Fatalf("expected no async refresh callback without valid metadata, got %d", got)
+			}
+		}
+	})
+
+	t.Run("refresh_ahead_hit_skips_async_refresh_with_random_malformed_metadata", func(t *testing.T) {
+		if noOp {
+			t.Skip("null store does not persist seeded cache hits")
+		}
+
+		rng := rand.New(rand.NewSource(42))
+		for i := 0; i < 4; i++ {
+			key := caseKey(fmt.Sprintf("edge:refresh_ahead:rand_bad_meta:%d", i))
+			if err := cache.Set(key, []byte("cached"), 2*time.Second); err != nil {
+				t.Fatalf("seed value failed: %v", err)
+			}
+
+			meta := make([]byte, 8+i)
+			for j := range meta {
+				// Force non-numeric metadata so ParseInt always fails.
+				meta[j] = byte('a' + rng.Intn(26))
+			}
+			if err := cache.Set(key+refreshMetaSuffix, meta, 2*time.Second); err != nil {
+				t.Fatalf("seed random malformed metadata failed: %v", err)
+			}
+
+			var calls atomic.Int64
+			body, err := cache.RefreshAhead(key, 2*time.Second, time.Second, func() ([]byte, error) {
+				calls.Add(1)
+				return []byte("refreshed"), nil
+			})
+			if err != nil {
+				t.Fatalf("refresh ahead failed: %v", err)
+			}
+			if string(body) != "cached" {
+				t.Fatalf("expected cached value on hit, got %q", string(body))
+			}
+			time.Sleep(60 * time.Millisecond)
+			if got := calls.Load(); got != 0 {
+				t.Fatalf("expected no async refresh callback with malformed metadata, got %d", got)
 			}
 		}
 	})
@@ -1251,6 +1292,26 @@ func runDriverFactoryInvariantSuite(t *testing.T, fx storeFactory) {
 		got, ok, err := comboCache.Get("shape:combo")
 		if err != nil || !ok || string(got) != "payload" {
 			t.Fatalf("combo round-trip failed: ok=%v body=%q err=%v", ok, string(got), err)
+		}
+
+		rng := rand.New(rand.NewSource(99))
+		for i := 0; i < 8; i++ {
+			key := fmt.Sprintf("shape:combo:rand:%d", i)
+			size := 1 + rng.Intn(2048)
+			payload := make([]byte, size)
+			if _, err := rng.Read(payload); err != nil {
+				t.Fatalf("random payload gen failed: %v", err)
+			}
+			if err := comboCache.Set(key, payload, time.Second); err != nil {
+				t.Fatalf("combo random set failed (i=%d size=%d): %v", i, size, err)
+			}
+			got, ok, err := comboCache.Get(key)
+			if err != nil || !ok {
+				t.Fatalf("combo random get failed (i=%d): ok=%v err=%v", i, ok, err)
+			}
+			if !bytes.Equal(got, payload) {
+				t.Fatalf("combo random round-trip mismatch (i=%d size=%d)", i, size)
+			}
 		}
 
 		storeMax, cleanupMax := fx.new(t, WithPrefix("itest_shape_max"), WithMaxValueBytes(16))
