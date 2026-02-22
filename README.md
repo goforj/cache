@@ -14,7 +14,8 @@
     <a href="https://goreportcard.com/report/github.com/goforj/cache"><img src="https://goreportcard.com/badge/github.com/goforj/cache" alt="Go Report Card"></a>
     <a href="https://codecov.io/gh/goforj/cache"><img src="https://codecov.io/gh/goforj/cache/graph/badge.svg?token=B6ROULLKWU"/></a>
 <!-- test-count:embed:start -->
-    <img src="https://img.shields.io/badge/tests-274-brightgreen" alt="Tests">
+    <img src="https://img.shields.io/badge/unit_tests-290-brightgreen" alt="Unit tests (executed count)">
+    <img src="https://img.shields.io/badge/integration_tests-305-blue" alt="Integration tests (executed count)">
 <!-- test-count:embed:end -->
 </p>
 

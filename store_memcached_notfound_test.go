@@ -32,7 +32,7 @@ func TestMemcachedIncrementNotFoundPath(t *testing.T) {
 func memcachedInMemoryDial(data map[string][]byte) func(context.Context, string, string) (net.Conn, error) {
 	return func(_ context.Context, _, _ string) (net.Conn, error) {
 		server, client := net.Pipe()
-		go handleMemcachedConn(server, data)
+		go handleMemcachedConn(server, data, nil)
 		return client, nil
 	}
 }

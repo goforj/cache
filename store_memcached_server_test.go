@@ -12,18 +12,22 @@ import (
 )
 
 func startFakeMemcached(t *testing.T) (addr string, stop func(), accept chan net.Conn) {
+	return startFakeMemcachedWithHook(t, nil)
+}
+
+func startFakeMemcachedWithHook(t *testing.T, onCommand func(string)) (addr string, stop func(), accept chan net.Conn) {
 	t.Helper()
 	data := make(map[string][]byte)
 	accept = make(chan net.Conn, 4)
 	go func() {
 		for conn := range accept {
-			go handleMemcachedConn(conn, data)
+			go handleMemcachedConn(conn, data, onCommand)
 		}
 	}()
 	return "pipe", func() { close(accept) }, accept
 }
 
-func handleMemcachedConn(conn net.Conn, data map[string][]byte) {
+func handleMemcachedConn(conn net.Conn, data map[string][]byte, onCommand func(string)) {
 	defer conn.Close()
 	r := bufio.NewReader(conn)
 	w := bufio.NewWriter(conn)
@@ -37,6 +41,9 @@ func handleMemcachedConn(conn net.Conn, data map[string][]byte) {
 			continue
 		}
 		parts := strings.Split(line, " ")
+		if onCommand != nil {
+			onCommand(parts[0])
+		}
 		switch parts[0] {
 		case "get":
 			if len(parts) < 2 {
@@ -169,5 +176,48 @@ func TestMemcachedStoreAgainstFakeServer(t *testing.T) {
 	}
 	if err := store.Flush(ctx); err != nil {
 		t.Fatalf("flush failed: %v", err)
+	}
+}
+
+func TestMemcachedCounterOpsIssueTouchToRefreshTTL(t *testing.T) {
+	origDial := dialMemcached
+	defer func() { dialMemcached = origDial }()
+
+	commands := make(chan string, 32)
+	serverAddr, stop, accept := startFakeMemcachedWithHook(t, func(cmd string) {
+		commands <- cmd
+	})
+	defer stop()
+	dialMemcached = func(ctx context.Context, network, addr string) (net.Conn, error) {
+		_, _, _ = ctx, network, addr
+		server, client := net.Pipe()
+		accept <- server
+		return client, nil
+	}
+
+	store := newMemcachedStore([]string{serverAddr}, time.Second, "pfx")
+	ctx := context.Background()
+	if _, err := store.Increment(ctx, "cnt", 2, time.Second); err != nil {
+		t.Fatalf("increment failed: %v", err)
+	}
+	if _, err := store.Decrement(ctx, "cnt", 1, time.Second); err != nil {
+		t.Fatalf("decrement failed: %v", err)
+	}
+
+	touches := 0
+	deadline := time.After(100 * time.Millisecond)
+	for {
+		select {
+		case cmd := <-commands:
+			if cmd == "touch" {
+				touches++
+			}
+		case <-deadline:
+			goto done
+		}
+	}
+done:
+	if touches < 2 {
+		t.Fatalf("expected touch to be issued after incr/decr to refresh ttl, got %d touches", touches)
 	}
 }

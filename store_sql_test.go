@@ -193,6 +193,27 @@ func TestSQLStoreAddZeroTTL(t *testing.T) {
 	}
 }
 
+func TestSQLStoreAddReusesExpiredKey(t *testing.T) {
+	store := newSQLiteStore(t)
+	ss := store.(*sqlStore)
+	ctx := context.Background()
+
+	expired := time.Now().Add(-time.Hour).UnixMilli()
+	_, err := ss.db.ExecContext(ctx, fmt.Sprintf("INSERT INTO %s (k, v, ea) VALUES (?, ?, ?)", ss.table), ss.cacheKey("readd"), []byte("old"), expired)
+	if err != nil {
+		t.Fatalf("insert expired row: %v", err)
+	}
+
+	created, err := store.Add(ctx, "readd", []byte("new"), time.Minute)
+	if err != nil || !created {
+		t.Fatalf("expected add to reuse expired row, created=%v err=%v", created, err)
+	}
+	body, ok, err := store.Get(ctx, "readd")
+	if err != nil || !ok || string(body) != "new" {
+		t.Fatalf("expected replaced value after add on expired row, ok=%v body=%q err=%v", ok, string(body), err)
+	}
+}
+
 func TestSQLStoreIncrementForUpdateBranch(t *testing.T) {
 	store := newSQLiteStore(t)
 	ss := store.(*sqlStore)

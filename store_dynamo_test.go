@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -12,15 +14,16 @@ import (
 )
 
 type dynStub struct {
-	items        map[string]map[string]types.AttributeValue
-	exists       bool
-	putErr       error
-	scanErr      error
-	getErr       error
-	describeErrs []error
-	createErrs   []error
-	describeHits int
-	createHits   int
+	items           map[string]map[string]types.AttributeValue
+	exists          bool
+	putErr          error
+	scanErr         error
+	getErr          error
+	batchWriteSizes []int
+	describeErrs    []error
+	createErrs      []error
+	describeHits    int
+	createHits      int
 }
 
 func newDynStub() *dynStub { return &dynStub{items: map[string]map[string]types.AttributeValue{}} }
@@ -43,7 +46,21 @@ func (d *dynStub) PutItem(_ context.Context, in *dynamodb.PutItemInput, _ ...fun
 	}
 	key := in.Item["k"].(*types.AttributeValueMemberS).Value
 	if in.ConditionExpression != nil {
-		if _, exists := d.items[key]; exists {
+		if existing, exists := d.items[key]; exists {
+			cond := *in.ConditionExpression
+			if strings.Contains(cond, "ea < :now") {
+				nowAttr, ok := in.ExpressionAttributeValues[":now"].(*types.AttributeValueMemberN)
+				if ok {
+					now, _ := strconv.ParseInt(nowAttr.Value, 10, 64)
+					if eaAttr, ok := existing["ea"].(*types.AttributeValueMemberN); ok {
+						ea, _ := strconv.ParseInt(eaAttr.Value, 10, 64)
+						if ea < now {
+							d.items[key] = in.Item
+							return &dynamodb.PutItemOutput{}, nil
+						}
+					}
+				}
+			}
 			return nil, &types.ConditionalCheckFailedException{}
 		}
 	}
@@ -59,6 +76,7 @@ func (d *dynStub) DeleteItem(_ context.Context, in *dynamodb.DeleteItemInput, _ 
 
 func (d *dynStub) BatchWriteItem(_ context.Context, in *dynamodb.BatchWriteItemInput, _ ...func(*dynamodb.Options)) (*dynamodb.BatchWriteItemOutput, error) {
 	for _, writes := range in.RequestItems {
+		d.batchWriteSizes = append(d.batchWriteSizes, len(writes))
 		for _, wr := range writes {
 			if dr := wr.DeleteRequest; dr != nil {
 				key := dr.Key["k"].(*types.AttributeValueMemberS).Value
@@ -166,6 +184,56 @@ func TestDynamoStoreBasicOperations(t *testing.T) {
 	}
 	if err := store.Flush(ctx); err != nil {
 		t.Fatalf("flush failed: %v", err)
+	}
+}
+
+func TestDynamoStoreAddReusesExpiredKey(t *testing.T) {
+	stub := newDynStub()
+	store, err := newDynamoStore(context.Background(), StoreConfig{
+		DynamoClient: stub,
+		DynamoTable:  "tbl",
+		Prefix:       "p",
+		DefaultTTL:   time.Minute,
+	})
+	if err != nil {
+		t.Fatalf("store create failed: %v", err)
+	}
+	ctx := context.Background()
+	stub.items["p:k"] = map[string]types.AttributeValue{
+		"k":  &types.AttributeValueMemberS{Value: "p:k"},
+		"v":  &types.AttributeValueMemberB{Value: []byte("old")},
+		"ea": &types.AttributeValueMemberN{Value: fmt.Sprintf("%d", time.Now().Add(-time.Hour).UnixMilli())},
+	}
+	created, err := store.Add(ctx, "k", []byte("new"), time.Minute)
+	if err != nil || !created {
+		t.Fatalf("expected expired key add reuse success, created=%v err=%v", created, err)
+	}
+	body, ok, err := store.Get(ctx, "k")
+	if err != nil || !ok || string(body) != "new" {
+		t.Fatalf("expected replaced expired value, ok=%v body=%q err=%v", ok, string(body), err)
+	}
+}
+
+func TestDynamoDeleteManyBatchesOverLimit(t *testing.T) {
+	stub := newDynStub()
+	store := &dynamoStore{client: stub, table: "tbl", prefix: "p", defaultTTL: time.Minute}
+	ctx := context.Background()
+	keys := make([]string, 0, 60)
+	for i := 0; i < 60; i++ {
+		k := fmt.Sprintf("k%d", i)
+		keys = append(keys, k)
+		stub.items["p:"+k] = map[string]types.AttributeValue{
+			"k": &types.AttributeValueMemberS{Value: "p:" + k},
+		}
+	}
+	if err := store.DeleteMany(ctx, keys...); err != nil {
+		t.Fatalf("delete many failed: %v", err)
+	}
+	if len(stub.batchWriteSizes) != 3 {
+		t.Fatalf("expected 3 batch writes for 60 keys, got %d (%v)", len(stub.batchWriteSizes), stub.batchWriteSizes)
+	}
+	if stub.batchWriteSizes[0] > 25 || stub.batchWriteSizes[1] > 25 || stub.batchWriteSizes[2] > 25 {
+		t.Fatalf("expected each batch <=25, got %v", stub.batchWriteSizes)
 	}
 }
 

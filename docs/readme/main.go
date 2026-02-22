@@ -5,13 +5,11 @@ package main
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -39,11 +37,6 @@ func run() error {
 		return err
 	}
 
-	testsCount, err := countTests(root)
-	if err != nil {
-		return fmt.Errorf("count tests: %w", err)
-	}
-
 	funcs, err := parseFuncs(root)
 	if err != nil {
 		return err
@@ -58,11 +51,6 @@ func run() error {
 	}
 
 	out, err := replaceAPISection(string(data), api)
-	if err != nil {
-		return err
-	}
-
-	out, err = updateTestsSection(out, testsCount)
 	if err != nil {
 		return err
 	}
@@ -427,40 +415,220 @@ func replaceAPISection(readme, api string) (string, error) {
 	return out.String(), nil
 }
 
-func countTests(root string) (int, error) {
-	cmd := exec.Command("go", "test", "./...", "-run", "Test", "-count=1", "-json")
-	cmd.Dir = root
-
-	var out bytes.Buffer
-	cmd.Stdout = &out
-	cmd.Stderr = &out
-
-	if err := cmd.Run(); err != nil {
-		return 0, fmt.Errorf("go test -json: %w\n%s", err, out.String())
-	}
-
-	var total int
-	dec := json.NewDecoder(bytes.NewReader(out.Bytes()))
-
-	for dec.More() {
-		var event struct {
-			Action string `json:"Action"`
-			Test   string `json:"Test"`
-		}
-		if err := dec.Decode(&event); err != nil {
-			return 0, err
-		}
-		if event.Action == "run" && event.Test != "" {
-			total++
-		}
-	}
-
-	return total, nil
+type TestCounts struct {
+	UnitFuncs                 int
+	IntegrationFuncs          int
+	UnitStaticSubtests        int
+	IntegrationStaticSubtests int
 }
 
-var testsBadgePattern = regexp.MustCompile(`tests-\d+-brightgreen`)
+type ContractMatrix struct {
+	Drivers           int
+	Cases             int
+	InvariantSubtests int
+}
 
-func updateTestsSection(readme string, tests int) (string, error) {
+func countTests(root string) (TestCounts, error) {
+	var counts TestCounts
+
+	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			name := info.Name()
+			if name == ".git" || name == "vendor" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+
+		src, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+
+		fset := token.NewFileSet()
+		file, err := parser.ParseFile(fset, path, src, 0)
+		if err != nil {
+			return err
+		}
+
+		isIntegration := hasIntegrationBuildTag(src)
+		subtests := countLiteralSubtests(file)
+		for _, decl := range file.Decls {
+			fn, ok := decl.(*ast.FuncDecl)
+			if !ok || fn.Recv != nil {
+				continue
+			}
+			if !strings.HasPrefix(fn.Name.Name, "Test") {
+				continue
+			}
+			if isIntegration {
+				counts.IntegrationFuncs++
+			} else {
+				counts.UnitFuncs++
+			}
+		}
+		if isIntegration {
+			counts.IntegrationStaticSubtests += subtests
+		} else {
+			counts.UnitStaticSubtests += subtests
+		}
+		return nil
+	})
+	if err != nil {
+		return TestCounts{}, err
+	}
+
+	return counts, nil
+}
+
+func countLiteralSubtests(file *ast.File) int {
+	count := 0
+	ast.Inspect(file, func(n ast.Node) bool {
+		call, ok := n.(*ast.CallExpr)
+		if !ok || len(call.Args) < 2 {
+			return true
+		}
+		sel, ok := call.Fun.(*ast.SelectorExpr)
+		if !ok || sel.Sel == nil || sel.Sel.Name != "Run" {
+			return true
+		}
+		lit, ok := call.Args[0].(*ast.BasicLit)
+		if !ok || lit.Kind != token.STRING {
+			return true
+		}
+		if _, ok := call.Args[1].(*ast.FuncLit); !ok {
+			return true
+		}
+		count++
+		return true
+	})
+	return count
+}
+
+func readContractMatrix(root string) (ContractMatrix, error) {
+	path := filepath.Join(root, "store_contract_integration_test.go")
+	src, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return ContractMatrix{}, nil
+		}
+		return ContractMatrix{}, err
+	}
+
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, path, src, 0)
+	if err != nil {
+		return ContractMatrix{}, err
+	}
+
+	var m ContractMatrix
+	invariantFns := map[string]bool{
+		"runCacheHelperInvariantSuite":         true,
+		"runLockHelperInvariantSuite":          true,
+		"runRateLimitHelperInvariantSuite":     true,
+		"runRefreshAheadHelperInvariantSuite":  true,
+		"runRememberStaleDeeperInvariantSuite": true,
+		"runBatchHelperInvariantSuite":         true,
+		"runCounterHelperInvariantSuite":       true,
+		"runDriverFactoryInvariantSuite":       true,
+	}
+
+	for _, decl := range file.Decls {
+		fn, ok := decl.(*ast.FuncDecl)
+		if !ok || fn.Body == nil {
+			continue
+		}
+		switch fn.Name.Name {
+		case "integrationContractCases":
+			m.Cases = countReturnedCompositeElements(fn, "contractCase")
+		case "integrationFixtures":
+			m.Drivers = countCompositeLitsByType(fn.Body, "storeFactory")
+		default:
+			if invariantFns[fn.Name.Name] {
+				m.InvariantSubtests += countLiteralSubtestsInBlock(fn.Body)
+			}
+		}
+	}
+
+	return m, nil
+}
+
+func countReturnedCompositeElements(fn *ast.FuncDecl, elemType string) int {
+	if fn.Body == nil {
+		return 0
+	}
+	for _, stmt := range fn.Body.List {
+		ret, ok := stmt.(*ast.ReturnStmt)
+		if !ok || len(ret.Results) == 0 {
+			continue
+		}
+		cl, ok := ret.Results[0].(*ast.CompositeLit)
+		if !ok {
+			continue
+		}
+		arr, ok := cl.Type.(*ast.ArrayType)
+		if !ok {
+			continue
+		}
+		id, ok := arr.Elt.(*ast.Ident)
+		if !ok || id.Name != elemType {
+			continue
+		}
+		return len(cl.Elts)
+	}
+	return 0
+}
+
+func countCompositeLitsByType(body *ast.BlockStmt, typeName string) int {
+	count := 0
+	ast.Inspect(body, func(n ast.Node) bool {
+		cl, ok := n.(*ast.CompositeLit)
+		if !ok {
+			return true
+		}
+		id, ok := cl.Type.(*ast.Ident)
+		if ok && id.Name == typeName {
+			count++
+		}
+		return true
+	})
+	return count
+}
+
+func countLiteralSubtestsInBlock(body *ast.BlockStmt) int {
+	if body == nil {
+		return 0
+	}
+	count := 0
+	ast.Inspect(body, func(n ast.Node) bool {
+		call, ok := n.(*ast.CallExpr)
+		if !ok || len(call.Args) < 2 {
+			return true
+		}
+		sel, ok := call.Fun.(*ast.SelectorExpr)
+		if !ok || sel.Sel == nil || sel.Sel.Name != "Run" {
+			return true
+		}
+		lit, ok := call.Args[0].(*ast.BasicLit)
+		if !ok || lit.Kind != token.STRING {
+			return true
+		}
+		if _, ok := call.Args[1].(*ast.FuncLit); !ok {
+			return true
+		}
+		count++
+		return true
+	})
+	return count
+}
+
+func updateTestsSection(readme string, tests TestCounts, matrix ContractMatrix) (string, error) {
 	start := strings.Index(readme, testCountStart)
 	end := strings.Index(readme, testCountEnd)
 
@@ -477,9 +645,34 @@ func updateTestsSection(readme string, tests int) (string, error) {
 		leading = "\n"
 	}
 
-	badge := fmt.Sprintf("%s    <img src=\"https://img.shields.io/badge/tests-%d-brightgreen\" alt=\"Tests\">\n", leading, tests)
+	_ = matrix
+	lines := []string{
+		fmt.Sprintf("    <img src=\"https://img.shields.io/badge/unit_tests-%d-brightgreen\" alt=\"Unit tests (static count of Test funcs)\">", tests.UnitFuncs),
+		fmt.Sprintf("    <img src=\"https://img.shields.io/badge/integration_tests-%d-blue\" alt=\"Integration tests (static count of Test funcs)\">", tests.IntegrationFuncs),
+	}
+	badge := leading + strings.Join(lines, "\n") + "\n"
 
 	return before + badge + after, nil
+}
+
+func hasIntegrationBuildTag(src []byte) bool {
+	lines := strings.Split(string(src), "\n")
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+		if strings.HasPrefix(trimmed, "package ") {
+			break
+		}
+		if strings.Contains(trimmed, "go:build") && strings.Contains(trimmed, "integration") {
+			return true
+		}
+		if strings.HasPrefix(trimmed, "// +build") && strings.Contains(trimmed, "integration") {
+			return true
+		}
+	}
+	return false
 }
 
 //
