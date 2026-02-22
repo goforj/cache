@@ -7,10 +7,11 @@ import (
 	"context"
 	"fmt"
 	"github.com/goforj/cache"
+	"time"
 )
 
 func main() {
-	// Get returns raw bytes for key when present.
+	// Get acquires the lock once, runs fn if acquired, then releases automatically.
 
 	// Example: get bytes
 	ctx := context.Background()
@@ -19,4 +20,13 @@ func main() {
 	_ = c.Set("user:42", []byte("Ada"), 0)
 	value, ok, _ := c.Get("user:42")
 	fmt.Println(ok, string(value)) // true Ada
+	// Example: acquire once and auto-release
+	ctx := context.Background()
+	c := cache.NewCache(cache.NewMemoryStore(ctx))
+	lock := c.NewLockHandle("job:sync", 10*time.Second)
+	locked, err := lock.Get(func() error {
+		// do protected work
+		return nil
+	})
+	fmt.Println(err == nil, locked) // true true
 }
