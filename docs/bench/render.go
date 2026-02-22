@@ -80,10 +80,19 @@ func RenderBenchmarks() {
 
 func runBenchmarks(ctx context.Context) map[string][]benchRow {
 	drivers := []string{"memory", "file", "redis", "memcached", "sql_postgres", "sql_mysql", "sql_sqlite"}
-	ops := map[string]func(context.Context, *cache.Cache){
-		"Set":    doSet,
-		"Get":    doGet,
-		"Delete": doDelete,
+	ops := map[string]struct {
+		setup func(context.Context, *cache.Cache)
+		run   func(context.Context, *cache.Cache)
+	}{
+		"set_bytes":            {run: doSetBytes},
+		"set_string":           {run: doSetString},
+		"set_typed_string":     {run: doSetTypedString},
+		"set_typed_struct":     {run: doSetTypedStruct},
+		"get_bytes":            {setup: setupGetBytes, run: doGetBytes},
+		"get_string":           {setup: setupGetString, run: doGetString},
+		"get_typed_string":     {setup: setupGetTypedString, run: doGetTypedString},
+		"get_typed_struct":     {setup: setupGetTypedStruct, run: doGetTypedStruct},
+		"delete":               {setup: setupDelete, run: doDelete},
 	}
 
 	results := make(map[string][]benchRow)
@@ -95,8 +104,11 @@ func runBenchmarks(ctx context.Context) map[string][]benchRow {
 		if cleanup != nil {
 			defer cleanup()
 		}
-		for opName, fn := range ops {
-			ns, bytes, allocs, opCount := benchOp(ctx, c, fn)
+		for opName, op := range ops {
+			if op.setup != nil {
+				op.setup(ctx, c)
+			}
+			ns, bytes, allocs, opCount := benchOp(ctx, c, op.run)
 			results[opName] = append(results[opName], benchRow{
 				Driver:   driver,
 				Op:       opName,
@@ -137,8 +149,11 @@ func runBenchmarks(ctx context.Context) map[string][]benchRow {
 			if cleanup != nil {
 				defer cleanup()
 			}
-			for opName, fn := range ops {
-				ns, bytes, allocs, opCount := benchOp(ctx, c, fn)
+			for opName, op := range ops {
+				if op.setup != nil {
+					op.setup(ctx, c)
+				}
+				ns, bytes, allocs, opCount := benchOp(ctx, c, op.run)
 				pairRows = append(pairRows, benchRow{
 					Driver:   variant.name,
 					Op:       opName,
@@ -168,12 +183,61 @@ func benchOp(ctx context.Context, c *cache.Cache, fn func(context.Context, *cach
 	return float64(res.NsPerOp()), float64(res.AllocedBytesPerOp()), float64(res.AllocsPerOp()), int64(res.N)
 }
 
-func doSet(ctx context.Context, c *cache.Cache) {
+type benchProfile struct {
+	Name  string `json:"name"`
+	Level int    `json:"level"`
+}
+
+func doSetBytes(ctx context.Context, c *cache.Cache) {
 	_ = c.SetBytes("bench:key", []byte("v"), time.Minute)
 }
 
-func doGet(ctx context.Context, c *cache.Cache) {
+func doSetString(ctx context.Context, c *cache.Cache) {
+	_ = c.SetString("bench:key", "v", time.Minute)
+}
+
+func doSetTypedString(ctx context.Context, c *cache.Cache) {
+	_ = cache.Set(c, "bench:key", "v", time.Minute)
+}
+
+func doSetTypedStruct(ctx context.Context, c *cache.Cache) {
+	_ = cache.Set(c, "bench:key", benchProfile{Name: "Ada", Level: 7}, time.Minute)
+}
+
+func setupGetBytes(ctx context.Context, c *cache.Cache) {
+	_ = c.SetBytes("bench:key", []byte("v"), time.Minute)
+}
+
+func setupGetString(ctx context.Context, c *cache.Cache) {
+	_ = c.SetString("bench:key", "v", time.Minute)
+}
+
+func setupGetTypedString(ctx context.Context, c *cache.Cache) {
+	_ = cache.Set(c, "bench:key", "v", time.Minute)
+}
+
+func setupGetTypedStruct(ctx context.Context, c *cache.Cache) {
+	_ = cache.Set(c, "bench:key", benchProfile{Name: "Ada", Level: 7}, time.Minute)
+}
+
+func setupDelete(ctx context.Context, c *cache.Cache) {
+	_ = c.SetBytes("bench:key", []byte("v"), time.Minute)
+}
+
+func doGetBytes(ctx context.Context, c *cache.Cache) {
 	_, _, _ = c.GetBytes("bench:key")
+}
+
+func doGetString(ctx context.Context, c *cache.Cache) {
+	_, _, _ = c.GetString("bench:key")
+}
+
+func doGetTypedString(ctx context.Context, c *cache.Cache) {
+	_, _, _ = cache.Get[string](c, "bench:key")
+}
+
+func doGetTypedStruct(ctx context.Context, c *cache.Cache) {
+	_, _, _ = cache.Get[benchProfile](c, "bench:key")
 }
 
 func doDelete(ctx context.Context, c *cache.Cache) {
@@ -226,7 +290,7 @@ func renderTable(byOp map[string][]benchRow) string {
 }
 
 func writeDashboard(root string, byOp map[string][]benchRow) error {
-	ops := []string{"Get", "Set", "Delete"}
+	ops := benchChartOps()
 	byDriver := map[string]map[string]float64{}
 	for _, op := range ops {
 		for _, row := range byOp[op] {
@@ -297,7 +361,7 @@ func orderDrivers(drivers []string) []string {
 }
 
 func writeMetricSVG(root, fileName, title, yUnit, scale string, drivers []string, byOp map[string][]benchRow, valueFn func(benchRow) float64) error {
-	ops := []string{"Get", "Set", "Delete"}
+	ops := benchChartOps()
 	byDriver := map[string]map[string]float64{}
 	for _, op := range ops {
 		for _, row := range byOp[op] {
@@ -318,12 +382,12 @@ func writeDashboardSVG(root, fileName, title, yUnit, scale string, drivers []str
 		width       = 1600
 		height      = 690
 		marginLeft  = 180
-		marginRight = 150
+		marginRight = 200
 		marginTop   = 90
 		marginBot   = 130
 	)
-	ops := []string{"Get", "Set", "Delete"}
-	colors := map[string]string{"Get": "#4e79a7", "Set": "#59a14f", "Delete": "#e15759"}
+	ops := benchChartOps()
+	colors := benchOpColors()
 	plotW := width - marginLeft - marginRight
 	plotH := height - marginTop - marginBot
 
@@ -336,7 +400,7 @@ func writeDashboardSVG(root, fileName, title, yUnit, scale string, drivers []str
 	if scale == "log" {
 		scaleLabel = "log"
 	}
-	svg.WriteString(`<text x="` + strconv.Itoa(width/2) + `" y="84" text-anchor="middle" fill="#9ca3af" font-size="36" font-family="Arial, sans-serif">Grouped by operation (Get, Set, Delete), ` + scaleLabel + ` y-scale, ` + metricPreference(yUnit) + `</text>` + "\n")
+	svg.WriteString(`<text x="` + strconv.Itoa(width/2) + `" y="84" text-anchor="middle" fill="#9ca3af" font-size="36" font-family="Arial, sans-serif">Grouped by operation, ` + scaleLabel + ` y-scale, ` + metricPreference(yUnit) + `</text>` + "\n")
 
 	axisX0 := marginLeft
 	axisX1 := width - marginRight
@@ -428,7 +492,7 @@ func writeDashboardSVG(root, fileName, title, yUnit, scale string, drivers []str
 	for i, op := range ops {
 		y := legendY + i*32
 		svg.WriteString(`<rect x="` + strconv.Itoa(legendX) + `" y="` + strconv.Itoa(y-14) + `" width="20" height="20" fill="` + colors[op] + `"/>` + "\n")
-		svg.WriteString(`<text x="` + strconv.Itoa(legendX+30) + `" y="` + strconv.Itoa(y+1) + `" fill="#f3f4f6" font-size="28" font-family="Arial, sans-serif">` + op + `</text>` + "\n")
+		svg.WriteString(`<text x="` + strconv.Itoa(legendX+30) + `" y="` + strconv.Itoa(y+1) + `" fill="#f3f4f6" font-size="28" font-family="Arial, sans-serif">` + benchOpLabel(op) + `</text>` + "\n")
 	}
 
 	svg.WriteString(`</svg>` + "\n")
@@ -455,13 +519,13 @@ func writeDashboardSplitSVG(root, fileName, title, yUnit string, drivers []strin
 		width       = 1600
 		height      = 825
 		marginLeft  = 180
-		marginRight = 150
+		marginRight = 200
 		marginTop   = 150
 		marginBot   = 150
 		panelGap    = 80
 	)
-	ops := []string{"Get", "Set", "Delete"}
-	colors := map[string]string{"Get": "#4e79a7", "Set": "#59a14f", "Delete": "#e15759"}
+	ops := benchChartOps()
+	colors := benchOpColors()
 	plotW := width - marginLeft - marginRight
 	panelH := (height - marginTop - marginBot - panelGap) / 2
 
@@ -499,7 +563,7 @@ func writeDashboardSplitSVG(root, fileName, title, yUnit string, drivers []strin
 	for i, op := range ops {
 		y := legendY + i*32
 		svg.WriteString(`<rect x="` + strconv.Itoa(legendX) + `" y="` + strconv.Itoa(y-14) + `" width="20" height="20" fill="` + colors[op] + `"/>` + "\n")
-		svg.WriteString(`<text x="` + strconv.Itoa(legendX+30) + `" y="` + strconv.Itoa(y+1) + `" fill="#f3f4f6" font-size="28" font-family="Arial, sans-serif">` + op + `</text>` + "\n")
+		svg.WriteString(`<text x="` + strconv.Itoa(legendX+30) + `" y="` + strconv.Itoa(y+1) + `" fill="#f3f4f6" font-size="28" font-family="Arial, sans-serif">` + benchOpLabel(op) + `</text>` + "\n")
 	}
 
 	drawPanel := func(panelTitle string, panelDrivers []string, yTop int) {
@@ -579,6 +643,59 @@ func writeDashboardSplitSVG(root, fileName, title, yUnit string, drivers []strin
 	svg.WriteString(`</svg>` + "\n")
 	outPath := filepath.Join(root, "docs", "bench", fileName)
 	return os.WriteFile(outPath, svg.Bytes(), 0o644)
+}
+
+func benchChartOps() []string {
+	return []string{
+		"get_bytes",
+		"get_string",
+		"get_typed_string",
+		"get_typed_struct",
+		"set_bytes",
+		"set_string",
+		"set_typed_string",
+		"set_typed_struct",
+		"delete",
+	}
+}
+
+func benchOpLabel(op string) string {
+	switch op {
+	case "get_bytes":
+		return "GetBytes"
+	case "get_string":
+		return "GetString"
+	case "get_typed_string":
+		return "Get[string]"
+	case "get_typed_struct":
+		return "Get[T]"
+	case "set_bytes":
+		return "SetBytes"
+	case "set_string":
+		return "SetString"
+	case "set_typed_string":
+		return "Set[string]"
+	case "set_typed_struct":
+		return "Set[T]"
+	case "delete":
+		return "Delete"
+	default:
+		return op
+	}
+}
+
+func benchOpColors() map[string]string {
+	return map[string]string{
+		"get_bytes":         "#4e79a7",
+		"get_string":        "#6ea6d8",
+		"get_typed_string":  "#9fc5e8",
+		"get_typed_struct":  "#cfe2f3",
+		"set_bytes":         "#59a14f",
+		"set_string":        "#7bc96f",
+		"set_typed_string":  "#a8d08d",
+		"set_typed_struct":  "#c6e0b4",
+		"delete":            "#e15759",
+	}
 }
 
 func metricPreference(yUnit string) string {

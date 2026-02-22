@@ -175,18 +175,58 @@ func BenchmarkCacheSetGet(b *testing.B) {
 
 func benchmarkSetGet(b *testing.B, c *cache.Cache) {
 	b.Helper()
-	b.ReportAllocs()
+	type profile struct {
+		Name  string `json:"name"`
+		Level int    `json:"level"`
+	}
 
-	key := "bench:key"
-	val := []byte("value")
+	cases := []struct {
+		name  string
+		setup func()
+		run   func()
+	}{
+		{
+			name: "set_get_bytes",
+			setup: func() {
+				_ = c.SetBytes("bench:key", []byte("value"), time.Minute)
+			},
+			run: func() {
+				_ = c.SetBytes("bench:key", []byte("value"), time.Minute)
+				_, _, _ = c.GetBytes("bench:key")
+			},
+		},
+		{
+			name: "set_get_typed_string",
+			setup: func() {
+				_ = cache.Set(c, "bench:key", "value", time.Minute)
+			},
+			run: func() {
+				_ = cache.Set(c, "bench:key", "value", time.Minute)
+				_, _, _ = cache.Get[string](c, "bench:key")
+			},
+		},
+		{
+			name: "set_get_typed_struct",
+			setup: func() {
+				_ = cache.Set(c, "bench:key", profile{Name: "Ada", Level: 7}, time.Minute)
+			},
+			run: func() {
+				_ = cache.Set(c, "bench:key", profile{Name: "Ada", Level: 7}, time.Minute)
+				_, _, _ = cache.Get[profile](c, "bench:key")
+			},
+		},
+	}
 
-	_ = c.SetBytes(key, val, time.Minute)
-	_, _, _ = c.GetBytes(key)
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_ = c.SetBytes(key, val, time.Minute)
-		_, _, _ = c.GetBytes(key)
+	for _, tc := range cases {
+		tc := tc
+		b.Run(tc.name, func(b *testing.B) {
+			b.ReportAllocs()
+			tc.setup()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				tc.run()
+			}
+		})
 	}
 }
 
