@@ -1098,3 +1098,25 @@ fmt.Println(c.SetString("user:42:name", "Ada", time.Minute) == nil) // true
 
 SetStringCtx is the context-aware variant of SetString.
 <!-- api:embed:end -->
+
+## Integration Coverage
+
+| Area | What is validated | Scope |
+| :--- | :--- | :--- |
+| Core store contract | `Set/Get`, TTL expiry, `Add`, counters, `Delete/DeleteMany`, `Flush`, typed `Remember` | All drivers |
+| Option contracts | `prefix`, `compression`, `encryption`, `prefix+compression+encryption`, `WithMaxValueBytes`, `WithDefaultTTL` | All drivers (per option case) |
+| Locking | single-winner contention, timeout/cancel, TTL expiry reacquire, unlock safety | All drivers |
+| Rate limiting | monotonic counts, `remaining >= 0`, window rollover reset | All drivers |
+| Refresh-ahead | miss/hit behavior, async refresh success/error, malformed metadata handling | All drivers |
+| Remember stale | stale fallback semantics, TTL interactions, stale/fresh independent expiry, joined errors | All drivers |
+| Batch ops | partial misses, empty input behavior, default TTL application | All drivers |
+| Counter semantics | signed deltas, zero delta, TTL refresh extension | All drivers |
+| Context cancellation | `GetCtx/SetCtx/LockCtx/RefreshAheadCtx/Remember*Ctx` prompt return + driver-aware cancel semantics | All drivers (driver-aware assertions) |
+| Latency / transient faults | injected slow `Get/Add/Increment`, timeout propagation, no hidden retries for `RefreshAhead/Remember*/LockCtx/RateLimit*` | All drivers (integration wrappers over real stores) |
+| Prefix isolation | `Delete/Flush` isolation + helper-generated keys (`__lock:`, `:__refresh_exp`, `:__stale`, rate-limit buckets) | Shared/prefixed backends |
+| Payload shaping / corruption | compression+encryption round-trips, corrupted compressed/encrypted payload errors | Shared/persistent backends |
+| Payload size limits | large binary payload round-trips; backend-specific near/over-limit checks (Memcached, DynamoDB) | Driver-specific where meaningful |
+| Cross-store scope | shared vs local semantics across store instances (e.g. rate-limit counters) | Driver-specific expectations |
+| Backend fault / recovery | backend restart mid-suite, outage errors, post-recovery round-trip/lock/refresh/stale flows | Container-backed drivers (`INTEGRATION_FAULT=1`) |
+
+Default integration runs cover the contract suite above. Fault/recovery restart tests are opt-in because they restart shared testcontainers and are slower/flakier by nature.
