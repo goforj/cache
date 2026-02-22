@@ -128,7 +128,7 @@ memoRepo := cache.NewCache(memoStore)
 
 ## Testing
 
-Unit tests cover the public helpers. Integration tests use `testcontainers-go` to spin up Redis:
+Unit tests cover the public helpers. Integration tests use `testcontainers-go` to run the cross-driver contract suite (Redis, NATS, Memcached, DynamoDB local, and SQL backends where enabled):
 
 ```bash
 go test -tags=integration ./...
@@ -138,11 +138,12 @@ Use `INTEGRATION_DRIVER=redis` (comma-separated; defaults to `all`) to select wh
 
 ## Benchmarks
 
-```go
-go test ./docs/bench -tags benchrender
+```bash
+go test -tags benchrender ./docs/bench -run TestRenderBenchmarks -count=1 -v
 ```
 
 Note: NATS numbers can look slower than Redis/memory because the NATS driver preserves per-operation TTL semantics by storing per-key expiry metadata (envelope encode/decode) and may do extra compare/update steps for some operations.
+Generic helper benchmarks (`Get[T]` / `Set[T]`) use the default JSON codec, so compare them against `GetBytes` / `SetBytes` (and `GetString` / `SetString`) when evaluating convenience vs raw-path performance.
 
 <!-- bench:embed:start -->
 
@@ -181,7 +182,7 @@ c := f.Cache()
 
 // exercise code under test
 _ = c.SetString("settings:mode", "dark", 0)
-_, _, _ = c.Get("settings:mode")
+_, _, _ = c.GetBytes("settings:mode")
 _ = c.Delete("settings:mode")
 
 f.AssertCalled(t, cachefake.OpSet, "settings:mode", 1)
