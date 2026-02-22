@@ -118,7 +118,9 @@ func TestObserverContract_HelperOpsEmitExpectedMetadata(t *testing.T) {
 		}
 		assertLast(t, before, "get_string", "s:key", true, nil)
 
-		type payload struct{ Name string `json:"name"` }
+		type payload struct {
+			Name string `json:"name"`
+		}
 		before = obs.len()
 		if err := SetJSONCtx(ctx, c, "j:key", payload{Name: "Ada"}, time.Minute); err != nil {
 			t.Fatalf("set json failed: %v", err)
@@ -247,7 +249,9 @@ func TestObserverContract_HelperOpsEmitExpectedMetadata(t *testing.T) {
 		assertLast(t, before, "remember_string", "remember:string", true, nil)
 
 		// RememberJSON emits get_json/set_json observer ops (no dedicated remember_json op).
-		type payload struct{ Name string `json:"name"` }
+		type payload struct {
+			Name string `json:"name"`
+		}
 		before = obs.len()
 		if _, err := RememberJSONCtx[payload](ctx, c, "remember:json", time.Minute, func(context.Context) (payload, error) {
 			return payload{Name: "Ada"}, nil
@@ -275,7 +279,7 @@ func TestObserverContract_HelperOpsEmitExpectedMetadata(t *testing.T) {
 
 	t.Run("rate_limit_helpers_emit_increment_ops", func(t *testing.T) {
 		before := obs.len()
-		if _, _, err := c.RateLimitCtx(ctx, "rl:key", 5, time.Minute); err != nil {
+		if _, err := c.RateLimitCtx(ctx, "rl:key", 5, time.Minute); err != nil {
 			t.Fatalf("rate limit failed: %v", err)
 		}
 		last := assertLast(t, before, "increment", "*", true, nil)
@@ -284,8 +288,8 @@ func TestObserverContract_HelperOpsEmitExpectedMetadata(t *testing.T) {
 		}
 
 		before = obs.len()
-		if _, _, _, _, err := c.RateLimitWithRemainingCtx(ctx, "rl:key2", 5, time.Minute); err != nil {
-			t.Fatalf("rate limit with remaining failed: %v", err)
+		if _, err := c.RateLimitCtx(ctx, "rl:key2", 5, time.Minute); err != nil {
+			t.Fatalf("rate limit failed: %v", err)
 		}
 		last = assertLast(t, before, "increment", "*", true, nil)
 		if len(last.key) == 0 || last.key[:7] != "rl:key2" {

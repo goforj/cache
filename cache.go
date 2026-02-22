@@ -16,6 +16,15 @@ type Cache struct {
 	observer   Observer
 }
 
+// RateLimitStatus contains fixed-window rate limiting metadata.
+// @group Rate Limiting
+type RateLimitStatus struct {
+	Allowed   bool
+	Count     int64
+	Remaining int64
+	ResetAt   time.Time
+}
+
 // NewCache creates a cache facade bound to a concrete store.
 // @group Core
 //
@@ -510,47 +519,28 @@ func (c *Cache) DecrementCtx(ctx context.Context, key string, delta int64, ttl t
 	return val, err
 }
 
-// RateLimit increments key in a fixed window and reports whether requests are allowed.
+// RateLimit increments a fixed-window counter and returns allowance metadata.
 // @group Rate Limiting
 //
-// Example: fixed-window rate limit
+// Example: fixed-window rate limit metadata
 //
 //	ctx := context.Background()
 //	c := cache.NewCache(cache.NewMemoryStore(ctx))
-//	allowed, count, _ := c.RateLimit("rl:login:user:42", 5, time.Minute)
-//	fmt.Println(allowed, count >= 1) // true true
-func (c *Cache) RateLimit(key string, limit int64, window time.Duration) (bool, int64, error) {
+//	res, err := c.RateLimit("rl:api:ip:1.2.3.4", 100, time.Minute)
+//	fmt.Println(err == nil, res.Allowed, res.Count, res.Remaining, !res.ResetAt.IsZero())
+//	// Output: true true 1 99 true
+func (c *Cache) RateLimit(key string, limit int64, window time.Duration) (RateLimitStatus, error) {
 	return c.RateLimitCtx(context.Background(), key, limit, window)
 }
 
 // RateLimitCtx is the context-aware variant of RateLimit.
 // @group Rate Limiting
-func (c *Cache) RateLimitCtx(ctx context.Context, key string, limit int64, window time.Duration) (bool, int64, error) {
-	allowed, count, _, _, err := c.RateLimitWithRemainingCtx(ctx, key, limit, window)
-	return allowed, count, err
-}
-
-// RateLimitWithRemaining increments a fixed-window counter and returns allowance metadata.
-// @group Rate Limiting
-//
-// Example: rate limit headers metadata
-//
-//	ctx := context.Background()
-//	c := cache.NewCache(cache.NewMemoryStore(ctx))
-//	allowed, count, remaining, resetAt, err := c.RateLimitWithRemaining("rl:api:ip:1.2.3.4", 100, time.Minute)
-//	fmt.Println(err == nil, allowed, count >= 1, remaining >= 0, resetAt.After(time.Now()))
-func (c *Cache) RateLimitWithRemaining(key string, limit int64, window time.Duration) (bool, int64, int64, time.Time, error) {
-	return c.RateLimitWithRemainingCtx(context.Background(), key, limit, window)
-}
-
-// RateLimitWithRemainingCtx is the context-aware variant of RateLimitWithRemaining.
-// @group Rate Limiting
-func (c *Cache) RateLimitWithRemainingCtx(ctx context.Context, key string, limit int64, window time.Duration) (bool, int64, int64, time.Time, error) {
+func (c *Cache) RateLimitCtx(ctx context.Context, key string, limit int64, window time.Duration) (RateLimitStatus, error) {
 	if limit <= 0 {
-		return false, 0, 0, time.Time{}, errors.New("cache rate limit requires limit > 0")
+		return RateLimitStatus{}, errors.New("cache rate limit requires limit > 0")
 	}
 	if window <= 0 {
-		return false, 0, 0, time.Time{}, errors.New("cache rate limit requires window > 0")
+		return RateLimitStatus{}, errors.New("cache rate limit requires window > 0")
 	}
 
 	now := time.Now()
@@ -558,14 +548,19 @@ func (c *Cache) RateLimitWithRemainingCtx(ctx context.Context, key string, limit
 	bucketKey := fmt.Sprintf("%s:%d", key, bucket)
 	count, err := c.IncrementCtx(ctx, bucketKey, 1, window)
 	if err != nil {
-		return false, 0, 0, time.Time{}, err
+		return RateLimitStatus{}, err
 	}
 	remaining := limit - count
 	if remaining < 0 {
 		remaining = 0
 	}
 	resetAt := time.Unix(0, (bucket+1)*window.Nanoseconds())
-	return count <= limit, count, remaining, resetAt, nil
+	return RateLimitStatus{
+		Allowed:   count <= limit,
+		Count:     count,
+		Remaining: remaining,
+		ResetAt:   resetAt,
+	}, nil
 }
 
 // TryLock acquires a short-lived lock key when not already held.

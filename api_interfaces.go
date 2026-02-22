@@ -50,10 +50,8 @@ type CounterAPI interface {
 
 // RateLimitAPI exposes rate limiting helpers.
 type RateLimitAPI interface {
-	RateLimit(key string, limit int64, window time.Duration) (bool, int64, error)
-	RateLimitCtx(ctx context.Context, key string, limit int64, window time.Duration) (bool, int64, error)
-	RateLimitWithRemaining(key string, limit int64, window time.Duration) (bool, int64, int64, time.Time, error)
-	RateLimitWithRemainingCtx(ctx context.Context, key string, limit int64, window time.Duration) (bool, int64, int64, time.Time, error)
+	RateLimit(key string, limit int64, window time.Duration) (RateLimitStatus, error)
+	RateLimitCtx(ctx context.Context, key string, limit int64, window time.Duration) (RateLimitStatus, error)
 }
 
 // LockAPI exposes lock helpers based on cache keys.
@@ -95,4 +93,3 @@ type CacheAPI interface {
 }
 
 var _ CacheAPI = (*Cache)(nil)
-

@@ -806,38 +806,38 @@ func TestCacheRateLimitAllowsThenDenies(t *testing.T) {
 	key := "rl:test:user:1"
 
 	for i := 1; i <= 3; i++ {
-		allowed, count, err := c.RateLimit(key, 3, time.Minute)
+		res, err := c.RateLimit(key, 3, time.Minute)
 		if err != nil {
 			t.Fatalf("rate limit call %d failed: %v", i, err)
 		}
-		if !allowed || count != int64(i) {
-			t.Fatalf("expected allowed count=%d, got allowed=%v count=%d", i, allowed, count)
+		if !res.Allowed || res.Count != int64(i) {
+			t.Fatalf("expected allowed count=%d, got allowed=%v count=%d", i, res.Allowed, res.Count)
 		}
 	}
 
-	allowed, count, err := c.RateLimit(key, 3, time.Minute)
+	res, err := c.RateLimit(key, 3, time.Minute)
 	if err != nil {
 		t.Fatalf("rate limit deny call failed: %v", err)
 	}
-	if allowed || count != 4 {
-		t.Fatalf("expected denied at count=4, got allowed=%v count=%d", allowed, count)
+	if res.Allowed || res.Count != 4 {
+		t.Fatalf("expected denied at count=4, got allowed=%v count=%d", res.Allowed, res.Count)
 	}
 }
 
 func TestCacheRateLimitValidatesInput(t *testing.T) {
 	c := NewCache(NewMemoryStore(context.Background()))
 
-	if _, _, err := c.RateLimit("rl:k", 0, time.Second); err == nil {
+	if _, err := c.RateLimit("rl:k", 0, time.Second); err == nil {
 		t.Fatalf("expected error for non-positive limit")
 	}
-	if _, _, err := c.RateLimit("rl:k", 1, 0); err == nil {
+	if _, err := c.RateLimit("rl:k", 1, 0); err == nil {
 		t.Fatalf("expected error for non-positive window")
 	}
 }
 
 func TestCacheRateLimitPropagatesIncrementError(t *testing.T) {
 	c := NewCache(&spyStore{driver: DriverMemory, incErr: expectedErr})
-	if _, _, err := c.RateLimit("rl:k", 1, time.Second); !errors.Is(err, expectedErr) {
+	if _, err := c.RateLimit("rl:k", 1, time.Second); !errors.Is(err, expectedErr) {
 		t.Fatalf("expected increment error, got %v", err)
 	}
 }
@@ -847,59 +847,59 @@ func TestCacheRateLimitWindowResets(t *testing.T) {
 	key := "rl:test:reset"
 	window := 120 * time.Millisecond
 
-	allowed, count, err := c.RateLimit(key, 1, window)
-	if err != nil || !allowed || count != 1 {
-		t.Fatalf("expected first call allowed, got allowed=%v count=%d err=%v", allowed, count, err)
+	res, err := c.RateLimit(key, 1, window)
+	if err != nil || !res.Allowed || res.Count != 1 {
+		t.Fatalf("expected first call allowed, got res=%+v err=%v", res, err)
 	}
-	allowed, count, err = c.RateLimit(key, 1, window)
-	if err != nil || allowed || count != 2 {
-		t.Fatalf("expected second call denied, got allowed=%v count=%d err=%v", allowed, count, err)
+	res, err = c.RateLimit(key, 1, window)
+	if err != nil || res.Allowed || res.Count != 2 {
+		t.Fatalf("expected second call denied, got res=%+v err=%v", res, err)
 	}
 
 	time.Sleep(250 * time.Millisecond)
 
-	allowed, count, err = c.RateLimit(key, 1, window)
-	if err != nil || !allowed || count != 1 {
-		t.Fatalf("expected window reset, got allowed=%v count=%d err=%v", allowed, count, err)
+	res, err = c.RateLimit(key, 1, window)
+	if err != nil || !res.Allowed || res.Count != 1 {
+		t.Fatalf("expected window reset, got res=%+v err=%v", res, err)
 	}
 }
 
-func TestCacheRateLimitWithRemaining(t *testing.T) {
+func TestCacheRateLimitMetadata(t *testing.T) {
 	c := NewCache(NewMemoryStore(context.Background()))
 	key := "rl:remaining:user:1"
 
-	allowed, count, remaining, resetAt, err := c.RateLimitWithRemaining(key, 3, time.Minute)
-	if err != nil || !allowed || count != 1 || remaining != 2 || !resetAt.After(time.Now()) {
-		t.Fatalf("first call mismatch allowed=%v count=%d remaining=%d resetAt=%v err=%v", allowed, count, remaining, resetAt, err)
+	res, err := c.RateLimit(key, 3, time.Minute)
+	if err != nil || !res.Allowed || res.Count != 1 || res.Remaining != 2 || !res.ResetAt.After(time.Now()) {
+		t.Fatalf("first call mismatch res=%+v err=%v", res, err)
 	}
 
-	allowed, count, remaining, _, err = c.RateLimitWithRemaining(key, 3, time.Minute)
-	if err != nil || !allowed || count != 2 || remaining != 1 {
-		t.Fatalf("second call mismatch allowed=%v count=%d remaining=%d err=%v", allowed, count, remaining, err)
+	res, err = c.RateLimit(key, 3, time.Minute)
+	if err != nil || !res.Allowed || res.Count != 2 || res.Remaining != 1 {
+		t.Fatalf("second call mismatch res=%+v err=%v", res, err)
 	}
 
-	allowed, count, remaining, _, err = c.RateLimitWithRemaining(key, 3, time.Minute)
-	if err != nil || !allowed || count != 3 || remaining != 0 {
-		t.Fatalf("third call mismatch allowed=%v count=%d remaining=%d err=%v", allowed, count, remaining, err)
+	res, err = c.RateLimit(key, 3, time.Minute)
+	if err != nil || !res.Allowed || res.Count != 3 || res.Remaining != 0 {
+		t.Fatalf("third call mismatch res=%+v err=%v", res, err)
 	}
 
-	allowed, count, remaining, _, err = c.RateLimitWithRemaining(key, 3, time.Minute)
-	if err != nil || allowed || count != 4 || remaining != 0 {
-		t.Fatalf("fourth call mismatch allowed=%v count=%d remaining=%d err=%v", allowed, count, remaining, err)
+	res, err = c.RateLimit(key, 3, time.Minute)
+	if err != nil || res.Allowed || res.Count != 4 || res.Remaining != 0 {
+		t.Fatalf("fourth call mismatch res=%+v err=%v", res, err)
 	}
 }
 
-func TestCacheRateLimitWithRemainingValidationAndError(t *testing.T) {
+func TestCacheRateLimitValidationAndError(t *testing.T) {
 	c := NewCache(NewMemoryStore(context.Background()))
-	if _, _, _, _, err := c.RateLimitWithRemaining("rl:bad", 0, time.Second); err == nil {
+	if _, err := c.RateLimit("rl:bad", 0, time.Second); err == nil {
 		t.Fatalf("expected limit validation error")
 	}
-	if _, _, _, _, err := c.RateLimitWithRemaining("rl:bad", 1, 0); err == nil {
+	if _, err := c.RateLimit("rl:bad", 1, 0); err == nil {
 		t.Fatalf("expected window validation error")
 	}
 
 	cErr := NewCache(&spyStore{driver: DriverMemory, incErr: expectedErr})
-	if _, _, _, _, err := cErr.RateLimitWithRemaining("rl:err", 1, time.Second); !errors.Is(err, expectedErr) {
+	if _, err := cErr.RateLimit("rl:err", 1, time.Second); !errors.Is(err, expectedErr) {
 		t.Fatalf("expected increment error, got %v", err)
 	}
 }

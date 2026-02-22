@@ -814,10 +814,10 @@ func runLatencyAndTransientFaultHelperInvariantSuite(t *testing.T, base Store, c
 		defer cancel()
 
 		start := time.Now()
-		allowed, count, err := cache.RateLimitCtx(ctx, caseKey("net:slow:rl"), 5, time.Minute)
+		res, err := cache.RateLimitCtx(ctx, caseKey("net:slow:rl"), 5, time.Minute)
 		elapsed := time.Since(start)
-		if err == nil || allowed || count != 0 {
-			t.Fatalf("expected rate limit timeout error, allowed=%v count=%d err=%v", allowed, count, err)
+		if err == nil || res.Allowed || res.Count != 0 {
+			t.Fatalf("expected rate limit timeout error, allowed=%v count=%d err=%v", res.Allowed, res.Count, err)
 		}
 		if !errors.Is(err, context.DeadlineExceeded) {
 			t.Fatalf("expected context deadline exceeded, got %v", err)
@@ -870,9 +870,9 @@ func runLatencyAndTransientFaultHelperInvariantSuite(t *testing.T, base Store, c
 			t.Fatalf("expected injected lock error without retries, locked=%v err=%v", locked, err)
 		}
 
-		allowed, count, err := cache.RateLimitCtx(context.Background(), caseKey("net:flaky:rl"), 5, time.Minute)
-		if !errors.Is(err, injected) || allowed || count != 0 {
-			t.Fatalf("expected injected rate-limit error, allowed=%v count=%d err=%v", allowed, count, err)
+		res, err := cache.RateLimitCtx(context.Background(), caseKey("net:flaky:rl"), 5, time.Minute)
+		if !errors.Is(err, injected) || res.Allowed || res.Count != 0 {
+			t.Fatalf("expected injected rate-limit error, allowed=%v count=%d err=%v", res.Allowed, res.Count, err)
 		}
 
 		if got := flaky.getCalls.Load(); got != 2 {
@@ -927,30 +927,30 @@ func runRateLimitHelperInvariantSuite(t *testing.T, cache *Cache, driver Driver,
 		alignRateLimitWindowStart(window)
 		var prevCount int64
 		for i := 0; i < 4; i++ {
-			allowed, count, remaining, resetAt, err := cache.RateLimitWithRemaining(key, limit, window)
+			res, err := cache.RateLimit(key, limit, window)
 			if err != nil {
 				t.Fatalf("rate limit call %d failed: %v", i+1, err)
 			}
-			if remaining < 0 {
-				t.Fatalf("remaining should never be negative, got %d", remaining)
+			if res.Remaining < 0 {
+				t.Fatalf("remaining should never be negative, got %d", res.Remaining)
 			}
-			if !resetAt.After(time.Now().Add(-window)) {
-				t.Fatalf("resetAt should be near-future, got %v", resetAt)
+			if !res.ResetAt.After(time.Now().Add(-window)) {
+				t.Fatalf("resetAt should be near-future, got %v", res.ResetAt)
 			}
 			if noOp {
-				if count != 0 || !allowed {
-					t.Fatalf("null store rate limit should stay allowed with count=0, got allowed=%v count=%d", allowed, count)
+				if res.Count != 0 || !res.Allowed {
+					t.Fatalf("null store rate limit should stay allowed with count=0, got allowed=%v count=%d", res.Allowed, res.Count)
 				}
 				continue
 			}
-			if count <= prevCount {
-				t.Fatalf("count must be monotonic within window: prev=%d got=%d", prevCount, count)
+			if res.Count <= prevCount {
+				t.Fatalf("count must be monotonic within window: prev=%d got=%d", prevCount, res.Count)
 			}
-			prevCount = count
-			if i < 3 && !allowed {
+			prevCount = res.Count
+			if i < 3 && !res.Allowed {
 				t.Fatalf("expected allowed before limit exceeded at call %d", i+1)
 			}
-			if i == 3 && allowed {
+			if i == 3 && res.Allowed {
 				t.Fatalf("expected deny after limit exceeded")
 			}
 		}
@@ -959,35 +959,35 @@ func runRateLimitHelperInvariantSuite(t *testing.T, cache *Cache, driver Driver,
 	t.Run("rate_limit_window_rollover_resets_count", func(t *testing.T) {
 		key := caseKey("rl:reset")
 		window := rateLimitWindowFor(driver)
-		allowed, count, err := cache.RateLimit(key, 1, window)
+		res, err := cache.RateLimit(key, 1, window)
 		if err != nil {
 			t.Fatalf("first rate limit call failed: %v", err)
 		}
-		if !noOp && (!allowed || count != 1) {
-			t.Fatalf("expected first call allowed count=1, got allowed=%v count=%d", allowed, count)
+		if !noOp && (!res.Allowed || res.Count != 1) {
+			t.Fatalf("expected first call allowed count=1, got allowed=%v count=%d", res.Allowed, res.Count)
 		}
-		allowed, count, err = cache.RateLimit(key, 1, window)
+		res, err = cache.RateLimit(key, 1, window)
 		if err != nil {
 			t.Fatalf("second rate limit call failed: %v", err)
 		}
-		if !noOp && (allowed || count < 2) {
-			t.Fatalf("expected second call denied in same window, got allowed=%v count=%d", allowed, count)
+		if !noOp && (res.Allowed || res.Count < 2) {
+			t.Fatalf("expected second call denied in same window, got allowed=%v count=%d", res.Allowed, res.Count)
 		}
 
 		time.Sleep(rateLimitResetWaitFor(driver, window))
 
-		allowed, count, err = cache.RateLimit(key, 1, window)
+		res, err = cache.RateLimit(key, 1, window)
 		if err != nil {
 			t.Fatalf("post-reset rate limit call failed: %v", err)
 		}
 		if noOp {
-			if !allowed || count != 0 {
-				t.Fatalf("null store expected allowed count=0 after rollover, got allowed=%v count=%d", allowed, count)
+			if !res.Allowed || res.Count != 0 {
+				t.Fatalf("null store expected allowed count=0 after rollover, got allowed=%v count=%d", res.Allowed, res.Count)
 			}
 			return
 		}
-		if !allowed || count != 1 {
-			t.Fatalf("expected count reset after window rollover, got allowed=%v count=%d", allowed, count)
+		if !res.Allowed || res.Count != 1 {
+			t.Fatalf("expected count reset after window rollover, got allowed=%v count=%d", res.Allowed, res.Count)
 		}
 	})
 }
@@ -1306,28 +1306,28 @@ func runDriverFactoryInvariantSuite(t *testing.T, fx storeFactory) {
 		key := "factory_scope:rl"
 		window := rateLimitWindowFor(driver)
 
-		_, countA, err := ca.RateLimit(key, 10, window)
+		resA, err := ca.RateLimit(key, 10, window)
 		if err != nil {
 			t.Fatalf("rate limit on storeA failed: %v", err)
 		}
-		_, countB, err := cb.RateLimit(key, 10, window)
+		resB, err := cb.RateLimit(key, 10, window)
 		if err != nil {
 			t.Fatalf("rate limit on storeB failed: %v", err)
 		}
 
 		switch driver {
 		case DriverNull:
-			if countA != 0 || countB != 0 {
-				t.Fatalf("null store should report zero counters, got %d/%d", countA, countB)
+			if resA.Count != 0 || resB.Count != 0 {
+				t.Fatalf("null store should report zero counters, got %d/%d", resA.Count, resB.Count)
 			}
 		case DriverRedis, DriverMemcached, DriverDynamo, DriverSQL:
-			if countA != 1 || countB != 2 {
-				t.Fatalf("expected shared backend counters across instances, got countA=%d countB=%d", countA, countB)
+			if resA.Count != 1 || resB.Count != 2 {
+				t.Fatalf("expected shared backend counters across instances, got countA=%d countB=%d", resA.Count, resB.Count)
 			}
 		default:
 			// memory/file fixtures create isolated backing stores per factory call.
-			if countA != 1 || countB != 1 {
-				t.Fatalf("expected local/isolated backend counters not to share, got countA=%d countB=%d", countA, countB)
+			if resA.Count != 1 || resB.Count != 1 {
+				t.Fatalf("expected local/isolated backend counters not to share, got countA=%d countB=%d", resA.Count, resB.Count)
 			}
 		}
 	})
@@ -1444,19 +1444,19 @@ func runDriverFactoryInvariantSuite(t *testing.T, fx storeFactory) {
 			window := rateLimitWindowFor(driver)
 			alignRateLimitWindowStart(window)
 
-			allowedA, countA, err := ca.RateLimit(key, 10, window)
+			resA, err := ca.RateLimit(key, 10, window)
 			if err != nil {
 				t.Fatalf("rate limit A failed: %v", err)
 			}
-			allowedB, countB, err := cb.RateLimit(key, 10, window)
+			resB, err := cb.RateLimit(key, 10, window)
 			if err != nil {
 				t.Fatalf("rate limit B failed: %v", err)
 			}
-			if !allowedA || !allowedB {
-				t.Fatalf("expected both prefixes allowed on first call, got A=%v B=%v", allowedA, allowedB)
+			if !resA.Allowed || !resB.Allowed {
+				t.Fatalf("expected both prefixes allowed on first call, got A=%v B=%v", resA.Allowed, resB.Allowed)
 			}
-			if countA != 1 || countB != 1 {
-				t.Fatalf("expected isolated rate-limit counters across prefixes, got countA=%d countB=%d", countA, countB)
+			if resA.Count != 1 || resB.Count != 1 {
+				t.Fatalf("expected isolated rate-limit counters across prefixes, got countA=%d countB=%d", resA.Count, resB.Count)
 			}
 		})
 	})

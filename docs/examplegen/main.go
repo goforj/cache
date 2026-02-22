@@ -76,7 +76,9 @@ func run() error {
 		sort.Slice(fd.Examples, func(i, j int) bool {
 			return fd.Examples[i].Line < fd.Examples[j].Line
 		})
+	}
 
+	for _, fd := range funcs {
 		if err := writeMain(examplesDir, fd, modPath); err != nil {
 			return err
 		}
@@ -126,6 +128,7 @@ func modulePath(root string) (string, error) {
 
 type FuncDoc struct {
 	Name        string
+	Slug        string
 	Group       string
 	Description string
 	Examples    []Example
@@ -172,8 +175,10 @@ func extractFuncDocs(
 			continue
 		}
 
-		out[name] = &FuncDoc{
+		slug := funcSlug(fn)
+		out[slug] = &FuncDoc{
 			Name:        name,
+			Slug:        slug,
 			Group:       extractGroup(fn.Doc),
 			Description: extractFuncDescription(fn.Doc),
 			Examples:    extractBlocks(fset, filename, name, fn),
@@ -181,6 +186,35 @@ func extractFuncDocs(
 	}
 
 	return out
+}
+
+func funcSlug(fn *ast.FuncDecl) string {
+	name := fn.Name.Name
+	if fn.Recv == nil || len(fn.Recv.List) == 0 {
+		return name
+	}
+	recv := recvTypeName(fn.Recv.List[0].Type)
+	if recv == "" {
+		return name
+	}
+	return recv + "_" + name
+}
+
+func recvTypeName(expr ast.Expr) string {
+	switch t := expr.(type) {
+	case *ast.Ident:
+		return t.Name
+	case *ast.StarExpr:
+		return recvTypeName(t.X)
+	case *ast.IndexExpr:
+		return recvTypeName(t.X)
+	case *ast.IndexListExpr:
+		return recvTypeName(t.X)
+	case *ast.SelectorExpr:
+		return t.Sel.Name
+	default:
+		return ""
+	}
 }
 
 func extractGroup(group *ast.CommentGroup) string {
@@ -361,7 +395,11 @@ func writeMain(base string, fd *FuncDoc, importPath string) error {
 		return fmt.Errorf("import path cannot be empty")
 	}
 
-	dir := filepath.Join(base, strings.ToLower(fd.Name))
+	slug := fd.Slug
+	if slug == "" {
+		slug = fd.Name
+	}
+	dir := filepath.Join(base, strings.ToLower(slug))
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}

@@ -13,13 +13,6 @@ import (
 func main() {
 	// Get acquires the lock once, runs fn if acquired, then releases automatically.
 
-	// Example: get bytes
-	ctx := context.Background()
-	s := cache.NewMemoryStore(ctx)
-	c := cache.NewCache(s)
-	_ = c.Set("user:42", []byte("Ada"), 0)
-	value, ok, _ := c.Get("user:42")
-	fmt.Println(ok, string(value)) // true Ada
 	// Example: acquire once and auto-release
 	ctx := context.Background()
 	c := cache.NewCache(cache.NewMemoryStore(ctx))
