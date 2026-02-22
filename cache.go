@@ -968,73 +968,6 @@ func (c *Cache) RememberBytesCtx(ctx context.Context, key string, ttl time.Durat
 	return body, nil
 }
 
-// RememberString returns key value or computes/stores it when missing.
-// @group Read Through
-//
-// Example: remember string
-//
-//	ctx := context.Background()
-//	c := cache.NewCache(cache.NewMemoryStore(ctx))
-//	val, err := c.RememberString("settings:mode", time.Minute, func() (string, error) {
-//		return "on", nil
-//	})
-//	fmt.Println(err == nil, val) // true on
-func (c *Cache) RememberString(key string, ttl time.Duration, fn func() (string, error)) (string, error) {
-	return c.RememberStringCtx(context.Background(), key, ttl, func(context.Context) (string, error) {
-		if fn == nil {
-			return "", errors.New("cache remember string requires a callback")
-		}
-		return fn()
-	})
-}
-
-// RememberStringCtx is the context-aware variant of RememberString.
-// @group Read Through
-func (c *Cache) RememberStringCtx(ctx context.Context, key string, ttl time.Duration, fn func(context.Context) (string, error)) (string, error) {
-	start := time.Now()
-	value, err := c.RememberBytesCtx(ctx, key, ttl, func(ctx context.Context) ([]byte, error) {
-		if fn == nil {
-			c.observe(ctx, "remember_string", key, false, errors.New("cache remember string requires a callback"), start)
-			return nil, errors.New("cache remember string requires a callback")
-		}
-		body, err := fn(ctx)
-		if err != nil {
-			c.observe(ctx, "remember_string", key, false, err, start)
-			return nil, err
-		}
-		return []byte(body), nil
-	})
-	if err != nil {
-		c.observe(ctx, "remember_string", key, false, err, start)
-		return "", err
-	}
-	out := string(value)
-	c.observe(ctx, "remember_string", key, true, nil, start)
-	return out, nil
-}
-
-// RememberJSON returns key value or computes/stores JSON when missing.
-// @group Read Through
-//
-// Example: remember JSON
-//
-//	type Settings struct { Enabled bool `json:"enabled"` }
-//	ctx := context.Background()
-//	c := cache.NewCache(cache.NewMemoryStore(ctx))
-//	settings, err := cache.RememberJSON[Settings](c, "settings:alerts", time.Minute, func() (Settings, error) {
-//		return Settings{Enabled: true}, nil
-//	})
-//	fmt.Println(err == nil, settings.Enabled) // true true
-func RememberJSON[T any](cache *Cache, key string, ttl time.Duration, fn func() (T, error)) (T, error) {
-	return RememberJSONCtx(context.Background(), cache, key, ttl, func(ctx context.Context) (T, error) {
-		if fn == nil {
-			var zero T
-			return zero, errors.New("cache remember json requires a callback")
-		}
-		return fn()
-	})
-}
-
 // RememberStale returns a typed value with stale fallback semantics using JSON encoding by default.
 // @group Read Through
 //
@@ -1070,10 +1003,28 @@ func RememberStale[T any](cache *Cache, key string, ttl, staleTTL time.Duration,
 //	})
 //	fmt.Println(err == nil, profile.Name) // true Ada
 func Remember[T any](cache *Cache, key string, ttl time.Duration, fn func() (T, error)) (T, error) {
-	return RememberValue(cache, key, ttl, fn)
+	return RememberCtx(context.Background(), cache, key, ttl, func(context.Context) (T, error) {
+		if fn == nil {
+			var zero T
+			return zero, errors.New("cache remember requires a callback")
+		}
+		return fn()
+	})
 }
 
-// ValueCodec defines how to encode/decode values for RememberValue.
+// RememberCtx is the context-aware variant of Remember.
+// @group Read Through
+func RememberCtx[T any](ctx context.Context, cache *Cache, key string, ttl time.Duration, fn func(context.Context) (T, error)) (T, error) {
+	return rememberValueWithCodecCtx(ctx, cache, key, ttl, func() (T, error) {
+		if fn == nil {
+			var zero T
+			return zero, errors.New("cache remember requires a callback")
+		}
+		return fn(ctx)
+	}, defaultValueCodec[T]())
+}
+
+// ValueCodec defines how to encode/decode typed values for helper operations.
 type ValueCodec[T any] struct {
 	Encode func(T) ([]byte, error)
 	Decode func([]byte) (T, error)
@@ -1091,25 +1042,7 @@ func defaultValueCodec[T any]() ValueCodec[T] {
 	}
 }
 
-// RememberValue returns a typed value or computes/stores it when missing using JSON encoding by default.
-// @group Read Through
-//
-// Example: remember typed value (codec default)
-//
-//	type Summary struct { Text string `json:"text"` }
-//	ctx := context.Background()
-//	c := cache.NewCache(cache.NewMemoryStore(ctx))
-//	s, err := cache.RememberValue[Summary](c, "dashboard:summary", time.Minute, func() (Summary, error) {
-//		return Summary{Text: "ok"}, nil
-//	})
-//	fmt.Println(err == nil, s.Text) // true ok
-func RememberValue[T any](cache *Cache, key string, ttl time.Duration, fn func() (T, error)) (T, error) {
-	return RememberValueWithCodec(context.Background(), cache, key, ttl, fn, defaultValueCodec[T]())
-}
-
-// RememberValueWithCodec allows custom encoding/decoding for typed remember operations.
-// @group Read Through
-func RememberValueWithCodec[T any](ctx context.Context, cache *Cache, key string, ttl time.Duration, fn func() (T, error), codec ValueCodec[T]) (T, error) {
+func rememberValueWithCodecCtx[T any](ctx context.Context, cache *Cache, key string, ttl time.Duration, fn func() (T, error), codec ValueCodec[T]) (T, error) {
 	var zero T
 	body, ok, err := cache.GetBytesCtx(ctx, key)
 	if err != nil {
@@ -1135,23 +1068,7 @@ func RememberValueWithCodec[T any](ctx context.Context, cache *Cache, key string
 	return val, nil
 }
 
-// RememberStaleValueWithCodec allows custom encoding/decoding for typed stale remember operations.
-// @group Read Through
-//
-// Example: remember stale with custom codec
-//
-//	type Profile struct { Name string }
-//	codec := cache.ValueCodec[Profile]{
-//		Encode: func(v Profile) ([]byte, error) { return []byte(v.Name), nil },
-//		Decode: func(b []byte) (Profile, error) { return Profile{Name: string(b)}, nil },
-//	}
-//	ctx := context.Background()
-//	c := cache.NewCache(cache.NewMemoryStore(ctx))
-//	profile, usedStale, err := cache.RememberStaleValueWithCodec(ctx, c, "profile:42", time.Minute, 10*time.Minute, func() (Profile, error) {
-//		return Profile{Name: "Ada"}, nil
-//	}, codec)
-//	fmt.Println(err == nil, usedStale, profile.Name) // true false Ada
-func RememberStaleValueWithCodec[T any](ctx context.Context, cache *Cache, key string, ttl, staleTTL time.Duration, fn func() (T, error), codec ValueCodec[T]) (T, bool, error) {
+func rememberStaleValueWithCodecCtx[T any](ctx context.Context, cache *Cache, key string, ttl, staleTTL time.Duration, fn func() (T, error), codec ValueCodec[T]) (T, bool, error) {
 	var zero T
 	body, stale, err := cache.RememberStaleBytesCtx(ctx, key, ttl, staleTTL, func(ctx context.Context) ([]byte, error) {
 		if fn == nil {
@@ -1173,30 +1090,6 @@ func RememberStaleValueWithCodec[T any](ctx context.Context, cache *Cache, key s
 	return out, stale, nil
 }
 
-// RememberJSONCtx is the context-aware variant of RememberJSON.
-// @group Read Through
-func RememberJSONCtx[T any](ctx context.Context, cache *Cache, key string, ttl time.Duration, fn func(context.Context) (T, error)) (T, error) {
-	var zero T
-	out, ok, err := GetJSONCtx[T](ctx, cache, key)
-	if err != nil {
-		return zero, err
-	}
-	if ok {
-		return out, nil
-	}
-	if fn == nil {
-		return zero, errors.New("cache remember json requires a callback")
-	}
-	value, err := fn(ctx)
-	if err != nil {
-		return zero, err
-	}
-	if err := SetJSONCtx(ctx, cache, key, value, ttl); err != nil {
-		return zero, err
-	}
-	return value, nil
-}
-
 // RememberStaleCtx returns a typed value with stale fallback semantics using JSON encoding by default.
 // @group Read Through
 //
@@ -1210,7 +1103,7 @@ func RememberJSONCtx[T any](ctx context.Context, cache *Cache, key string, ttl t
 //	})
 //	fmt.Println(err == nil, usedStale, profile.Name) // true false Ada
 func RememberStaleCtx[T any](ctx context.Context, cache *Cache, key string, ttl, staleTTL time.Duration, fn func(context.Context) (T, error)) (T, bool, error) {
-	return RememberStaleValueWithCodec(ctx, cache, key, ttl, staleTTL, func() (T, error) {
+	return rememberStaleValueWithCodecCtx(ctx, cache, key, ttl, staleTTL, func() (T, error) {
 		if fn == nil {
 			var zero T
 			return zero, errors.New("cache remember stale requires a callback")

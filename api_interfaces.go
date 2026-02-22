@@ -68,8 +68,6 @@ type LockAPI interface {
 type RememberAPI interface {
 	RememberBytes(key string, ttl time.Duration, fn func() ([]byte, error)) ([]byte, error)
 	RememberBytesCtx(ctx context.Context, key string, ttl time.Duration, fn func(context.Context) ([]byte, error)) ([]byte, error)
-	RememberString(key string, ttl time.Duration, fn func() (string, error)) (string, error)
-	RememberStringCtx(ctx context.Context, key string, ttl time.Duration, fn func(context.Context) (string, error)) (string, error)
 	RememberStaleBytes(key string, ttl, staleTTL time.Duration, fn func() ([]byte, error)) ([]byte, bool, error)
 	RememberStaleBytesCtx(ctx context.Context, key string, ttl, staleTTL time.Duration, fn func(context.Context) ([]byte, error)) ([]byte, bool, error)
 }

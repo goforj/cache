@@ -217,7 +217,7 @@ func TestContextCancellation_RefreshAheadAndRememberHelpersDoNotInvokeCallbacks(
 			run: func(t *testing.T, c *Cache, ctx context.Context) {
 				t.Helper()
 				called := false
-				_, err := c.RememberStringCtx(ctx, "rs", time.Minute, func(context.Context) (string, error) {
+				_, err := RememberCtx[string](ctx, c, "rs", time.Minute, func(context.Context) (string, error) {
 					called = true
 					return "v", nil
 				})
@@ -236,7 +236,7 @@ func TestContextCancellation_RefreshAheadAndRememberHelpersDoNotInvokeCallbacks(
 				t.Helper()
 				called := false
 				type payload struct{ Name string }
-				_, err := RememberJSONCtx[payload](ctx, c, "rj", time.Minute, func(context.Context) (payload, error) {
+				_, err := RememberCtx[payload](ctx, c, "rj", time.Minute, func(context.Context) (payload, error) {
 					called = true
 					return payload{Name: "Ada"}, nil
 				})
@@ -322,7 +322,7 @@ func TestContextCancellation_RememberJSONCtxDoesNotDecodeOrSetAfterCanceledGet(t
 
 	type payload struct{ Name string }
 	called := false
-	_, err := RememberJSONCtx[payload](ctx, c, "json-cancel", time.Minute, func(context.Context) (payload, error) {
+	_, err := RememberCtx[payload](ctx, c, "json-cancel", time.Minute, func(context.Context) (payload, error) {
 		called = true
 		return payload{Name: "Ada"}, nil
 	})

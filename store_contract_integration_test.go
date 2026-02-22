@@ -675,8 +675,8 @@ func runContextCancellationHelperInvariantSuite(t *testing.T, cache *Cache, driv
 			return err
 		})
 
-		checkNoHiddenCallbackRetry("RememberStringCtx", func(ctx context.Context, calls *atomic.Int64) error {
-			_, err := cache.RememberStringCtx(ctx, caseKey("ctx:remember_string"), time.Minute, func(context.Context) (string, error) {
+		checkNoHiddenCallbackRetry("RememberCtx[string]", func(ctx context.Context, calls *atomic.Int64) error {
+			_, err := RememberCtx[string](ctx, cache, caseKey("ctx:remember_string"), time.Minute, func(context.Context) (string, error) {
 				calls.Add(1)
 				return "v", nil
 			})
@@ -687,7 +687,7 @@ func runContextCancellationHelperInvariantSuite(t *testing.T, cache *Cache, driv
 			type payload struct {
 				Name string `json:"name"`
 			}
-			_, err := RememberJSONCtx[payload](ctx, cache, caseKey("ctx:remember_json"), time.Minute, func(context.Context) (payload, error) {
+			_, err := RememberCtx[payload](ctx, cache, caseKey("ctx:remember_json"), time.Minute, func(context.Context) (payload, error) {
 				calls.Add(1)
 				return payload{Name: "Ada"}, nil
 			})
@@ -754,8 +754,8 @@ func runLatencyAndTransientFaultHelperInvariantSuite(t *testing.T, base Store, c
 			})
 			return err
 		})
-		check("RememberStringCtx", func(ctx context.Context, calls *atomic.Int64) error {
-			_, err := cache.RememberStringCtx(ctx, caseKey("net:slow:remember_string"), time.Minute, func(context.Context) (string, error) {
+		check("RememberCtx[string]", func(ctx context.Context, calls *atomic.Int64) error {
+			_, err := RememberCtx[string](ctx, cache, caseKey("net:slow:remember_string"), time.Minute, func(context.Context) (string, error) {
 				calls.Add(1)
 				return "v", nil
 			})
@@ -765,7 +765,7 @@ func runLatencyAndTransientFaultHelperInvariantSuite(t *testing.T, base Store, c
 			type payload struct {
 				Name string `json:"name"`
 			}
-			_, err := RememberJSONCtx[payload](ctx, cache, caseKey("net:slow:remember_json"), time.Minute, func(context.Context) (payload, error) {
+			_, err := RememberCtx[payload](ctx, cache, caseKey("net:slow:remember_json"), time.Minute, func(context.Context) (payload, error) {
 				calls.Add(1)
 				return payload{Name: "Ada"}, nil
 			})

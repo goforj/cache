@@ -241,24 +241,24 @@ func TestObserverContract_HelperOpsEmitExpectedMetadata(t *testing.T) {
 		assertLast(t, before, "remember", "remember:key", true, nil)
 
 		before = obs.len()
-		if _, err := c.RememberStringCtx(ctx, "remember:string", time.Minute, func(context.Context) (string, error) {
+		if _, err := RememberCtx[string](ctx, c, "remember:string", time.Minute, func(context.Context) (string, error) {
 			return "v", nil
 		}); err != nil {
 			t.Fatalf("remember string failed: %v", err)
 		}
-		assertLast(t, before, "remember_string", "remember:string", true, nil)
+		assertLast(t, before, "set", "remember:string", false, nil)
 
-		// RememberJSON emits get_json/set_json observer ops (no dedicated remember_json op).
+		// Generic Remember emits get/set observer ops via typed codec helpers.
 		type payload struct {
 			Name string `json:"name"`
 		}
 		before = obs.len()
-		if _, err := RememberJSONCtx[payload](ctx, c, "remember:json", time.Minute, func(context.Context) (payload, error) {
+		if _, err := RememberCtx[payload](ctx, c, "remember:json", time.Minute, func(context.Context) (payload, error) {
 			return payload{Name: "Ada"}, nil
 		}); err != nil {
 			t.Fatalf("remember json failed: %v", err)
 		}
-		assertLast(t, before, "set_json", "remember:json", false, nil)
+		assertLast(t, before, "set", "remember:json", false, nil)
 
 		before = obs.len()
 		if _, _, err := RememberStaleCtx[string](ctx, c, "remember:stale", time.Minute, 2*time.Minute, func(context.Context) (string, error) {
