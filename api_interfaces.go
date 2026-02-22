@@ -67,7 +67,7 @@ type LockAPI interface {
 // RememberAPI exposes remember and stale-remember helpers.
 type RememberAPI interface {
 	RememberBytes(key string, ttl time.Duration, fn func() ([]byte, error)) ([]byte, error)
-	RememberCtx(ctx context.Context, key string, ttl time.Duration, fn func(context.Context) ([]byte, error)) ([]byte, error)
+	RememberBytesCtx(ctx context.Context, key string, ttl time.Duration, fn func(context.Context) ([]byte, error)) ([]byte, error)
 	RememberString(key string, ttl time.Duration, fn func() (string, error)) (string, error)
 	RememberStringCtx(ctx context.Context, key string, ttl time.Duration, fn func(context.Context) (string, error)) (string, error)
 	RememberStaleBytes(key string, ttl, staleTTL time.Duration, fn func() ([]byte, error)) ([]byte, bool, error)
@@ -76,8 +76,8 @@ type RememberAPI interface {
 
 // RefreshAheadAPI exposes refresh-ahead helpers.
 type RefreshAheadAPI interface {
-	RefreshAhead(key string, ttl, refreshAhead time.Duration, fn func() ([]byte, error)) ([]byte, error)
-	RefreshAheadCtx(ctx context.Context, key string, ttl, refreshAhead time.Duration, fn func(context.Context) ([]byte, error)) ([]byte, error)
+	RefreshAheadBytes(key string, ttl, refreshAhead time.Duration, fn func() ([]byte, error)) ([]byte, error)
+	RefreshAheadBytesCtx(ctx context.Context, key string, ttl, refreshAhead time.Duration, fn func(context.Context) ([]byte, error)) ([]byte, error)
 }
 
 // CacheAPI is the composed application-facing interface for Cache.

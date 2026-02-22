@@ -93,14 +93,14 @@ func testBackendFaultRecoveryForDriver(t *testing.T, fx storeFactory) {
 	t.Run("post_recovery_refresh_ahead_and_stale_paths", func(t *testing.T) {
 		refreshKey := "fault:recovery:refresh"
 		var refreshCalls atomic.Int64
-		body, err := postCache.RefreshAhead(refreshKey, time.Second, 200*time.Millisecond, func() ([]byte, error) {
+		body, err := postCache.RefreshAheadBytes(refreshKey, time.Second, 200*time.Millisecond, func() ([]byte, error) {
 			refreshCalls.Add(1)
 			return []byte("seed"), nil
 		})
 		if err != nil || string(body) != "seed" {
 			t.Fatalf("refresh ahead miss after recovery failed: body=%q err=%v", string(body), err)
 		}
-		body, err = postCache.RefreshAhead(refreshKey, time.Second, 200*time.Millisecond, func() ([]byte, error) {
+		body, err = postCache.RefreshAheadBytes(refreshKey, time.Second, 200*time.Millisecond, func() ([]byte, error) {
 			refreshCalls.Add(1)
 			return []byte("new"), nil
 		})

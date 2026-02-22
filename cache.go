@@ -248,7 +248,7 @@ func (c *Cache) BatchSetCtx(ctx context.Context, values map[string][]byte, ttl t
 	return nil
 }
 
-// RefreshAhead returns cached value immediately and refreshes asynchronously when near expiry.
+// RefreshAheadBytes returns cached value immediately and refreshes asynchronously when near expiry.
 // On miss, it computes and stores synchronously.
 // @group Refresh Ahead
 //
@@ -256,12 +256,12 @@ func (c *Cache) BatchSetCtx(ctx context.Context, values map[string][]byte, ttl t
 //
 //	ctx := context.Background()
 //	c := cache.NewCache(cache.NewMemoryStore(ctx))
-//	body, err := c.RefreshAhead("dashboard:summary", time.Minute, 10*time.Second, func() ([]byte, error) {
+//	body, err := c.RefreshAheadBytes("dashboard:summary", time.Minute, 10*time.Second, func() ([]byte, error) {
 //		return []byte("payload"), nil
 //	})
 //	fmt.Println(err == nil, len(body) > 0) // true true
-func (c *Cache) RefreshAhead(key string, ttl, refreshAhead time.Duration, fn func() ([]byte, error)) ([]byte, error) {
-	return c.RefreshAheadCtx(context.Background(), key, ttl, refreshAhead, func(ctx context.Context) ([]byte, error) {
+func (c *Cache) RefreshAheadBytes(key string, ttl, refreshAhead time.Duration, fn func() ([]byte, error)) ([]byte, error) {
+	return c.RefreshAheadBytesCtx(context.Background(), key, ttl, refreshAhead, func(ctx context.Context) ([]byte, error) {
 		if fn == nil {
 			return nil, errors.New("cache refresh ahead requires a callback")
 		}
@@ -269,9 +269,9 @@ func (c *Cache) RefreshAhead(key string, ttl, refreshAhead time.Duration, fn fun
 	})
 }
 
-// RefreshAheadCtx is the context-aware variant of RefreshAhead.
+// RefreshAheadBytesCtx is the context-aware variant of RefreshAheadBytes.
 // @group Refresh Ahead
-func (c *Cache) RefreshAheadCtx(ctx context.Context, key string, ttl, refreshAhead time.Duration, fn func(context.Context) ([]byte, error)) ([]byte, error) {
+func (c *Cache) RefreshAheadBytesCtx(ctx context.Context, key string, ttl, refreshAhead time.Duration, fn func(context.Context) ([]byte, error)) ([]byte, error) {
 	if ttl <= 0 {
 		return nil, errors.New("cache refresh ahead requires ttl > 0")
 	}
@@ -384,7 +384,7 @@ func RefreshAheadCtx[T any](ctx context.Context, cache *Cache, key string, ttl, 
 // @group Refresh Ahead
 func RefreshAheadValueWithCodec[T any](ctx context.Context, cache *Cache, key string, ttl, refreshAhead time.Duration, fn func() (T, error), codec ValueCodec[T]) (T, error) {
 	var zero T
-	body, err := cache.RefreshAheadCtx(ctx, key, ttl, refreshAhead, func(ctx context.Context) ([]byte, error) {
+	body, err := cache.RefreshAheadBytesCtx(ctx, key, ttl, refreshAhead, func(ctx context.Context) ([]byte, error) {
 		if fn == nil {
 			return nil, errors.New("cache refresh ahead requires a callback")
 		}
@@ -768,7 +768,7 @@ func (c *Cache) FlushCtx(ctx context.Context) error {
 //	})
 //	fmt.Println(err == nil, string(data)) // true payload
 func (c *Cache) RememberBytes(key string, ttl time.Duration, fn func() ([]byte, error)) ([]byte, error) {
-	return c.RememberCtx(context.Background(), key, ttl, func(ctx context.Context) ([]byte, error) {
+	return c.RememberBytesCtx(context.Background(), key, ttl, func(ctx context.Context) ([]byte, error) {
 		if fn == nil {
 			return nil, errors.New("cache remember requires a callback")
 		}
@@ -853,9 +853,9 @@ func (c *Cache) RememberStaleBytesCtx(ctx context.Context, key string, ttl, stal
 	return nil, false, err
 }
 
-// RememberCtx is the context-aware variant of RememberBytes.
+// RememberBytesCtx is the context-aware variant of RememberBytes.
 // @group Read Through
-func (c *Cache) RememberCtx(ctx context.Context, key string, ttl time.Duration, fn func(context.Context) ([]byte, error)) ([]byte, error) {
+func (c *Cache) RememberBytesCtx(ctx context.Context, key string, ttl time.Duration, fn func(context.Context) ([]byte, error)) ([]byte, error) {
 	start := time.Now()
 	body, ok, err := c.GetCtx(ctx, key)
 	if err != nil {
@@ -908,7 +908,7 @@ func (c *Cache) RememberString(key string, ttl time.Duration, fn func() (string,
 // @group Read Through
 func (c *Cache) RememberStringCtx(ctx context.Context, key string, ttl time.Duration, fn func(context.Context) (string, error)) (string, error) {
 	start := time.Now()
-	value, err := c.RememberCtx(ctx, key, ttl, func(ctx context.Context) ([]byte, error) {
+	value, err := c.RememberBytesCtx(ctx, key, ttl, func(ctx context.Context) ([]byte, error) {
 		if fn == nil {
 			c.observe(ctx, "remember_string", key, false, errors.New("cache remember string requires a callback"), start)
 			return nil, errors.New("cache remember string requires a callback")

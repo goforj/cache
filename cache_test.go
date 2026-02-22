@@ -24,11 +24,11 @@ func TestCacheRememberCachesValue(t *testing.T) {
 		return []byte("alpha"), nil
 	}
 
-	first, err := repo.RememberCtx(ctx, "k", time.Minute, fn)
+	first, err := repo.RememberBytesCtx(ctx, "k", time.Minute, fn)
 	if err != nil {
 		t.Fatalf("remember failed: %v", err)
 	}
-	second, err := repo.RememberCtx(ctx, "k", time.Minute, fn)
+	second, err := repo.RememberBytesCtx(ctx, "k", time.Minute, fn)
 	if err != nil {
 		t.Fatalf("remember failed: %v", err)
 	}
@@ -196,7 +196,7 @@ func TestCacheDeleteManyFlushAndErrors(t *testing.T) {
 		t.Fatalf("expected flush to clear key")
 	}
 
-	if _, err := repo.RememberCtx(ctx, "missing", time.Minute, nil); err == nil {
+	if _, err := repo.RememberBytesCtx(ctx, "missing", time.Minute, nil); err == nil {
 		t.Fatalf("expected remember nil callback error")
 	}
 	if _, err := repo.RememberStringCtx(ctx, "missing-string", time.Minute, nil); err == nil {
@@ -208,7 +208,7 @@ func TestCacheDeleteManyFlushAndErrors(t *testing.T) {
 	}
 
 	expected := errors.New("boom")
-	_, err = repo.RememberCtx(ctx, "broken", time.Minute, func(context.Context) ([]byte, error) {
+	_, err = repo.RememberBytesCtx(ctx, "broken", time.Minute, func(context.Context) ([]byte, error) {
 		return nil, expected
 	})
 	if !errors.Is(err, expected) {
@@ -430,7 +430,7 @@ func TestCacheRememberSetError(t *testing.T) {
 	store := &spyStore{driver: DriverMemory, setErr: expectedErr}
 	c := NewCache(store)
 	ctx := context.Background()
-	_, err := c.RememberCtx(ctx, "k", time.Second, func(context.Context) ([]byte, error) {
+	_, err := c.RememberBytesCtx(ctx, "k", time.Second, func(context.Context) ([]byte, error) {
 		return []byte("x"), nil
 	})
 	if !errors.Is(err, expectedErr) {
@@ -442,7 +442,7 @@ func TestCacheRememberGetError(t *testing.T) {
 	store := &spyStore{driver: DriverMemory, getErr: expectedErr}
 	c := NewCache(store)
 	ctx := context.Background()
-	if _, err := c.RememberCtx(ctx, "k", time.Second, func(context.Context) ([]byte, error) { return []byte("x"), nil }); !errors.Is(err, expectedErr) {
+	if _, err := c.RememberBytesCtx(ctx, "k", time.Second, func(context.Context) ([]byte, error) { return []byte("x"), nil }); !errors.Is(err, expectedErr) {
 		t.Fatalf("expected get error")
 	}
 }
@@ -576,7 +576,7 @@ func TestCacheRememberPropagatesCallbackError(t *testing.T) {
 	c := NewCache(store)
 	ctx := context.Background()
 	expected := errors.New("boom")
-	_, err := c.RememberCtx(ctx, "k", time.Second, func(context.Context) ([]byte, error) {
+	_, err := c.RememberBytesCtx(ctx, "k", time.Second, func(context.Context) ([]byte, error) {
 		return nil, expected
 	})
 	if !errors.Is(err, expected) {
@@ -946,7 +946,7 @@ func TestCacheBatchSetPropagatesError(t *testing.T) {
 func TestCacheRefreshAheadMissComputesSynchronously(t *testing.T) {
 	c := NewCache(NewMemoryStore(context.Background()))
 	calls := 0
-	body, err := c.RefreshAhead("ra:miss", time.Second, 200*time.Millisecond, func() ([]byte, error) {
+	body, err := c.RefreshAheadBytes("ra:miss", time.Second, 200*time.Millisecond, func() ([]byte, error) {
 		calls++
 		return []byte("fresh"), nil
 	})
@@ -960,7 +960,7 @@ func TestCacheRefreshAheadHitTriggersAsyncRefresh(t *testing.T) {
 	key := "ra:hit"
 
 	calls := 0
-	_, err := c.RefreshAhead(key, 300*time.Millisecond, 250*time.Millisecond, func() ([]byte, error) {
+	_, err := c.RefreshAheadBytes(key, 300*time.Millisecond, 250*time.Millisecond, func() ([]byte, error) {
 		calls++
 		return []byte("v1"), nil
 	})
@@ -971,7 +971,7 @@ func TestCacheRefreshAheadHitTriggersAsyncRefresh(t *testing.T) {
 	time.Sleep(80 * time.Millisecond)
 
 	done := make(chan struct{}, 1)
-	body, err := c.RefreshAhead(key, 300*time.Millisecond, 250*time.Millisecond, func() ([]byte, error) {
+	body, err := c.RefreshAheadBytes(key, 300*time.Millisecond, 250*time.Millisecond, func() ([]byte, error) {
 		calls++
 		done <- struct{}{}
 		return []byte("v2"), nil
@@ -1016,7 +1016,7 @@ func TestCacheRefreshAheadConcurrentHitTriggersSingleAsyncRefresh(t *testing.T) 
 		return []byte("v2"), nil
 	}
 
-	_, err := c.RefreshAhead(key, ttl, refreshAhead, cb)
+	_, err := c.RefreshAheadBytes(key, ttl, refreshAhead, cb)
 	if err != nil {
 		t.Fatalf("seed refresh ahead failed: %v", err)
 	}
@@ -1032,7 +1032,7 @@ func TestCacheRefreshAheadConcurrentHitTriggersSingleAsyncRefresh(t *testing.T) 
 		go func() {
 			defer wg.Done()
 			<-start
-			body, err := c.RefreshAhead(key, ttl, refreshAhead, cb)
+			body, err := c.RefreshAheadBytes(key, ttl, refreshAhead, cb)
 			if err != nil {
 				errs <- err
 				return
@@ -1081,18 +1081,18 @@ func TestCacheRefreshAheadConcurrentHitTriggersSingleAsyncRefresh(t *testing.T) 
 
 func TestCacheRefreshAheadValidationAndErrors(t *testing.T) {
 	c := NewCache(NewMemoryStore(context.Background()))
-	if _, err := c.RefreshAhead("ra:bad", 0, time.Second, func() ([]byte, error) { return []byte("x"), nil }); err == nil {
+	if _, err := c.RefreshAheadBytes("ra:bad", 0, time.Second, func() ([]byte, error) { return []byte("x"), nil }); err == nil {
 		t.Fatalf("expected ttl validation error")
 	}
-	if _, err := c.RefreshAhead("ra:bad", time.Second, 0, func() ([]byte, error) { return []byte("x"), nil }); err == nil {
+	if _, err := c.RefreshAheadBytes("ra:bad", time.Second, 0, func() ([]byte, error) { return []byte("x"), nil }); err == nil {
 		t.Fatalf("expected refreshAhead validation error")
 	}
-	if _, err := c.RefreshAhead("ra:bad", time.Second, time.Second, nil); err == nil {
+	if _, err := c.RefreshAheadBytes("ra:bad", time.Second, time.Second, nil); err == nil {
 		t.Fatalf("expected nil callback error")
 	}
 
 	expected := errors.New("upstream")
-	if _, err := c.RefreshAhead("ra:err", time.Second, time.Second, func() ([]byte, error) {
+	if _, err := c.RefreshAheadBytes("ra:err", time.Second, time.Second, func() ([]byte, error) {
 		return nil, expected
 	}); !errors.Is(err, expected) {
 		t.Fatalf("expected callback error, got %v", err)
@@ -1131,7 +1131,7 @@ func TestCacheRefreshAheadHitSkipsAsyncRefreshWithoutValidMetadata(t *testing.T)
 			tt.seedMeta(t, c, key)
 
 			var calls atomic.Int64
-			body, err := c.RefreshAhead(key, time.Second, 500*time.Millisecond, func() ([]byte, error) {
+			body, err := c.RefreshAheadBytes(key, time.Second, 500*time.Millisecond, func() ([]byte, error) {
 				calls.Add(1)
 				return []byte("refreshed"), nil
 			})
@@ -1329,7 +1329,7 @@ func TestCacheRememberCtxConcurrentMissContention(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			<-start
-			body, err := c.RememberCtx(ctx, "remember:contend", time.Minute, func(context.Context) ([]byte, error) {
+			body, err := c.RememberBytesCtx(ctx, "remember:contend", time.Minute, func(context.Context) ([]byte, error) {
 				calls.Add(1)
 				time.Sleep(20 * time.Millisecond)
 				return []byte("value"), nil

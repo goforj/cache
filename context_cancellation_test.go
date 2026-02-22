@@ -172,7 +172,7 @@ func TestContextCancellation_RefreshAheadAndRememberHelpersDoNotInvokeCallbacks(
 				t.Helper()
 				called := false
 				start := time.Now()
-				_, err := c.RefreshAheadCtx(ctx, "ra", time.Minute, 10*time.Second, func(context.Context) ([]byte, error) {
+				_, err := c.RefreshAheadBytesCtx(ctx, "ra", time.Minute, 10*time.Second, func(context.Context) ([]byte, error) {
 					called = true
 					return []byte("v"), nil
 				})
@@ -195,7 +195,7 @@ func TestContextCancellation_RefreshAheadAndRememberHelpersDoNotInvokeCallbacks(
 				t.Helper()
 				called := false
 				start := time.Now()
-				_, err := c.RememberCtx(ctx, "r", time.Minute, func(context.Context) ([]byte, error) {
+				_, err := c.RememberBytesCtx(ctx, "r", time.Minute, func(context.Context) ([]byte, error) {
 					called = true
 					return []byte("v"), nil
 				})

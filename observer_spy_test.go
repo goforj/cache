@@ -25,7 +25,7 @@ func TestObserverRecordsAllOps(t *testing.T) {
 	obs := &spyObserver{}
 	c := NewCache(newMemoryStore(0, 0)).WithObserver(obs)
 
-	_, _ = c.RememberCtx(ctx, "r1", time.Second, func(context.Context) ([]byte, error) { return []byte("v"), nil })
+	_, _ = c.RememberBytesCtx(ctx, "r1", time.Second, func(context.Context) ([]byte, error) { return []byte("v"), nil })
 	_, _ = c.RememberStringCtx(ctx, "r2", time.Second, func(context.Context) (string, error) { return "v", nil })
 	_, _ = RememberJSONCtx[string](ctx, c, "r3", time.Second, func(context.Context) (string, error) { return "v", nil })
 	_, _, _ = c.GetCtx(ctx, "missing")
@@ -41,6 +41,6 @@ func TestObserverRecordsAllOps(t *testing.T) {
 func TestObserverNilIsSafe(t *testing.T) {
 	ctx := context.Background()
 	c := NewCache(newMemoryStore(0, 0)) // no observer
-	_, _ = c.RememberCtx(ctx, "k", time.Second, func(context.Context) ([]byte, error) { return []byte("v"), nil })
+	_, _ = c.RememberBytesCtx(ctx, "k", time.Second, func(context.Context) ([]byte, error) { return []byte("v"), nil })
 	// ensure no panic when observer nil
 }

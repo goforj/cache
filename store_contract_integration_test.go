@@ -404,7 +404,7 @@ func runCacheHelperInvariantSuite(t *testing.T, store Store, caseKey func(string
 			}
 
 			var calls atomic.Int64
-			body, err := cache.RefreshAhead(key, 2*time.Second, time.Second, func() ([]byte, error) {
+			body, err := cache.RefreshAheadBytes(key, 2*time.Second, time.Second, func() ([]byte, error) {
 				calls.Add(1)
 				return []byte("refreshed"), nil
 			})
@@ -444,7 +444,7 @@ func runCacheHelperInvariantSuite(t *testing.T, store Store, caseKey func(string
 			}
 
 			var calls atomic.Int64
-			body, err := cache.RefreshAhead(key, 2*time.Second, time.Second, func() ([]byte, error) {
+			body, err := cache.RefreshAheadBytes(key, 2*time.Second, time.Second, func() ([]byte, error) {
 				calls.Add(1)
 				return []byte("refreshed"), nil
 			})
@@ -660,7 +660,7 @@ func runContextCancellationHelperInvariantSuite(t *testing.T, cache *Cache, driv
 		}
 
 		checkNoHiddenCallbackRetry("RefreshAheadCtx", func(ctx context.Context, calls *atomic.Int64) error {
-			_, err := cache.RefreshAheadCtx(ctx, caseKey("ctx:refresh"), time.Minute, 10*time.Second, func(context.Context) ([]byte, error) {
+			_, err := cache.RefreshAheadBytesCtx(ctx, caseKey("ctx:refresh"), time.Minute, 10*time.Second, func(context.Context) ([]byte, error) {
 				calls.Add(1)
 				return []byte("v"), nil
 			})
@@ -668,7 +668,7 @@ func runContextCancellationHelperInvariantSuite(t *testing.T, cache *Cache, driv
 		})
 
 		checkNoHiddenCallbackRetry("RememberCtx", func(ctx context.Context, calls *atomic.Int64) error {
-			_, err := cache.RememberCtx(ctx, caseKey("ctx:remember"), time.Minute, func(context.Context) ([]byte, error) {
+			_, err := cache.RememberBytesCtx(ctx, caseKey("ctx:remember"), time.Minute, func(context.Context) ([]byte, error) {
 				calls.Add(1)
 				return []byte("v"), nil
 			})
@@ -741,14 +741,14 @@ func runLatencyAndTransientFaultHelperInvariantSuite(t *testing.T, base Store, c
 		}
 
 		check("RefreshAheadCtx", func(ctx context.Context, calls *atomic.Int64) error {
-			_, err := cache.RefreshAheadCtx(ctx, caseKey("net:slow:refresh"), time.Minute, 10*time.Second, func(context.Context) ([]byte, error) {
+			_, err := cache.RefreshAheadBytesCtx(ctx, caseKey("net:slow:refresh"), time.Minute, 10*time.Second, func(context.Context) ([]byte, error) {
 				calls.Add(1)
 				return []byte("v"), nil
 			})
 			return err
 		})
 		check("RememberCtx", func(ctx context.Context, calls *atomic.Int64) error {
-			_, err := cache.RememberCtx(ctx, caseKey("net:slow:remember"), time.Minute, func(context.Context) ([]byte, error) {
+			_, err := cache.RememberBytesCtx(ctx, caseKey("net:slow:remember"), time.Minute, func(context.Context) ([]byte, error) {
 				calls.Add(1)
 				return []byte("v"), nil
 			})
@@ -842,7 +842,7 @@ func runLatencyAndTransientFaultHelperInvariantSuite(t *testing.T, base Store, c
 		cache := NewCache(flaky)
 
 		var refreshCalls atomic.Int64
-		_, err := cache.RefreshAheadCtx(context.Background(), caseKey("net:flaky:refresh"), time.Minute, 10*time.Second, func(context.Context) ([]byte, error) {
+		_, err := cache.RefreshAheadBytesCtx(context.Background(), caseKey("net:flaky:refresh"), time.Minute, 10*time.Second, func(context.Context) ([]byte, error) {
 			refreshCalls.Add(1)
 			return []byte("v"), nil
 		})
@@ -854,7 +854,7 @@ func runLatencyAndTransientFaultHelperInvariantSuite(t *testing.T, base Store, c
 		}
 
 		var rememberCalls atomic.Int64
-		_, err = cache.RememberCtx(context.Background(), caseKey("net:flaky:remember"), time.Minute, func(context.Context) ([]byte, error) {
+		_, err = cache.RememberBytesCtx(context.Background(), caseKey("net:flaky:remember"), time.Minute, func(context.Context) ([]byte, error) {
 			rememberCalls.Add(1)
 			return []byte("v"), nil
 		})
@@ -886,12 +886,12 @@ func runLatencyAndTransientFaultHelperInvariantSuite(t *testing.T, base Store, c
 		}
 
 		// Subsequent explicit calls should succeed once transient errors are exhausted.
-		if _, err := cache.RememberCtx(context.Background(), caseKey("net:flaky:remember"), time.Minute, func(context.Context) ([]byte, error) {
+		if _, err := cache.RememberBytesCtx(context.Background(), caseKey("net:flaky:remember"), time.Minute, func(context.Context) ([]byte, error) {
 			return []byte("ok"), nil
 		}); err != nil {
 			t.Fatalf("expected remember success after transient error exhausted, got %v", err)
 		}
-		if _, err := cache.RefreshAheadCtx(context.Background(), caseKey("net:flaky:refresh"), time.Minute, 10*time.Second, func(context.Context) ([]byte, error) {
+		if _, err := cache.RefreshAheadBytesCtx(context.Background(), caseKey("net:flaky:refresh"), time.Minute, 10*time.Second, func(context.Context) ([]byte, error) {
 			return []byte("ok"), nil
 		}); err != nil {
 			t.Fatalf("expected refresh ahead success after transient error exhausted, got %v", err)
@@ -1001,7 +1001,7 @@ func runRefreshAheadHelperInvariantSuite(t *testing.T, cache *Cache, driver Driv
 
 	t.Run("refresh_ahead_miss_writes_value_and_metadata", func(t *testing.T) {
 		key := caseKey("ra:miss-meta")
-		body, err := cache.RefreshAhead(key, ttl, refreshAhead, func() ([]byte, error) {
+		body, err := cache.RefreshAheadBytes(key, ttl, refreshAhead, func() ([]byte, error) {
 			return []byte("v1"), nil
 		})
 		if err != nil || string(body) != "v1" {
@@ -1022,7 +1022,7 @@ func runRefreshAheadHelperInvariantSuite(t *testing.T, cache *Cache, driver Driv
 	t.Run("refresh_ahead_hit_async_success_updates_value", func(t *testing.T) {
 		key := caseKey("ra:async-success")
 		calls := int64(0)
-		_, err := cache.RefreshAhead(key, ttl, refreshAhead, func() ([]byte, error) {
+		_, err := cache.RefreshAheadBytes(key, ttl, refreshAhead, func() ([]byte, error) {
 			atomic.AddInt64(&calls, 1)
 			return []byte("v1"), nil
 		})
@@ -1032,7 +1032,7 @@ func runRefreshAheadHelperInvariantSuite(t *testing.T, cache *Cache, driver Driv
 		time.Sleep(nearExpirySleep)
 
 		done := make(chan struct{}, 1)
-		body, err := cache.RefreshAhead(key, ttl, refreshAhead, func() ([]byte, error) {
+		body, err := cache.RefreshAheadBytes(key, ttl, refreshAhead, func() ([]byte, error) {
 			atomic.AddInt64(&calls, 1)
 			select {
 			case done <- struct{}{}:
@@ -1070,7 +1070,7 @@ func runRefreshAheadHelperInvariantSuite(t *testing.T, cache *Cache, driver Driv
 
 	t.Run("refresh_ahead_async_error_keeps_existing_value", func(t *testing.T) {
 		key := caseKey("ra:async-error")
-		_, err := cache.RefreshAhead(key, ttl, refreshAhead, func() ([]byte, error) {
+		_, err := cache.RefreshAheadBytes(key, ttl, refreshAhead, func() ([]byte, error) {
 			return []byte("v1"), nil
 		})
 		if err != nil {
@@ -1079,7 +1079,7 @@ func runRefreshAheadHelperInvariantSuite(t *testing.T, cache *Cache, driver Driv
 		time.Sleep(nearExpirySleep)
 
 		done := make(chan struct{}, 1)
-		body, err := cache.RefreshAhead(key, ttl, refreshAhead, func() ([]byte, error) {
+		body, err := cache.RefreshAheadBytes(key, ttl, refreshAhead, func() ([]byte, error) {
 			select {
 			case done <- struct{}{}:
 			default:
@@ -1409,7 +1409,7 @@ func runDriverFactoryInvariantSuite(t *testing.T, fx storeFactory) {
 
 		t.Run("refresh_metadata_keys", func(t *testing.T) {
 			key := "prefix:helper:refresh"
-			if _, err := ca.RefreshAhead(key, time.Minute, 10*time.Second, func() ([]byte, error) {
+			if _, err := ca.RefreshAheadBytes(key, time.Minute, 10*time.Second, func() ([]byte, error) {
 				return []byte("v"), nil
 			}); err != nil {
 				t.Fatalf("refresh ahead seed failed: %v", err)

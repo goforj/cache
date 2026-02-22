@@ -233,7 +233,7 @@ func TestObserverContract_HelperOpsEmitExpectedMetadata(t *testing.T) {
 
 	t.Run("read_through_and_refresh_helpers", func(t *testing.T) {
 		before := obs.len()
-		if _, err := c.RememberCtx(ctx, "remember:key", time.Minute, func(context.Context) ([]byte, error) {
+		if _, err := c.RememberBytesCtx(ctx, "remember:key", time.Minute, func(context.Context) ([]byte, error) {
 			return []byte("v"), nil
 		}); err != nil {
 			t.Fatalf("remember failed: %v", err)
@@ -269,7 +269,7 @@ func TestObserverContract_HelperOpsEmitExpectedMetadata(t *testing.T) {
 		assertLast(t, before, "remember_stale", "remember:stale", true, nil)
 
 		before = obs.len()
-		if _, err := c.RefreshAheadCtx(ctx, "refresh:miss", time.Minute, 10*time.Second, func(context.Context) ([]byte, error) {
+		if _, err := c.RefreshAheadBytesCtx(ctx, "refresh:miss", time.Minute, 10*time.Second, func(context.Context) ([]byte, error) {
 			return []byte("v"), nil
 		}); err != nil {
 			t.Fatalf("refresh ahead miss failed: %v", err)
@@ -335,7 +335,7 @@ func TestObserverContract_ErrorPropagation(t *testing.T) {
 
 	t.Run("remember_nil_callback", func(t *testing.T) {
 		before := obs.len()
-		_, err := c.RememberCtx(ctx, "remember:nil", time.Minute, nil)
+		_, err := c.RememberBytesCtx(ctx, "remember:nil", time.Minute, nil)
 		if err == nil {
 			t.Fatalf("expected error")
 		}
@@ -347,7 +347,7 @@ func TestObserverContract_ErrorPropagation(t *testing.T) {
 
 	t.Run("refresh_ahead_nil_callback", func(t *testing.T) {
 		before := obs.len()
-		_, err := c.RefreshAheadCtx(ctx, "refresh:nil", time.Minute, 10*time.Second, nil)
+		_, err := c.RefreshAheadBytesCtx(ctx, "refresh:nil", time.Minute, 10*time.Second, nil)
 		if err == nil {
 			t.Fatalf("expected error")
 		}
