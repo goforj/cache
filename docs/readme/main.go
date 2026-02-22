@@ -65,7 +65,10 @@ func run() error {
 //
 
 type FuncDoc struct {
+	Key         string
 	Name        string
+	DisplayName string
+	Anchor      string
 	Group       string
 	Behavior    string
 	Fluent      string
@@ -130,8 +133,21 @@ func parseFuncs(root string) ([]*FuncDoc, error) {
 				continue
 			}
 
+			receiver := extractReceiverName(fn)
+			displayName := fn.Name.Name
+			anchor := strings.ToLower(fn.Name.Name)
+			key := fn.Name.Name
+			if receiver != "" {
+				displayName = receiver + "." + fn.Name.Name
+				anchor = strings.ToLower(receiver + "-" + fn.Name.Name)
+				key = receiver + "." + fn.Name.Name
+			}
+
 			fd := &FuncDoc{
+				Key:         key,
 				Name:        fn.Name.Name,
+				DisplayName: displayName,
+				Anchor:      anchor,
 				Group:       extractGroup(fn.Doc),
 				Behavior:    extractBehavior(fn.Doc),
 				Fluent:      extractFluent(fn.Doc),
@@ -139,10 +155,10 @@ func parseFuncs(root string) ([]*FuncDoc, error) {
 				Examples:    extractExamples(fset, fn),
 			}
 
-			if existing, ok := funcs[fd.Name]; ok {
+			if existing, ok := funcs[fd.Key]; ok {
 				existing.Examples = append(existing.Examples, fd.Examples...)
 			} else {
-				funcs[fd.Name] = fd
+				funcs[fd.Key] = fd
 			}
 		}
 	}
@@ -209,6 +225,30 @@ func extractDescription(group *ast.CommentGroup) string {
 	}
 
 	return strings.TrimSpace(strings.Join(lines, "\n"))
+}
+
+func extractReceiverName(fn *ast.FuncDecl) string {
+	if fn.Recv == nil || len(fn.Recv.List) == 0 {
+		return ""
+	}
+	return receiverTypeName(fn.Recv.List[0].Type)
+}
+
+func receiverTypeName(expr ast.Expr) string {
+	switch t := expr.(type) {
+	case *ast.StarExpr:
+		return receiverTypeName(t.X)
+	case *ast.Ident:
+		return t.Name
+	case *ast.IndexExpr:
+		return receiverTypeName(t.X)
+	case *ast.IndexListExpr:
+		return receiverTypeName(t.X)
+	case *ast.SelectorExpr:
+		return t.Sel.Name
+	default:
+		return ""
+	}
 }
 
 func extractExamples(fset *token.FileSet, fn *ast.FuncDecl) []Example {
@@ -330,12 +370,15 @@ func renderAPI(funcs []*FuncDoc) string {
 
 	for _, group := range groupNames {
 		sort.Slice(byGroup[group], func(i, j int) bool {
-			return byGroup[group][i].Name < byGroup[group][j].Name
+			if byGroup[group][i].DisplayName == byGroup[group][j].DisplayName {
+				return byGroup[group][i].Anchor < byGroup[group][j].Anchor
+			}
+			return byGroup[group][i].DisplayName < byGroup[group][j].DisplayName
 		})
 
 		var links []string
 		for _, fn := range byGroup[group] {
-			links = append(links, fmt.Sprintf("[%s](#%s)", fn.Name, strings.ToLower(fn.Name)))
+			links = append(links, fmt.Sprintf("[%s](#%s)", fn.DisplayName, fn.Anchor))
 		}
 
 		buf.WriteString(fmt.Sprintf("| **%s** | %s |\n",
@@ -351,9 +394,9 @@ func renderAPI(funcs []*FuncDoc) string {
 		buf.WriteString("## " + group + "\n\n")
 
 		for _, fn := range byGroup[group] {
-			anchor := strings.ToLower(fn.Name)
+			anchor := fn.Anchor
 
-			header := fn.Name
+			header := fn.DisplayName
 			if fn.Behavior != "" {
 				header += " · " + fn.Behavior
 			}
