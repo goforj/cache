@@ -12,24 +12,24 @@ type CoreAPI interface {
 
 // ReadAPI exposes read-oriented cache operations.
 type ReadAPI interface {
-	Get(key string) ([]byte, bool, error)
-	GetCtx(ctx context.Context, key string) ([]byte, bool, error)
-	BatchGet(keys ...string) (map[string][]byte, error)
-	BatchGetCtx(ctx context.Context, keys ...string) (map[string][]byte, error)
+	GetBytes(key string) ([]byte, bool, error)
+	GetBytesCtx(ctx context.Context, key string) ([]byte, bool, error)
+	BatchGetBytes(keys ...string) (map[string][]byte, error)
+	BatchGetBytesCtx(ctx context.Context, keys ...string) (map[string][]byte, error)
 	GetString(key string) (string, bool, error)
 	GetStringCtx(ctx context.Context, key string) (string, bool, error)
-	Pull(key string) ([]byte, bool, error)
-	PullCtx(ctx context.Context, key string) ([]byte, bool, error)
+	PullBytes(key string) ([]byte, bool, error)
+	PullBytesCtx(ctx context.Context, key string) ([]byte, bool, error)
 }
 
 // WriteAPI exposes write and invalidation operations.
 type WriteAPI interface {
-	Set(key string, value []byte, ttl time.Duration) error
-	SetCtx(ctx context.Context, key string, value []byte, ttl time.Duration) error
+	SetBytes(key string, value []byte, ttl time.Duration) error
+	SetBytesCtx(ctx context.Context, key string, value []byte, ttl time.Duration) error
 	SetString(key string, value string, ttl time.Duration) error
 	SetStringCtx(ctx context.Context, key string, value string, ttl time.Duration) error
-	BatchSet(values map[string][]byte, ttl time.Duration) error
-	BatchSetCtx(ctx context.Context, values map[string][]byte, ttl time.Duration) error
+	BatchSetBytes(values map[string][]byte, ttl time.Duration) error
+	BatchSetBytesCtx(ctx context.Context, values map[string][]byte, ttl time.Duration) error
 	Add(key string, value []byte, ttl time.Duration) (bool, error)
 	AddCtx(ctx context.Context, key string, value []byte, ttl time.Duration) (bool, error)
 	Delete(key string) error

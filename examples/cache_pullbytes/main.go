@@ -11,7 +11,7 @@ import (
 )
 
 func main() {
-	// Pull returns value and removes it from cache.
+	// PullBytes returns value and removes it from cache.
 
 	// Example: pull and delete
 	ctx := context.Background()

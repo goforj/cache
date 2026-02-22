@@ -169,11 +169,11 @@ func benchOp(ctx context.Context, c *cache.Cache, fn func(context.Context, *cach
 }
 
 func doSet(ctx context.Context, c *cache.Cache) {
-	_ = c.Set("bench:key", []byte("v"), time.Minute)
+	_ = c.SetBytes("bench:key", []byte("v"), time.Minute)
 }
 
 func doGet(ctx context.Context, c *cache.Cache) {
-	_, _, _ = c.Get("bench:key")
+	_, _, _ = c.GetBytes("bench:key")
 }
 
 func doDelete(ctx context.Context, c *cache.Cache) {

@@ -16,7 +16,7 @@ func main() {
 	// Example: batch set keys
 	ctx := context.Background()
 	c := cache.NewCache(cache.NewMemoryStore(ctx))
-	err := c.BatchSet(map[string][]byte{
+	err := c.BatchSetBytes(map[string][]byte{
 		"a": []byte("1"),
 		"b": []byte("2"),
 	}, time.Minute)

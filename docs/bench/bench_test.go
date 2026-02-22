@@ -180,13 +180,13 @@ func benchmarkSetGet(b *testing.B, c *cache.Cache) {
 	key := "bench:key"
 	val := []byte("value")
 
-	_ = c.Set(key, val, time.Minute)
-	_, _, _ = c.Get(key)
+	_ = c.SetBytes(key, val, time.Minute)
+	_, _, _ = c.GetBytes(key)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = c.Set(key, val, time.Minute)
-		_, _, _ = c.Get(key)
+		_ = c.SetBytes(key, val, time.Minute)
+		_, _, _ = c.GetBytes(key)
 	}
 }
 

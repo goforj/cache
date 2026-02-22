@@ -82,7 +82,7 @@ func (c *Cache) Driver() Driver {
 	return c.store.Driver()
 }
 
-// Get returns raw bytes for key when present.
+// GetBytes returns raw bytes for key when present.
 // @group Reads
 //
 // Example: get bytes
@@ -90,23 +90,23 @@ func (c *Cache) Driver() Driver {
 //	ctx := context.Background()
 //	s := cache.NewMemoryStore(ctx)
 //	c := cache.NewCache(s)
-//	_ = c.Set("user:42", []byte("Ada"), 0)
-//	value, ok, _ := c.Get("user:42")
+//	_ = c.SetBytes("user:42", []byte("Ada"), 0)
+//	value, ok, _ := c.GetBytes("user:42")
 //	fmt.Println(ok, string(value)) // true Ada
-func (c *Cache) Get(key string) ([]byte, bool, error) {
-	return c.GetCtx(context.Background(), key)
+func (c *Cache) GetBytes(key string) ([]byte, bool, error) {
+	return c.GetBytesCtx(context.Background(), key)
 }
 
-// GetCtx is the context-aware variant of Get.
+// GetBytesCtx is the context-aware variant of GetBytes.
 // @group Reads
-func (c *Cache) GetCtx(ctx context.Context, key string) ([]byte, bool, error) {
+func (c *Cache) GetBytesCtx(ctx context.Context, key string) ([]byte, bool, error) {
 	start := time.Now()
 	body, ok, err := c.store.Get(ctx, key)
 	c.observe(ctx, "get", key, ok, err, start)
 	return body, ok, err
 }
 
-// BatchGet returns all found values for the provided keys.
+// BatchGetBytes returns all found values for the provided keys.
 // Missing keys are omitted from the returned map.
 // @group Reads
 //
@@ -114,20 +114,20 @@ func (c *Cache) GetCtx(ctx context.Context, key string) ([]byte, bool, error) {
 //
 //	ctx := context.Background()
 //	c := cache.NewCache(cache.NewMemoryStore(ctx))
-//	_ = c.Set("a", []byte("1"), time.Minute)
-//	_ = c.Set("b", []byte("2"), time.Minute)
-//	values, err := c.BatchGet("a", "b", "missing")
+//	_ = c.SetBytes("a", []byte("1"), time.Minute)
+//	_ = c.SetBytes("b", []byte("2"), time.Minute)
+//	values, err := c.BatchGetBytes("a", "b", "missing")
 //	fmt.Println(err == nil, string(values["a"]), string(values["b"])) // true 1 2
-func (c *Cache) BatchGet(keys ...string) (map[string][]byte, error) {
-	return c.BatchGetCtx(context.Background(), keys...)
+func (c *Cache) BatchGetBytes(keys ...string) (map[string][]byte, error) {
+	return c.BatchGetBytesCtx(context.Background(), keys...)
 }
 
-// BatchGetCtx is the context-aware variant of BatchGet.
+// BatchGetBytesCtx is the context-aware variant of BatchGetBytes.
 // @group Reads
-func (c *Cache) BatchGetCtx(ctx context.Context, keys ...string) (map[string][]byte, error) {
+func (c *Cache) BatchGetBytesCtx(ctx context.Context, keys ...string) (map[string][]byte, error) {
 	out := make(map[string][]byte, len(keys))
 	for _, key := range keys {
-		body, ok, err := c.GetCtx(ctx, key)
+		body, ok, err := c.GetBytesCtx(ctx, key)
 		if err != nil {
 			return nil, err
 		}
@@ -156,7 +156,7 @@ func (c *Cache) GetString(key string) (string, bool, error) {
 // @group Reads
 func (c *Cache) GetStringCtx(ctx context.Context, key string) (string, bool, error) {
 	start := time.Now()
-	body, ok, err := c.GetCtx(ctx, key)
+	body, ok, err := c.GetBytesCtx(ctx, key)
 	if err != nil || !ok {
 		c.observe(ctx, "get_string", key, ok, err, start)
 		return "", ok, err
@@ -186,7 +186,7 @@ func GetJSON[T any](cache *Cache, key string) (T, bool, error) {
 func GetJSONCtx[T any](ctx context.Context, cache *Cache, key string) (T, bool, error) {
 	var zero T
 	start := time.Now()
-	body, ok, err := cache.GetCtx(ctx, key)
+	body, ok, err := cache.GetBytesCtx(ctx, key)
 	if err != nil || !ok {
 		cache.observe(ctx, "get_json", key, ok, err, start)
 		return zero, ok, err
@@ -200,48 +200,78 @@ func GetJSONCtx[T any](ctx context.Context, cache *Cache, key string) (T, bool, 
 	return out, true, nil
 }
 
-// Set writes raw bytes to key.
+// Get returns a typed value for key using the default codec (JSON) when present.
+// @group Reads
+//
+// Example: get typed value
+//
+//	type Profile struct { Name string `json:"name"` }
+//	ctx := context.Background()
+//	c := cache.NewCache(cache.NewMemoryStore(ctx))
+//	_ = cache.Set(c, "profile:42", Profile{Name: "Ada"}, time.Minute)
+//	profile, ok, err := cache.Get[Profile](c, "profile:42")
+//	fmt.Println(err == nil, ok, profile.Name) // true true Ada
+func Get[T any](cache *Cache, key string) (T, bool, error) {
+	return GetCtx[T](context.Background(), cache, key)
+}
+
+// GetCtx is the context-aware variant of Get.
+// @group Reads
+func GetCtx[T any](ctx context.Context, cache *Cache, key string) (T, bool, error) {
+	var zero T
+	body, ok, err := cache.GetBytesCtx(ctx, key)
+	if err != nil || !ok {
+		return zero, ok, err
+	}
+	out, err := defaultValueCodec[T]().Decode(body)
+	if err != nil {
+		return zero, false, err
+	}
+	return out, true, nil
+}
+
+// SetBytes writes raw bytes to key.
 // @group Writes
 //
 // Example: set bytes with ttl
 //
 //	ctx := context.Background()
 //	c := cache.NewCache(cache.NewMemoryStore(ctx))
-//	fmt.Println(c.Set("token", []byte("abc"), time.Minute) == nil) // true
-func (c *Cache) Set(key string, value []byte, ttl time.Duration) error {
-	return c.SetCtx(context.Background(), key, value, ttl)
+//	fmt.Println(c.SetBytes("token", []byte("abc"), time.Minute) == nil) // true
+func (c *Cache) SetBytes(key string, value []byte, ttl time.Duration) error {
+	return c.SetBytesCtx(context.Background(), key, value, ttl)
 }
 
-// SetCtx is the context-aware variant of Set.
+// SetBytesCtx is the context-aware variant of SetBytes.
 // @group Writes
-func (c *Cache) SetCtx(ctx context.Context, key string, value []byte, ttl time.Duration) error {
+func (c *Cache) SetBytesCtx(ctx context.Context, key string, value []byte, ttl time.Duration) error {
 	start := time.Now()
 	err := c.store.Set(ctx, key, value, c.resolveTTL(ttl))
 	c.observe(ctx, "set", key, false, err, start)
 	return err
 }
 
-// BatchSet writes many key/value pairs using a shared ttl.
+// BatchSetBytes writes many key/value pairs using a shared ttl.
 // @group Writes
 //
 // Example: batch set keys
 //
 //	ctx := context.Background()
 //	c := cache.NewCache(cache.NewMemoryStore(ctx))
-//	err := c.BatchSet(map[string][]byte{
+//	err := c.BatchSetBytes(map[string][]byte{
 //		"a": []byte("1"),
 //		"b": []byte("2"),
 //	}, time.Minute)
 //	fmt.Println(err == nil) // true
-func (c *Cache) BatchSet(values map[string][]byte, ttl time.Duration) error {
-	return c.BatchSetCtx(context.Background(), values, ttl)
+func (c *Cache) BatchSetBytes(values map[string][]byte, ttl time.Duration) error {
+	return c.BatchSetBytesCtx(context.Background(), values, ttl)
 }
 
-// BatchSetCtx is the context-aware variant of BatchSet.
+// BatchSetBytesCtx is the context-aware variant of BatchSetBytes.
 // @group Writes
-func (c *Cache) BatchSetCtx(ctx context.Context, values map[string][]byte, ttl time.Duration) error {
+func (c *Cache) BatchSetBytesCtx(ctx context.Context, values map[string][]byte, ttl time.Duration) error {
 	for key, value := range values {
-		if err := c.SetCtx(ctx, key, value, ttl); err != nil {
+		if err := c.SetBytesCtx(ctx, key, value, ttl); err != nil {
 			return err
 		}
 	}
@@ -279,7 +309,7 @@ func (c *Cache) RefreshAheadBytesCtx(ctx context.Context, key string, ttl, refre
 		return nil, errors.New("cache refresh ahead requires refreshAhead > 0")
 	}
 	start := time.Now()
-	body, ok, err := c.GetCtx(ctx, key)
+	body, ok, err := c.GetBytesCtx(ctx, key)
 	if err != nil {
 		c.observe(ctx, "refresh_ahead", key, false, err, start)
 		return nil, err
@@ -309,7 +339,7 @@ func (c *Cache) RefreshAheadBytesCtx(ctx context.Context, key string, ttl, refre
 
 func (c *Cache) maybeTriggerRefreshAhead(key string, ttl, refreshAhead time.Duration, fn func(context.Context) ([]byte, error)) {
 	metaKey := key + refreshMetaSuffix
-	meta, ok, err := c.GetCtx(context.Background(), metaKey)
+	meta, ok, err := c.GetBytesCtx(context.Background(), metaKey)
 	if err != nil || !ok {
 		return
 	}
@@ -339,11 +369,11 @@ func (c *Cache) maybeTriggerRefreshAhead(key string, ttl, refreshAhead time.Dura
 }
 
 func (c *Cache) setRefreshAheadValue(ctx context.Context, key string, value []byte, ttl time.Duration) error {
-	if err := c.SetCtx(ctx, key, value, ttl); err != nil {
+	if err := c.SetBytesCtx(ctx, key, value, ttl); err != nil {
 		return err
 	}
 	expiresAt := time.Now().Add(c.resolveTTL(ttl)).UnixNano()
-	return c.SetCtx(ctx, key+refreshMetaSuffix, []byte(strconv.FormatInt(expiresAt, 10)), ttl)
+	return c.SetBytesCtx(ctx, key+refreshMetaSuffix, []byte(strconv.FormatInt(expiresAt, 10)), ttl)
 }
 
 // RefreshAhead returns a typed value and refreshes asynchronously when near expiry.
@@ -420,7 +450,7 @@ func (c *Cache) SetString(key string, value string, ttl time.Duration) error {
 // @group Writes
 func (c *Cache) SetStringCtx(ctx context.Context, key string, value string, ttl time.Duration) error {
 	start := time.Now()
-	err := c.SetCtx(ctx, key, []byte(value), ttl)
+	err := c.SetBytesCtx(ctx, key, []byte(value), ttl)
 	c.observe(ctx, "set_string", key, false, err, start)
 	return err
 }
@@ -448,9 +478,33 @@ func SetJSONCtx[T any](ctx context.Context, cache *Cache, key string, value T, t
 		cache.observe(ctx, "set_json", key, false, err, start)
 		return err
 	}
-	err = cache.SetCtx(ctx, key, body, ttl)
+	err = cache.SetBytesCtx(ctx, key, body, ttl)
 	cache.observe(ctx, "set_json", key, false, err, start)
 	return err
+}
+
+// Set encodes value with the default codec (JSON) and writes it to key.
+// @group Writes
+//
+// Example: set typed value
+//
+//	type Settings struct { Enabled bool `json:"enabled"` }
+//	ctx := context.Background()
+//	c := cache.NewCache(cache.NewMemoryStore(ctx))
+//	err := cache.Set(c, "settings:alerts", Settings{Enabled: true}, time.Minute)
+//	fmt.Println(err == nil) // true
+func Set[T any](cache *Cache, key string, value T, ttl time.Duration) error {
+	return SetCtx[T](context.Background(), cache, key, value, ttl)
+}
+
+// SetCtx is the context-aware variant of Set.
+// @group Writes
+func SetCtx[T any](ctx context.Context, cache *Cache, key string, value T, ttl time.Duration) error {
+	body, err := defaultValueCodec[T]().Encode(value)
+	if err != nil {
+		return err
+	}
+	return cache.SetBytesCtx(ctx, key, body, ttl)
 }
 
 // Add writes value only when key is not already present.
@@ -658,7 +712,7 @@ func (c *Cache) UnlockCtx(ctx context.Context, key string) error {
 	return err
 }
 
-// Pull returns value and removes it from cache.
+// PullBytes returns value and removes it from cache.
 // @group Invalidation
 //
 // Example: pull and delete
@@ -666,17 +720,17 @@ func (c *Cache) UnlockCtx(ctx context.Context, key string) error {
 //	ctx := context.Background()
 //	c := cache.NewCache(cache.NewMemoryStore(ctx))
 //	_ = c.SetString("reset:token:42", "abc", time.Minute)
-//	body, ok, _ := c.Pull("reset:token:42")
+//	body, ok, _ := c.PullBytes("reset:token:42")
 //	fmt.Println(ok, string(body)) // true abc
-func (c *Cache) Pull(key string) ([]byte, bool, error) {
-	return c.PullCtx(context.Background(), key)
+func (c *Cache) PullBytes(key string) ([]byte, bool, error) {
+	return c.PullBytesCtx(context.Background(), key)
 }
 
-// PullCtx is the context-aware variant of Pull.
+// PullBytesCtx is the context-aware variant of PullBytes.
 // @group Invalidation
-func (c *Cache) PullCtx(ctx context.Context, key string) ([]byte, bool, error) {
+func (c *Cache) PullBytesCtx(ctx context.Context, key string) ([]byte, bool, error) {
 	start := time.Now()
-	body, ok, err := c.GetCtx(ctx, key)
+	body, ok, err := c.GetBytesCtx(ctx, key)
 	if err != nil || !ok {
 		c.observe(ctx, "pull", key, ok, err, start)
 		return nil, ok, err
@@ -689,6 +743,36 @@ func (c *Cache) PullCtx(ctx context.Context, key string) ([]byte, bool, error) {
 	return body, true, nil
 }
 
+// Pull returns a typed value for key and removes it, using the default codec (JSON).
+// @group Invalidation
+//
+// Example: pull typed value
+//
+//	type Token struct { Value string `json:"value"` }
+//	ctx := context.Background()
+//	c := cache.NewCache(cache.NewMemoryStore(ctx))
+//	_ = cache.Set(c, "reset:token:42", Token{Value: "abc"}, time.Minute)
+//	tok, ok, err := cache.Pull[Token](c, "reset:token:42")
+//	fmt.Println(err == nil, ok, tok.Value) // true true abc
+func Pull[T any](cache *Cache, key string) (T, bool, error) {
+	return PullCtx[T](context.Background(), cache, key)
+}
+
+// PullCtx is the context-aware variant of Pull.
+// @group Invalidation
+func PullCtx[T any](ctx context.Context, cache *Cache, key string) (T, bool, error) {
+	var zero T
+	body, ok, err := cache.PullBytesCtx(ctx, key)
+	if err != nil || !ok {
+		return zero, ok, err
+	}
+	out, err := defaultValueCodec[T]().Decode(body)
+	if err != nil {
+		return zero, false, err
+	}
+	return out, true, nil
+}
+
 // Delete removes a single key.
 // @group Invalidation
 //
@@ -696,7 +780,7 @@ func (c *Cache) PullCtx(ctx context.Context, key string) ([]byte, bool, error) {
 //
 //	ctx := context.Background()
 //	c := cache.NewCache(cache.NewMemoryStore(ctx))
-//	_ = c.Set("a", []byte("1"), time.Minute)
+//	_ = c.SetBytes("a", []byte("1"), time.Minute)
 //	fmt.Println(c.Delete("a") == nil) // true
 func (c *Cache) Delete(key string) error {
 	return c.DeleteCtx(context.Background(), key)
@@ -741,7 +825,7 @@ func (c *Cache) DeleteManyCtx(ctx context.Context, keys ...string) error {
 //
 //	ctx := context.Background()
 //	c := cache.NewCache(cache.NewMemoryStore(ctx))
-//	_ = c.Set("a", []byte("1"), time.Minute)
+//	_ = c.SetBytes("a", []byte("1"), time.Minute)
 //	fmt.Println(c.Flush() == nil) // true
 func (c *Cache) Flush() error {
 	return c.FlushCtx(context.Background())
@@ -810,7 +894,7 @@ func (c *Cache) RememberStaleBytesCtx(ctx context.Context, key string, ttl, stal
 	start := time.Now()
 	staleKey := key + staleSuffix
 
-	body, ok, err := c.GetCtx(ctx, key)
+	body, ok, err := c.GetBytesCtx(ctx, key)
 	if err != nil {
 		c.observe(ctx, "remember_stale", key, false, err, start)
 		return nil, false, err
@@ -827,7 +911,7 @@ func (c *Cache) RememberStaleBytesCtx(ctx context.Context, key string, ttl, stal
 
 	value, err := fn(ctx)
 	if err == nil {
-		if err := c.SetCtx(ctx, key, value, ttl); err != nil {
+		if err := c.SetBytesCtx(ctx, key, value, ttl); err != nil {
 			c.observe(ctx, "remember_stale", key, false, err, start)
 			return nil, false, err
 		}
@@ -835,13 +919,13 @@ func (c *Cache) RememberStaleBytesCtx(ctx context.Context, key string, ttl, stal
 			staleTTL = ttl
 		}
 		if staleTTL > 0 {
-			_ = c.SetCtx(ctx, staleKey, value, staleTTL)
+			_ = c.SetBytesCtx(ctx, staleKey, value, staleTTL)
 		}
 		c.observe(ctx, "remember_stale", key, true, nil, start)
 		return value, false, nil
 	}
 
-	staleBody, staleOK, staleErr := c.GetCtx(ctx, staleKey)
+	staleBody, staleOK, staleErr := c.GetBytesCtx(ctx, staleKey)
 	if staleErr == nil && staleOK {
 		c.observe(ctx, "remember_stale", key, true, nil, start)
 		return staleBody, true, nil
@@ -857,7 +941,7 @@ func (c *Cache) RememberStaleBytesCtx(ctx context.Context, key string, ttl, stal
 // @group Read Through
 func (c *Cache) RememberBytesCtx(ctx context.Context, key string, ttl time.Duration, fn func(context.Context) ([]byte, error)) ([]byte, error) {
 	start := time.Now()
-	body, ok, err := c.GetCtx(ctx, key)
+	body, ok, err := c.GetBytesCtx(ctx, key)
 	if err != nil {
 		c.observe(ctx, "remember", key, ok, err, start)
 		return nil, err
@@ -876,7 +960,7 @@ func (c *Cache) RememberBytesCtx(ctx context.Context, key string, ttl time.Durat
 		c.observe(ctx, "remember", key, false, err, start)
 		return nil, err
 	}
-	if err := c.SetCtx(ctx, key, body, ttl); err != nil {
+	if err := c.SetBytesCtx(ctx, key, body, ttl); err != nil {
 		c.observe(ctx, "remember", key, false, err, start)
 		return nil, err
 	}
@@ -1027,7 +1111,7 @@ func RememberValue[T any](cache *Cache, key string, ttl time.Duration, fn func()
 // @group Read Through
 func RememberValueWithCodec[T any](ctx context.Context, cache *Cache, key string, ttl time.Duration, fn func() (T, error), codec ValueCodec[T]) (T, error) {
 	var zero T
-	body, ok, err := cache.GetCtx(ctx, key)
+	body, ok, err := cache.GetBytesCtx(ctx, key)
 	if err != nil {
 		return zero, err
 	}
@@ -1045,7 +1129,7 @@ func RememberValueWithCodec[T any](ctx context.Context, cache *Cache, key string
 	if err != nil {
 		return zero, err
 	}
-	if err := cache.SetCtx(ctx, key, encoded, ttl); err != nil {
+	if err := cache.SetBytesCtx(ctx, key, encoded, ttl); err != nil {
 		return zero, err
 	}
 	return val, nil

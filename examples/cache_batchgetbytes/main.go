@@ -11,7 +11,7 @@ import (
 )
 
 func main() {
-	// BatchGet returns all found values for the provided keys.
+	// BatchGetBytes returns all found values for the provided keys.
 	// Missing keys are omitted from the returned map.
 
 	// Example: batch get keys

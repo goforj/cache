@@ -11,10 +11,12 @@ import (
 )
 
 func main() {
-	// Set writes raw bytes to key.
+	// Set encodes value with the default codec (JSON) and writes it to key.
 
-	// Example: set bytes with ttl
+	// Example: set typed value
+	type Settings struct { Enabled bool `json:"enabled"` }
 	ctx := context.Background()
 	c := cache.NewCache(cache.NewMemoryStore(ctx))
-	fmt.Println(c.Set("token", []byte("abc"), time.Minute) == nil) // true
+	err := cache.Set(c, "settings:alerts", Settings{Enabled: true}, time.Minute)
+	fmt.Println(err == nil) // true
 }

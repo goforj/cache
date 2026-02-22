@@ -92,7 +92,7 @@ func TestContextCancellation_GetSetLockCtxReturnPromptlyAndRespectContext(t *tes
 		defer cancel()
 
 		start := time.Now()
-		_, ok, err := c.GetCtx(ctx, "k")
+		_, ok, err := c.GetBytesCtx(ctx, "k")
 		elapsed := time.Since(start)
 
 		if ok {
@@ -116,7 +116,7 @@ func TestContextCancellation_GetSetLockCtxReturnPromptlyAndRespectContext(t *tes
 		defer cancel()
 
 		start := time.Now()
-		err := c.SetCtx(ctx, "k", []byte("v"), time.Minute)
+		err := c.SetBytesCtx(ctx, "k", []byte("v"), time.Minute)
 		elapsed := time.Since(start)
 
 		if err == nil || err != context.DeadlineExceeded {

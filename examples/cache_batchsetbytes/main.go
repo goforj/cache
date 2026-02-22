@@ -11,7 +11,7 @@ import (
 )
 
 func main() {
-	// BatchSet writes many key/value pairs using a shared ttl.
+	// BatchSetBytes writes many key/value pairs using a shared ttl.
 
 	// Example: batch set keys
 	ctx := context.Background()

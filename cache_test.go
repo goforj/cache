@@ -145,14 +145,14 @@ func TestCacheAddIncrementDecrementAndPull(t *testing.T) {
 	if err := repo.SetStringCtx(ctx, "pull", "value", time.Minute); err != nil {
 		t.Fatalf("set string failed: %v", err)
 	}
-	body, ok, err := repo.Pull("pull")
+	body, ok, err := repo.PullBytes("pull")
 	if err != nil {
 		t.Fatalf("pull failed: %v", err)
 	}
 	if !ok || string(body) != "value" {
 		t.Fatalf("unexpected pull result")
 	}
-	_, ok, err = repo.GetCtx(ctx, "pull")
+	_, ok, err = repo.GetBytesCtx(ctx, "pull")
 	if err != nil {
 		t.Fatalf("get failed: %v", err)
 	}
@@ -174,7 +174,7 @@ func TestCacheDeleteManyFlushAndErrors(t *testing.T) {
 	if err := repo.DeleteManyCtx(ctx, "a", "b"); err != nil {
 		t.Fatalf("delete many failed: %v", err)
 	}
-	_, ok, err := repo.GetCtx(ctx, "a")
+	_, ok, err := repo.GetBytesCtx(ctx, "a")
 	if err != nil {
 		t.Fatalf("get failed: %v", err)
 	}
@@ -188,7 +188,7 @@ func TestCacheDeleteManyFlushAndErrors(t *testing.T) {
 	if err := repo.FlushCtx(ctx); err != nil {
 		t.Fatalf("flush failed: %v", err)
 	}
-	_, ok, err = repo.GetCtx(ctx, "c")
+	_, ok, err = repo.GetBytesCtx(ctx, "c")
 	if err != nil {
 		t.Fatalf("get failed: %v", err)
 	}
@@ -314,7 +314,7 @@ func TestCacheSetUsesProvidedTTL(t *testing.T) {
 	c := NewCacheWithTTL(store, time.Minute)
 	ctx := context.Background()
 
-	if err := c.SetCtx(ctx, "k", []byte("v"), 3*time.Second); err != nil {
+	if err := c.SetBytesCtx(ctx, "k", []byte("v"), 3*time.Second); err != nil {
 		t.Fatalf("set failed: %v", err)
 	}
 	if len(store.ttls) != 1 || store.ttls[0] != 3*time.Second {
@@ -344,7 +344,7 @@ func TestCacheWriteOpsResolveDefaultTTLWhenNonPositive(t *testing.T) {
 		{
 			name: "set",
 			run: func(c *Cache, ttl time.Duration) error {
-				return c.Set("ttl:set", []byte("v"), ttl)
+				return c.SetBytes("ttl:set", []byte("v"), ttl)
 			},
 		},
 		{
@@ -420,7 +420,7 @@ func TestCacheSetJSONMarshalError(t *testing.T) {
 func TestCachePullDeleteError(t *testing.T) {
 	store := &spyStore{driver: DriverMemory, getOK: true, getBody: []byte("x"), delErr: expectedErr}
 	c := NewCache(store)
-	_, _, err := c.Pull("k")
+	_, _, err := c.PullBytes("k")
 	if !errors.Is(err, expectedErr) {
 		t.Fatalf("expected delete error, got %v", err)
 	}
@@ -562,7 +562,7 @@ func TestCacheGetJSONDecodeError(t *testing.T) {
 func TestCachePullMissing(t *testing.T) {
 	store := &spyStore{driver: DriverMemory, getOK: false}
 	c := NewCache(store)
-	_, ok, err := c.Pull("none")
+	_, ok, err := c.PullBytes("none")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -588,10 +588,10 @@ func TestCacheConvenienceWrappers(t *testing.T) {
 	store := NewMemoryStore(context.Background())
 	c := NewCache(store)
 
-	if err := c.Set("k", []byte("v"), time.Second); err != nil {
+	if err := c.SetBytes("k", []byte("v"), time.Second); err != nil {
 		t.Fatalf("set failed: %v", err)
 	}
-	if body, ok, err := c.Get("k"); err != nil || !ok || string(body) != "v" {
+	if body, ok, err := c.GetBytes("k"); err != nil || !ok || string(body) != "v" {
 		t.Fatalf("get failed: ok=%v err=%v body=%q", ok, err, string(body))
 	}
 
@@ -630,7 +630,7 @@ func TestCacheConvenienceWrappers(t *testing.T) {
 	if err := c.DeleteMany("a", "b"); err != nil {
 		t.Fatalf("delete many failed: %v", err)
 	}
-	if _, ok, err := c.Get("a"); err != nil || ok {
+	if _, ok, err := c.GetBytes("a"); err != nil || ok {
 		t.Fatalf("expected a deleted: ok=%v err=%v", ok, err)
 	}
 
@@ -640,7 +640,7 @@ func TestCacheConvenienceWrappers(t *testing.T) {
 	if err := c.Flush(); err != nil {
 		t.Fatalf("flush failed: %v", err)
 	}
-	if _, ok, err := c.Get("flush"); err != nil || ok {
+	if _, ok, err := c.GetBytes("flush"); err != nil || ok {
 		t.Fatalf("expected flush key removed: ok=%v err=%v", ok, err)
 	}
 
@@ -781,7 +781,7 @@ func TestRememberValueDecodesLegacyJSONPayload(t *testing.T) {
 
 	c := NewCache(NewMemoryStore(context.Background()))
 	legacyPayload := []byte(`{"name":"Ada","deprecated_field":"x"}`)
-	if err := c.Set("legacy:profile", legacyPayload, time.Minute); err != nil {
+	if err := c.SetBytes("legacy:profile", legacyPayload, time.Minute); err != nil {
 		t.Fatalf("seed legacy payload failed: %v", err)
 	}
 
@@ -906,7 +906,7 @@ func TestCacheRateLimitValidationAndError(t *testing.T) {
 
 func TestCacheBatchSetAndBatchGet(t *testing.T) {
 	c := NewCache(NewMemoryStore(context.Background()))
-	err := c.BatchSet(map[string][]byte{
+	err := c.BatchSetBytes(map[string][]byte{
 		"a": []byte("1"),
 		"b": []byte("2"),
 	}, time.Minute)
@@ -914,7 +914,7 @@ func TestCacheBatchSetAndBatchGet(t *testing.T) {
 		t.Fatalf("batch set failed: %v", err)
 	}
 
-	values, err := c.BatchGet("a", "b", "missing")
+	values, err := c.BatchGetBytes("a", "b", "missing")
 	if err != nil {
 		t.Fatalf("batch get failed: %v", err)
 	}
@@ -931,14 +931,14 @@ func TestCacheBatchSetAndBatchGet(t *testing.T) {
 
 func TestCacheBatchGetPropagatesError(t *testing.T) {
 	c := NewCache(&spyStore{driver: DriverMemory, getErr: expectedErr})
-	if _, err := c.BatchGet("a", "b"); !errors.Is(err, expectedErr) {
+	if _, err := c.BatchGetBytes("a", "b"); !errors.Is(err, expectedErr) {
 		t.Fatalf("expected get error, got %v", err)
 	}
 }
 
 func TestCacheBatchSetPropagatesError(t *testing.T) {
 	c := NewCache(&spyStore{driver: DriverMemory, setErr: expectedErr})
-	if err := c.BatchSet(map[string][]byte{"a": []byte("1")}, time.Second); !errors.Is(err, expectedErr) {
+	if err := c.BatchSetBytes(map[string][]byte{"a": []byte("1")}, time.Second); !errors.Is(err, expectedErr) {
 		t.Fatalf("expected set error, got %v", err)
 	}
 }
@@ -985,7 +985,7 @@ func TestCacheRefreshAheadHitTriggersAsyncRefresh(t *testing.T) {
 		t.Fatalf("expected async refresh callback to run")
 	}
 
-	body2, ok, err := c.Get(key)
+	body2, ok, err := c.GetBytes(key)
 	if err != nil || !ok || string(body2) != "v2" {
 		t.Fatalf("expected refreshed value, ok=%v body=%q err=%v", ok, string(body2), err)
 	}
@@ -1067,7 +1067,7 @@ func TestCacheRefreshAheadConcurrentHitTriggersSingleAsyncRefresh(t *testing.T) 
 
 	deadline := time.Now().Add(2 * time.Second)
 	for {
-		body, ok, err := c.Get(key)
+		body, ok, err := c.GetBytes(key)
 		if err == nil && ok && string(body) == "v2" {
 			break
 		}
@@ -1114,7 +1114,7 @@ func TestCacheRefreshAheadHitSkipsAsyncRefreshWithoutValidMetadata(t *testing.T)
 			name: "malformed metadata key",
 			seedMeta: func(t *testing.T, c *Cache, key string) {
 				t.Helper()
-				if err := c.Set(key+refreshMetaSuffix, []byte("not-an-int"), time.Second); err != nil {
+				if err := c.SetBytes(key+refreshMetaSuffix, []byte("not-an-int"), time.Second); err != nil {
 					t.Fatalf("seed malformed metadata failed: %v", err)
 				}
 			},
@@ -1125,7 +1125,7 @@ func TestCacheRefreshAheadHitSkipsAsyncRefreshWithoutValidMetadata(t *testing.T)
 		t.Run(tt.name, func(t *testing.T) {
 			c := NewCache(NewMemoryStore(context.Background()))
 			key := "ra:no-meta:" + tt.name
-			if err := c.Set(key, []byte("cached"), time.Second); err != nil {
+			if err := c.SetBytes(key, []byte("cached"), time.Second); err != nil {
 				t.Fatalf("seed value failed: %v", err)
 			}
 			tt.seedMeta(t, c, key)
@@ -1357,7 +1357,7 @@ func TestCacheRememberCtxConcurrentMissContention(t *testing.T) {
 		t.Fatalf("expected callback to run at least once")
 	}
 
-	body, ok, err := c.Get("remember:contend")
+	body, ok, err := c.GetBytes("remember:contend")
 	if err != nil || !ok || string(body) != "value" {
 		t.Fatalf("expected cached value after contention, ok=%v body=%q err=%v", ok, string(body), err)
 	}
@@ -1365,7 +1365,7 @@ func TestCacheRememberCtxConcurrentMissContention(t *testing.T) {
 
 func TestCacheRememberStaleFreshHit(t *testing.T) {
 	c := NewCache(NewMemoryStore(context.Background()))
-	if err := c.Set("stale:fresh", []byte("cached"), time.Minute); err != nil {
+	if err := c.SetBytes("stale:fresh", []byte("cached"), time.Minute); err != nil {
 		t.Fatalf("seed set failed: %v", err)
 	}
 
@@ -1453,10 +1453,10 @@ func TestCacheRememberStaleNonPositiveStaleTTLBehavior(t *testing.T) {
 		if err != nil || stale || string(val) != "seed" {
 			t.Fatalf("seed remember stale failed: stale=%v val=%q err=%v", stale, string(val), err)
 		}
-		if _, ok, err := c.Get(key); err != nil || !ok {
+		if _, ok, err := c.GetBytes(key); err != nil || !ok {
 			t.Fatalf("expected fresh key to be written using default ttl, ok=%v err=%v", ok, err)
 		}
-		if _, ok, err := c.Get(key + staleSuffix); err != nil {
+		if _, ok, err := c.GetBytes(key + staleSuffix); err != nil {
 			t.Fatalf("unexpected stale key read error: %v", err)
 		} else if ok {
 			t.Fatalf("expected no stale key when both ttl inputs are non-positive")

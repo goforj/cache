@@ -28,7 +28,7 @@ func TestObserverRecordsAllOps(t *testing.T) {
 	_, _ = c.RememberBytesCtx(ctx, "r1", time.Second, func(context.Context) ([]byte, error) { return []byte("v"), nil })
 	_, _ = c.RememberStringCtx(ctx, "r2", time.Second, func(context.Context) (string, error) { return "v", nil })
 	_, _ = RememberJSONCtx[string](ctx, c, "r3", time.Second, func(context.Context) (string, error) { return "v", nil })
-	_, _, _ = c.GetCtx(ctx, "missing")
+	_, _, _ = c.GetBytesCtx(ctx, "missing")
 	_ = c.DeleteCtx(ctx, "missing")
 	_ = c.DeleteManyCtx(ctx, "missing")
 	_ = c.FlushCtx(ctx)

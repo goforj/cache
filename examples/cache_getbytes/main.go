@@ -10,7 +10,7 @@ import (
 )
 
 func main() {
-	// Get returns raw bytes for key when present.
+	// GetBytes returns raw bytes for key when present.
 
 	// Example: get bytes
 	ctx := context.Background()

@@ -40,10 +40,10 @@ func testBackendFaultRecoveryForDriver(t *testing.T, fx storeFactory) {
 	driver := store.Driver()
 
 	preKey := "fault:preflight"
-	if err := cache.Set(preKey, []byte("ok"), time.Second); err != nil {
+	if err := cache.SetBytes(preKey, []byte("ok"), time.Second); err != nil {
 		t.Fatalf("preflight set failed before outage: %v", err)
 	}
-	if got, ok, err := cache.Get(preKey); err != nil || !ok || string(got) != "ok" {
+	if got, ok, err := cache.GetBytes(preKey); err != nil || !ok || string(got) != "ok" {
 		t.Fatalf("preflight get failed before outage: ok=%v body=%q err=%v", ok, string(got), err)
 	}
 
@@ -66,10 +66,10 @@ func testBackendFaultRecoveryForDriver(t *testing.T, fx storeFactory) {
 
 	t.Run("post_recovery_set_get_roundtrip", func(t *testing.T) {
 		key := "fault:recovery:roundtrip"
-		if err := postCache.Set(key, []byte("alive"), time.Second); err != nil {
+		if err := postCache.SetBytes(key, []byte("alive"), time.Second); err != nil {
 			t.Fatalf("set after recovery failed: %v", err)
 		}
-		got, ok, err := postCache.Get(key)
+		got, ok, err := postCache.GetBytes(key)
 		if err != nil || !ok || string(got) != "alive" {
 			t.Fatalf("get after recovery failed: ok=%v body=%q err=%v", ok, string(got), err)
 		}
@@ -189,7 +189,7 @@ func assertBackendOutageErrors(t *testing.T, driverName string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	start := time.Now()
-	_, ok, err := cache.GetCtx(ctx, "fault:outage:get")
+	_, ok, err := cache.GetBytesCtx(ctx, "fault:outage:get")
 	elapsed := time.Since(start)
 	if elapsed > 2*time.Second {
 		return fmt.Errorf("GetCtx during outage returned too slowly: %v", elapsed)
@@ -201,7 +201,7 @@ func assertBackendOutageErrors(t *testing.T, driverName string) error {
 	ctx2, cancel2 := context.WithTimeout(context.Background(), timeout)
 	defer cancel2()
 	start = time.Now()
-	err = cache.SetCtx(ctx2, "fault:outage:set", []byte("x"), time.Second)
+	err = cache.SetBytesCtx(ctx2, "fault:outage:set", []byte("x"), time.Second)
 	elapsed = time.Since(start)
 	if elapsed > 2*time.Second {
 		return fmt.Errorf("SetCtx during outage returned too slowly: %v", elapsed)
@@ -234,9 +234,9 @@ func waitForDriverRecovery(t *testing.T, fx storeFactory) {
 		store, cleanup := fx.new(t)
 		cache := NewCache(store)
 		key := fmt.Sprintf("fault:recovery:probe:%d", time.Now().UnixNano())
-		err := cache.Set(key, []byte("ok"), time.Second)
+		err := cache.SetBytes(key, []byte("ok"), time.Second)
 		if err == nil {
-			if got, ok, getErr := cache.Get(key); getErr == nil && ok && string(got) == "ok" {
+			if got, ok, getErr := cache.GetBytes(key); getErr == nil && ok && string(got) == "ok" {
 				cleanup()
 				return
 			} else {

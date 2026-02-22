@@ -362,7 +362,7 @@ func runCacheHelperInvariantSuite(t *testing.T, store Store, caseKey func(string
 			return
 		}
 
-		if _, ok, err := cache.Get(key + staleSuffix); err != nil {
+		if _, ok, err := cache.GetBytes(key + staleSuffix); err != nil {
 			t.Fatalf("unexpected stale key read error: %v", err)
 		} else if ok {
 			t.Fatalf("expected no stale key when both ttl inputs are non-positive")
@@ -394,11 +394,11 @@ func runCacheHelperInvariantSuite(t *testing.T, store Store, caseKey func(string
 				suffix = "malformed_meta"
 			}
 			key := caseKey("edge:refresh_ahead:" + suffix)
-			if err := cache.Set(key, []byte("cached"), 2*time.Second); err != nil {
+			if err := cache.SetBytes(key, []byte("cached"), 2*time.Second); err != nil {
 				t.Fatalf("seed value failed: %v", err)
 			}
 			if malformedMeta {
-				if err := cache.Set(key+refreshMetaSuffix, []byte("not-an-int"), 2*time.Second); err != nil {
+				if err := cache.SetBytes(key+refreshMetaSuffix, []byte("not-an-int"), 2*time.Second); err != nil {
 					t.Fatalf("seed malformed metadata failed: %v", err)
 				}
 			}
@@ -430,7 +430,7 @@ func runCacheHelperInvariantSuite(t *testing.T, store Store, caseKey func(string
 		rng := rand.New(rand.NewSource(42))
 		for i := 0; i < 4; i++ {
 			key := caseKey(fmt.Sprintf("edge:refresh_ahead:rand_bad_meta:%d", i))
-			if err := cache.Set(key, []byte("cached"), 2*time.Second); err != nil {
+			if err := cache.SetBytes(key, []byte("cached"), 2*time.Second); err != nil {
 				t.Fatalf("seed value failed: %v", err)
 			}
 
@@ -439,7 +439,7 @@ func runCacheHelperInvariantSuite(t *testing.T, store Store, caseKey func(string
 				// Force non-numeric metadata so ParseInt always fails.
 				meta[j] = byte('a' + rng.Intn(26))
 			}
-			if err := cache.Set(key+refreshMetaSuffix, meta, 2*time.Second); err != nil {
+			if err := cache.SetBytes(key+refreshMetaSuffix, meta, 2*time.Second); err != nil {
 				t.Fatalf("seed random malformed metadata failed: %v", err)
 			}
 
@@ -591,7 +591,7 @@ func runContextCancellationHelperInvariantSuite(t *testing.T, cache *Cache, driv
 		cancelGet()
 
 		start := time.Now()
-		_, ok, err := cache.GetCtx(getCtx, caseKey("ctx:get"))
+		_, ok, err := cache.GetBytesCtx(getCtx, caseKey("ctx:get"))
 		elapsed := time.Since(start)
 		if elapsed > maxElapsed {
 			t.Fatalf("GetCtx should return promptly on pre-canceled ctx, took %v", elapsed)
@@ -608,7 +608,7 @@ func runContextCancellationHelperInvariantSuite(t *testing.T, cache *Cache, driv
 		cancelSet()
 
 		start = time.Now()
-		err = cache.SetCtx(setCtx, caseKey("ctx:set"), []byte("v"), time.Minute)
+		err = cache.SetBytesCtx(setCtx, caseKey("ctx:set"), []byte("v"), time.Minute)
 		elapsed = time.Since(start)
 		if elapsed > maxElapsed {
 			t.Fatalf("SetCtx should return promptly on pre-canceled ctx, took %v", elapsed)
@@ -1007,10 +1007,10 @@ func runRefreshAheadHelperInvariantSuite(t *testing.T, cache *Cache, driver Driv
 		if err != nil || string(body) != "v1" {
 			t.Fatalf("refresh ahead miss failed: body=%q err=%v", string(body), err)
 		}
-		if _, ok, err := cache.Get(key); err != nil || !ok {
+		if _, ok, err := cache.GetBytes(key); err != nil || !ok {
 			t.Fatalf("expected value written on miss, ok=%v err=%v", ok, err)
 		}
-		meta, ok, err := cache.Get(key + refreshMetaSuffix)
+		meta, ok, err := cache.GetBytes(key + refreshMetaSuffix)
 		if err != nil || !ok {
 			t.Fatalf("expected metadata written on miss, ok=%v err=%v", ok, err)
 		}
@@ -1054,7 +1054,7 @@ func runRefreshAheadHelperInvariantSuite(t *testing.T, cache *Cache, driver Driv
 
 		deadline := time.Now().Add(asyncWait)
 		for {
-			got, ok, err := cache.Get(key)
+			got, ok, err := cache.GetBytes(key)
 			if err == nil && ok && string(got) == "v2" {
 				break
 			}
@@ -1098,7 +1098,7 @@ func runRefreshAheadHelperInvariantSuite(t *testing.T, cache *Cache, driver Driv
 			t.Fatalf("expected async failing callback to run")
 		}
 		time.Sleep(50 * time.Millisecond)
-		got, ok, err := cache.Get(key)
+		got, ok, err := cache.GetBytes(key)
 		if err != nil || !ok || string(got) != "v1" {
 			t.Fatalf("expected existing value to remain after async error, ok=%v body=%q err=%v", ok, string(got), err)
 		}
@@ -1181,13 +1181,13 @@ func runBatchHelperInvariantSuite(t *testing.T, cache *Cache, driver Driver, cas
 	t.Helper()
 
 	t.Run("batch_get_partial_miss_and_empty_inputs", func(t *testing.T) {
-		if err := cache.BatchSet(map[string][]byte{
+		if err := cache.BatchSetBytes(map[string][]byte{
 			caseKey("batch:a"): []byte("1"),
 			caseKey("batch:b"): []byte("2"),
 		}, time.Second); err != nil {
 			t.Fatalf("batch set failed: %v", err)
 		}
-		got, err := cache.BatchGet(caseKey("batch:a"), caseKey("batch:b"), caseKey("batch:missing"))
+		got, err := cache.BatchGetBytes(caseKey("batch:a"), caseKey("batch:b"), caseKey("batch:missing"))
 		if err != nil {
 			t.Fatalf("batch get failed: %v", err)
 		}
@@ -1203,11 +1203,11 @@ func runBatchHelperInvariantSuite(t *testing.T, cache *Cache, driver Driver, cas
 				t.Fatalf("missing key should be omitted")
 			}
 		}
-		empty, err := cache.BatchGet()
+		empty, err := cache.BatchGetBytes()
 		if err != nil || len(empty) != 0 {
 			t.Fatalf("empty batch get should return empty map, len=%d err=%v", len(empty), err)
 		}
-		if err := cache.BatchSet(map[string][]byte{}, time.Second); err != nil {
+		if err := cache.BatchSetBytes(map[string][]byte{}, time.Second); err != nil {
 			t.Fatalf("empty batch set should succeed, got %v", err)
 		}
 	})
@@ -1219,10 +1219,10 @@ func runBatchHelperInvariantSuite(t *testing.T, cache *Cache, driver Driver, cas
 		defaultTTL, wait := batchDefaultTTLProfile(driver)
 		bc := NewCacheWithTTL(cache.Store(), defaultTTL)
 		key := caseKey("batch:default-ttl")
-		if err := bc.BatchSet(map[string][]byte{key: []byte("v")}, 0); err != nil {
+		if err := bc.BatchSetBytes(map[string][]byte{key: []byte("v")}, 0); err != nil {
 			t.Fatalf("batch set with default ttl failed: %v", err)
 		}
-		if _, ok, err := bc.Get(key); err != nil || !ok {
+		if _, ok, err := bc.GetBytes(key); err != nil || !ok {
 			t.Fatalf("expected batch-set key before expiry, ok=%v err=%v", ok, err)
 		}
 		if err := waitForCacheKeyMiss(bc, key, wait); err != nil {
@@ -1281,11 +1281,11 @@ func runCounterHelperInvariantSuite(t *testing.T, cache *Cache, driver Driver, c
 			t.Fatalf("refresh increment failed: %v", err)
 		}
 		time.Sleep(afterOriginalExpiry)
-		if _, ok, err := cache.Get(key); err != nil || !ok {
+		if _, ok, err := cache.GetBytes(key); err != nil || !ok {
 			t.Fatalf("expected counter to survive original ttl due to refresh, ok=%v err=%v", ok, err)
 		}
 		time.Sleep(afterRefreshedExpiry)
-		if _, ok, err := cache.Get(key); err != nil || ok {
+		if _, ok, err := cache.GetBytes(key); err != nil || ok {
 			t.Fatalf("expected counter to expire after refreshed ttl, ok=%v err=%v", ok, err)
 		}
 	})
@@ -1345,33 +1345,33 @@ func runDriverFactoryInvariantSuite(t *testing.T, fx storeFactory) {
 		ca := NewCache(storeA)
 		cb := NewCache(storeB)
 		key := "prefix:shared"
-		if err := ca.Set(key, []byte("A"), time.Second); err != nil {
+		if err := ca.SetBytes(key, []byte("A"), time.Second); err != nil {
 			t.Fatalf("set A failed: %v", err)
 		}
-		if err := cb.Set(key, []byte("B"), time.Second); err != nil {
+		if err := cb.SetBytes(key, []byte("B"), time.Second); err != nil {
 			t.Fatalf("set B failed: %v", err)
 		}
-		if got, ok, err := ca.Get(key); err != nil || !ok || string(got) != "A" {
+		if got, ok, err := ca.GetBytes(key); err != nil || !ok || string(got) != "A" {
 			t.Fatalf("expected prefix A value, ok=%v body=%q err=%v", ok, string(got), err)
 		}
-		if got, ok, err := cb.Get(key); err != nil || !ok || string(got) != "B" {
+		if got, ok, err := cb.GetBytes(key); err != nil || !ok || string(got) != "B" {
 			t.Fatalf("expected prefix B value, ok=%v body=%q err=%v", ok, string(got), err)
 		}
 
 		if err := ca.Delete(key); err != nil {
 			t.Fatalf("delete in prefix A failed: %v", err)
 		}
-		if _, ok, err := ca.Get(key); err != nil || ok {
+		if _, ok, err := ca.GetBytes(key); err != nil || ok {
 			t.Fatalf("expected key deleted in prefix A only, ok=%v err=%v", ok, err)
 		}
-		if got, ok, err := cb.Get(key); err != nil || !ok || string(got) != "B" {
+		if got, ok, err := cb.GetBytes(key); err != nil || !ok || string(got) != "B" {
 			t.Fatalf("expected prefix B key untouched by prefix A delete, ok=%v body=%q err=%v", ok, string(got), err)
 		}
 
 		if err := cb.Flush(); err != nil {
 			t.Fatalf("flush prefix B failed: %v", err)
 		}
-		if _, ok, err := cb.Get(key); err != nil || ok {
+		if _, ok, err := cb.GetBytes(key); err != nil || ok {
 			t.Fatalf("expected prefix B flush to clear its key only, ok=%v err=%v", ok, err)
 		}
 	})
@@ -1415,10 +1415,10 @@ func runDriverFactoryInvariantSuite(t *testing.T, fx storeFactory) {
 				t.Fatalf("refresh ahead seed failed: %v", err)
 			}
 
-			if _, ok, err := ca.GetCtx(ctx, key+refreshMetaSuffix); err != nil || !ok {
+			if _, ok, err := ca.GetBytesCtx(ctx, key+refreshMetaSuffix); err != nil || !ok {
 				t.Fatalf("expected refresh metadata in prefix A, ok=%v err=%v", ok, err)
 			}
-			if _, ok, err := cb.GetCtx(ctx, key+refreshMetaSuffix); err != nil || ok {
+			if _, ok, err := cb.GetBytesCtx(ctx, key+refreshMetaSuffix); err != nil || ok {
 				t.Fatalf("expected no refresh metadata leak into prefix B, ok=%v err=%v", ok, err)
 			}
 		})
@@ -1431,10 +1431,10 @@ func runDriverFactoryInvariantSuite(t *testing.T, fx storeFactory) {
 				t.Fatalf("remember stale seed failed: usedStale=%v err=%v", usedStale, err)
 			}
 
-			if _, ok, err := ca.GetCtx(ctx, key+staleSuffix); err != nil || !ok {
+			if _, ok, err := ca.GetBytesCtx(ctx, key+staleSuffix); err != nil || !ok {
 				t.Fatalf("expected stale key in prefix A, ok=%v err=%v", ok, err)
 			}
-			if _, ok, err := cb.GetCtx(ctx, key+staleSuffix); err != nil || ok {
+			if _, ok, err := cb.GetBytesCtx(ctx, key+staleSuffix); err != nil || ok {
 				t.Fatalf("expected no stale key leak into prefix B, ok=%v err=%v", ok, err)
 			}
 		})
@@ -1478,10 +1478,10 @@ func runDriverFactoryInvariantSuite(t *testing.T, fx storeFactory) {
 
 		comboCache := NewCache(storeCombo)
 
-		if err := comboCache.Set("shape:combo", []byte("payload"), time.Second); err != nil {
+		if err := comboCache.SetBytes("shape:combo", []byte("payload"), time.Second); err != nil {
 			t.Fatalf("combo set failed: %v", err)
 		}
-		got, ok, err := comboCache.Get("shape:combo")
+		got, ok, err := comboCache.GetBytes("shape:combo")
 		if err != nil || !ok || string(got) != "payload" {
 			t.Fatalf("combo round-trip failed: ok=%v body=%q err=%v", ok, string(got), err)
 		}
@@ -1494,10 +1494,10 @@ func runDriverFactoryInvariantSuite(t *testing.T, fx storeFactory) {
 			if _, err := rng.Read(payload); err != nil {
 				t.Fatalf("random payload gen failed: %v", err)
 			}
-			if err := comboCache.Set(key, payload, time.Second); err != nil {
+			if err := comboCache.SetBytes(key, payload, time.Second); err != nil {
 				t.Fatalf("combo random set failed (i=%d size=%d): %v", i, size, err)
 			}
-			got, ok, err := comboCache.Get(key)
+			got, ok, err := comboCache.GetBytes(key)
 			if err != nil || !ok {
 				t.Fatalf("combo random get failed (i=%d): ok=%v err=%v", i, ok, err)
 			}
@@ -1520,10 +1520,10 @@ func runDriverFactoryInvariantSuite(t *testing.T, fx storeFactory) {
 			}
 
 			key := "shape:combo:large-binary"
-			if err := comboCache.Set(key, payload, 2*time.Second); err != nil {
+			if err := comboCache.SetBytes(key, payload, 2*time.Second); err != nil {
 				t.Fatalf("large binary combo set failed (driver=%s size=%d): %v", driver, largeSize, err)
 			}
-			got, ok, err := comboCache.Get(key)
+			got, ok, err := comboCache.GetBytes(key)
 			if err != nil || !ok {
 				t.Fatalf("large binary combo get failed (driver=%s): ok=%v err=%v", driver, ok, err)
 			}
@@ -1535,10 +1535,10 @@ func runDriverFactoryInvariantSuite(t *testing.T, fx storeFactory) {
 		storeMax, cleanupMax := fx.new(t, WithPrefix("itest_shape_max"), WithMaxValueBytes(16))
 		t.Cleanup(cleanupMax)
 		maxCache := NewCache(storeMax)
-		if err := maxCache.Set("shape:max:eq", []byte("1234567890abcdef"), time.Second); err != nil {
+		if err := maxCache.SetBytes("shape:max:eq", []byte("1234567890abcdef"), time.Second); err != nil {
 			t.Fatalf("expected exact max value to succeed, got %v", err)
 		}
-		if err := maxCache.Set("shape:max:gt", []byte("1234567890abcdefg"), time.Second); !errors.Is(err, ErrValueTooLarge) {
+		if err := maxCache.SetBytes("shape:max:gt", []byte("1234567890abcdefg"), time.Second); !errors.Is(err, ErrValueTooLarge) {
 			t.Fatalf("expected ErrValueTooLarge for max+1, got %v", err)
 		}
 
@@ -1547,10 +1547,10 @@ func runDriverFactoryInvariantSuite(t *testing.T, fx storeFactory) {
 		rawCompressedCache := NewCache(storeCorruptBase)
 		compressedStore := newShapingStore(storeCorruptBase, CompressionGzip, 0)
 		compressedCache := NewCache(compressedStore)
-		if err := rawCompressedCache.Set("shape:corrupt:gzip", []byte("CMP1gnot-gzip"), time.Second); err != nil {
+		if err := rawCompressedCache.SetBytes("shape:corrupt:gzip", []byte("CMP1gnot-gzip"), time.Second); err != nil {
 			t.Fatalf("seed corrupt compressed payload failed: %v", err)
 		}
-		if _, ok, err := compressedCache.Get("shape:corrupt:gzip"); !errors.Is(err, ErrCorruptCompression) || ok {
+		if _, ok, err := compressedCache.GetBytes("shape:corrupt:gzip"); !errors.Is(err, ErrCorruptCompression) || ok {
 			t.Fatalf("expected corrupt compression error, ok=%v err=%v", ok, err)
 		}
 
@@ -1562,10 +1562,10 @@ func runDriverFactoryInvariantSuite(t *testing.T, fx storeFactory) {
 			t.Fatalf("construct encrypting wrapper failed: %v", err)
 		}
 		encryptedCache := NewCache(encryptedStore)
-		if err := rawEncryptedCache.Set("shape:corrupt:enc", []byte{'E', 'N', 'C', '1', 12, 1, 2, 3}, time.Second); err != nil {
+		if err := rawEncryptedCache.SetBytes("shape:corrupt:enc", []byte{'E', 'N', 'C', '1', 12, 1, 2, 3}, time.Second); err != nil {
 			t.Fatalf("seed corrupt encrypted payload failed: %v", err)
 		}
-		if _, ok, err := encryptedCache.Get("shape:corrupt:enc"); !errors.Is(err, ErrDecryptFailed) || ok {
+		if _, ok, err := encryptedCache.GetBytes("shape:corrupt:enc"); !errors.Is(err, ErrDecryptFailed) || ok {
 			t.Fatalf("expected decrypt failure, ok=%v err=%v", ok, err)
 		}
 
@@ -1576,10 +1576,10 @@ func runDriverFactoryInvariantSuite(t *testing.T, fx storeFactory) {
 				for i := range near {
 					near[i] = byte(i)
 				}
-				if err := rawCompressedCache.Set("shape:backend:memcached:near", near, time.Second); err != nil {
+				if err := rawCompressedCache.SetBytes("shape:backend:memcached:near", near, time.Second); err != nil {
 					t.Fatalf("expected near-limit memcached payload to succeed, got %v", err)
 				}
-				if got, ok, err := rawCompressedCache.Get("shape:backend:memcached:near"); err != nil || !ok || !bytes.Equal(got, near) {
+				if got, ok, err := rawCompressedCache.GetBytes("shape:backend:memcached:near"); err != nil || !ok || !bytes.Equal(got, near) {
 					t.Fatalf("memcached near-limit round-trip failed: ok=%v err=%v", ok, err)
 				}
 
@@ -1587,7 +1587,7 @@ func runDriverFactoryInvariantSuite(t *testing.T, fx storeFactory) {
 				for i := range over {
 					over[i] = byte(i)
 				}
-				if err := rawCompressedCache.Set("shape:backend:memcached:over", over, time.Second); err == nil {
+				if err := rawCompressedCache.SetBytes("shape:backend:memcached:over", over, time.Second); err == nil {
 					t.Fatalf("expected memcached oversized payload error")
 				}
 
@@ -1596,10 +1596,10 @@ func runDriverFactoryInvariantSuite(t *testing.T, fx storeFactory) {
 				for i := range near {
 					near[i] = byte(i)
 				}
-				if err := rawCompressedCache.Set("shape:backend:dynamo:near", near, time.Second); err != nil {
+				if err := rawCompressedCache.SetBytes("shape:backend:dynamo:near", near, time.Second); err != nil {
 					t.Fatalf("expected near-limit dynamo payload to succeed, got %v", err)
 				}
-				if got, ok, err := rawCompressedCache.Get("shape:backend:dynamo:near"); err != nil || !ok || !bytes.Equal(got, near) {
+				if got, ok, err := rawCompressedCache.GetBytes("shape:backend:dynamo:near"); err != nil || !ok || !bytes.Equal(got, near) {
 					t.Fatalf("dynamo near-limit round-trip failed: ok=%v err=%v", ok, err)
 				}
 
@@ -1607,7 +1607,7 @@ func runDriverFactoryInvariantSuite(t *testing.T, fx storeFactory) {
 				for i := range over {
 					over[i] = byte(i)
 				}
-				if err := rawCompressedCache.Set("shape:backend:dynamo:over", over, time.Second); err == nil {
+				if err := rawCompressedCache.SetBytes("shape:backend:dynamo:over", over, time.Second); err == nil {
 					t.Fatalf("expected dynamo oversized payload error")
 				}
 
@@ -1863,7 +1863,7 @@ func waitForStoreKeyMiss(ctx context.Context, store Store, key string, maxWait t
 func waitForCacheKeyMiss(c *Cache, key string, maxWait time.Duration) error {
 	deadline := time.Now().Add(maxWait)
 	for {
-		_, ok, err := c.Get(key)
+		_, ok, err := c.GetBytes(key)
 		if err != nil {
 			return err
 		}

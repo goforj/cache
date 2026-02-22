@@ -90,16 +90,16 @@ func TestObserverContract_HelperOpsEmitExpectedMetadata(t *testing.T) {
 
 	t.Run("get_hit_and_miss", func(t *testing.T) {
 		before := obs.len()
-		if _, ok, err := c.GetCtx(ctx, "missing:get"); err != nil || ok {
+		if _, ok, err := c.GetBytesCtx(ctx, "missing:get"); err != nil || ok {
 			t.Fatalf("expected miss: ok=%v err=%v", ok, err)
 		}
 		assertLast(t, before, "get", "missing:get", false, nil)
 
-		if err := c.SetCtx(ctx, "present:get", []byte("v"), time.Minute); err != nil {
+		if err := c.SetBytesCtx(ctx, "present:get", []byte("v"), time.Minute); err != nil {
 			t.Fatalf("set failed: %v", err)
 		}
 		before = obs.len()
-		if _, ok, err := c.GetCtx(ctx, "present:get"); err != nil || !ok {
+		if _, ok, err := c.GetBytesCtx(ctx, "present:get"); err != nil || !ok {
 			t.Fatalf("expected hit: ok=%v err=%v", ok, err)
 		}
 		assertLast(t, before, "get", "present:get", true, nil)
@@ -186,16 +186,16 @@ func TestObserverContract_HelperOpsEmitExpectedMetadata(t *testing.T) {
 	})
 
 	t.Run("pull_delete_delete_many_flush", func(t *testing.T) {
-		if err := c.SetCtx(ctx, "pull:key", []byte("v"), time.Minute); err != nil {
+		if err := c.SetBytesCtx(ctx, "pull:key", []byte("v"), time.Minute); err != nil {
 			t.Fatalf("seed pull failed: %v", err)
 		}
 		before := obs.len()
-		if _, ok, err := c.PullCtx(ctx, "pull:key"); err != nil || !ok {
+		if _, ok, err := c.PullBytesCtx(ctx, "pull:key"); err != nil || !ok {
 			t.Fatalf("pull failed: ok=%v err=%v", ok, err)
 		}
 		assertLast(t, before, "pull", "pull:key", true, nil)
 
-		if err := c.SetCtx(ctx, "del:key", []byte("v"), time.Minute); err != nil {
+		if err := c.SetBytesCtx(ctx, "del:key", []byte("v"), time.Minute); err != nil {
 			t.Fatalf("seed delete failed: %v", err)
 		}
 		before = obs.len()
@@ -204,10 +204,10 @@ func TestObserverContract_HelperOpsEmitExpectedMetadata(t *testing.T) {
 		}
 		assertLast(t, before, "delete", "del:key", true, nil)
 
-		if err := c.SetCtx(ctx, "dm:a", []byte("1"), time.Minute); err != nil {
+		if err := c.SetBytesCtx(ctx, "dm:a", []byte("1"), time.Minute); err != nil {
 			t.Fatalf("seed delete many a failed: %v", err)
 		}
-		if err := c.SetCtx(ctx, "dm:b", []byte("2"), time.Minute); err != nil {
+		if err := c.SetBytesCtx(ctx, "dm:b", []byte("2"), time.Minute); err != nil {
 			t.Fatalf("seed delete many b failed: %v", err)
 		}
 		before = obs.len()
@@ -313,7 +313,7 @@ func TestObserverContract_ErrorPropagation(t *testing.T) {
 	}
 
 	t.Run("get_json_decode_error", func(t *testing.T) {
-		if err := c.SetCtx(ctx, "bad:json", []byte("{"), time.Minute); err != nil {
+		if err := c.SetBytesCtx(ctx, "bad:json", []byte("{"), time.Minute); err != nil {
 			t.Fatalf("seed bad json failed: %v", err)
 		}
 		before := obs.len()
