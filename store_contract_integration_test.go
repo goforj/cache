@@ -1143,6 +1143,91 @@ func runDriverFactoryInvariantSuite(t *testing.T, fx storeFactory) {
 		}
 	})
 
+	t.Run("prefix_isolation_helper_generated_keys", func(t *testing.T) {
+		storeA, cleanupA := fx.new(t, WithPrefix("itest_helper_a"))
+		t.Cleanup(cleanupA)
+		storeB, cleanupB := fx.new(t, WithPrefix("itest_helper_b"))
+		t.Cleanup(cleanupB)
+
+		driver := storeA.Driver()
+		if driver != DriverRedis && driver != DriverMemcached && driver != DriverNATS && driver != DriverDynamo && driver != DriverSQL {
+			t.Skip("helper-generated prefix isolation is only meaningful for prefixed/shared backends")
+		}
+
+		ca := NewCache(storeA)
+		cb := NewCache(storeB)
+		ctx := context.Background()
+
+		t.Run("lock_keys", func(t *testing.T) {
+			key := "prefix:helper:lock"
+			ttl := lockTTLFor(driver)
+			lockedA, err := ca.TryLock(key, ttl)
+			if err != nil || !lockedA {
+				t.Fatalf("storeA try lock failed: locked=%v err=%v", lockedA, err)
+			}
+			t.Cleanup(func() { _ = ca.Unlock(key) })
+
+			lockedB, err := cb.TryLock(key, ttl)
+			if err != nil || !lockedB {
+				t.Fatalf("storeB try lock should not conflict across prefixes: locked=%v err=%v", lockedB, err)
+			}
+			t.Cleanup(func() { _ = cb.Unlock(key) })
+		})
+
+		t.Run("refresh_metadata_keys", func(t *testing.T) {
+			key := "prefix:helper:refresh"
+			if _, err := ca.RefreshAhead(key, time.Minute, 10*time.Second, func() ([]byte, error) {
+				return []byte("v"), nil
+			}); err != nil {
+				t.Fatalf("refresh ahead seed failed: %v", err)
+			}
+
+			if _, ok, err := ca.GetCtx(ctx, key+refreshMetaSuffix); err != nil || !ok {
+				t.Fatalf("expected refresh metadata in prefix A, ok=%v err=%v", ok, err)
+			}
+			if _, ok, err := cb.GetCtx(ctx, key+refreshMetaSuffix); err != nil || ok {
+				t.Fatalf("expected no refresh metadata leak into prefix B, ok=%v err=%v", ok, err)
+			}
+		})
+
+		t.Run("stale_suffix_keys", func(t *testing.T) {
+			key := "prefix:helper:stale"
+			if _, usedStale, err := ca.RememberStaleBytes(key, time.Minute, 2*time.Minute, func() ([]byte, error) {
+				return []byte("seed"), nil
+			}); err != nil || usedStale {
+				t.Fatalf("remember stale seed failed: usedStale=%v err=%v", usedStale, err)
+			}
+
+			if _, ok, err := ca.GetCtx(ctx, key+staleSuffix); err != nil || !ok {
+				t.Fatalf("expected stale key in prefix A, ok=%v err=%v", ok, err)
+			}
+			if _, ok, err := cb.GetCtx(ctx, key+staleSuffix); err != nil || ok {
+				t.Fatalf("expected no stale key leak into prefix B, ok=%v err=%v", ok, err)
+			}
+		})
+
+		t.Run("rate_limit_bucket_keys", func(t *testing.T) {
+			key := "prefix:helper:rl"
+			window := rateLimitWindowFor(driver)
+			alignRateLimitWindowStart(window)
+
+			allowedA, countA, err := ca.RateLimit(key, 10, window)
+			if err != nil {
+				t.Fatalf("rate limit A failed: %v", err)
+			}
+			allowedB, countB, err := cb.RateLimit(key, 10, window)
+			if err != nil {
+				t.Fatalf("rate limit B failed: %v", err)
+			}
+			if !allowedA || !allowedB {
+				t.Fatalf("expected both prefixes allowed on first call, got A=%v B=%v", allowedA, allowedB)
+			}
+			if countA != 1 || countB != 1 {
+				t.Fatalf("expected isolated rate-limit counters across prefixes, got countA=%d countB=%d", countA, countB)
+			}
+		})
+	})
+
 	t.Run("shape_option_roundtrip_and_corruption_paths", func(t *testing.T) {
 		storeRaw, cleanupRaw := fx.new(t, WithPrefix("itest_shape_raw"))
 		t.Cleanup(cleanupRaw)
