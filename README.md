@@ -1122,3 +1122,42 @@ SetStringCtx is the context-aware variant of SetString.
 | Memo store caveats | per-process memoization, local-only invalidation, cross-process staleness behavior | Unit tests |
 
 Default integration runs cover the contract suite above. Fault/recovery restart tests are opt-in because they restart shared testcontainers and are slower/flakier by nature.
+
+## Contributing (README updates)
+
+README content is a mix of generated sections and manual sections.
+
+- API reference (`<!-- api:embed:start --> ... <!-- api:embed:end -->`) is generated.
+- Test badges are updated separately.
+- Sections like driver notes and the integration coverage table are manual.
+
+### Update generated API docs
+
+```bash
+go run ./docs/readme/main.go
+```
+
+### Update test badges
+
+Static counts (fast, watcher-friendly; counts top-level `Test*` funcs):
+
+```bash
+go run ./docs/readme/main.go
+```
+
+Executed counts (runs tests and counts real `go test -json` test/subtest starts):
+
+```bash
+go run ./docs/readme/testcounts/main.go
+```
+
+### Watch mode
+
+```bash
+./docs/watcher.sh
+```
+
+Notes:
+
+- The badge watcher runs real tests, so it is slower than API/example regeneration.
+- Fault/recovery integration tests are opt-in (`INTEGRATION_FAULT=1`).
