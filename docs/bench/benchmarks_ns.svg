@@ -2,7 +2,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1600" height="825" viewBox="0 0 1600 825">
 <rect width="100%" height="100%" fill="#111827"/>
 <text x="800" y="44" text-anchor="middle" fill="#f9fafb" font-size="34" font-family="Arial, sans-serif">Cache Benchmark Latency (ns/op)</text>
-<text x="800" y="96" text-anchor="middle" fill="#9ca3af" font-size="36" font-family="Arial, sans-serif">Linear split view (grouped bars): top outlier, bottom remaining drivers, lower is better</text>
+<text x="800" y="96" text-anchor="middle" fill="#9ca3af" font-size="30" font-family="Arial, sans-serif">Linear split view (grouped bars): top outlier, bottom remaining drivers, lower is better</text>
 <rect x="1420" y="116" width="20" height="20" fill="#4e79a7"/>
 <text x="1450" y="131" fill="#f3f4f6" font-size="28" font-family="Arial, sans-serif">GetBytes</text>
 <rect x="1420" y="148" width="20" height="20" fill="#6ea6d8"/>

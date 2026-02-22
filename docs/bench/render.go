@@ -400,7 +400,7 @@ func writeDashboardSVG(root, fileName, title, yUnit, scale string, drivers []str
 	if scale == "log" {
 		scaleLabel = "log"
 	}
-	svg.WriteString(`<text x="` + strconv.Itoa(width/2) + `" y="84" text-anchor="middle" fill="#9ca3af" font-size="36" font-family="Arial, sans-serif">Grouped by operation, ` + scaleLabel + ` y-scale, ` + metricPreference(yUnit) + `</text>` + "\n")
+	svg.WriteString(`<text x="` + strconv.Itoa(width/2) + `" y="84" text-anchor="middle" fill="#9ca3af" font-size="30" font-family="Arial, sans-serif">Grouped by operation, ` + scaleLabel + ` y-scale, ` + metricPreference(yUnit) + `</text>` + "\n")
 
 	axisX0 := marginLeft
 	axisX1 := width - marginRight
@@ -555,7 +555,7 @@ func writeDashboardSplitSVG(root, fileName, title, yUnit string, drivers []strin
 	svg.WriteString(`<svg xmlns="http://www.w3.org/2000/svg" width="` + strconv.Itoa(width) + `" height="` + strconv.Itoa(height) + `" viewBox="0 0 ` + strconv.Itoa(width) + ` ` + strconv.Itoa(height) + `">` + "\n")
 	svg.WriteString(`<rect width="100%" height="100%" fill="#111827"/>` + "\n")
 	svg.WriteString(`<text x="` + strconv.Itoa(width/2) + `" y="44" text-anchor="middle" fill="#f9fafb" font-size="34" font-family="Arial, sans-serif">` + title + ` (` + yUnit + `)</text>` + "\n")
-	svg.WriteString(`<text x="` + strconv.Itoa(width/2) + `" y="96" text-anchor="middle" fill="#9ca3af" font-size="36" font-family="Arial, sans-serif">Linear split view (grouped bars): top outlier, bottom remaining drivers, ` + metricPreference(yUnit) + `</text>` + "\n")
+	svg.WriteString(`<text x="` + strconv.Itoa(width/2) + `" y="96" text-anchor="middle" fill="#9ca3af" font-size="30" font-family="Arial, sans-serif">Linear split view (grouped bars): top outlier, bottom remaining drivers, ` + metricPreference(yUnit) + `</text>` + "\n")
 
 	plotRight := width - marginRight
 	legendX := plotRight + 20
