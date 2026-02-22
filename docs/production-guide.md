@@ -72,7 +72,7 @@ Guideline:
 
 For client-facing APIs:
 
-- Use `RateLimitWithRemaining` for header-friendly metadata:
+- Use `RateLimit` for header-friendly metadata:
   - `remaining`
   - `resetAt`
 
@@ -90,6 +90,36 @@ Attach an observer to capture hit/miss/error/latency by operation and driver:
 type Observer interface {
 	OnCacheOp(ctx context.Context, op string, key string, hit bool, err error, dur time.Duration, driver cache.Driver)
 }
+```
+
+Practical metrics pattern (Prometheus/OpenTelemetry):
+
+```go
+c = c.WithObserver(cache.ObserverFunc(func(ctx context.Context, op, key string, hit bool, err error, dur time.Duration, driver cache.Driver) {
+	_ = ctx
+	_ = key // do not use raw keys as metric labels (high cardinality)
+
+	status := "ok"
+	if err != nil {
+		status = "error"
+	}
+
+	// cache_operations_total{op,driver,status}
+	// cache_duration_seconds{op,driver}
+	// cache_reads_total{op,driver,result="hit|miss"} for read-ish ops
+
+	if op == "get" || op == "get_json" || op == "get_string" || op == "remember" || op == "remember_stale" || op == "refresh_ahead" {
+		result := "miss"
+		if hit {
+			result = "hit"
+		}
+		_ = result
+	}
+
+	_ = status
+	_ = dur
+	_ = driver
+}))
 ```
 
 Recommended metrics:

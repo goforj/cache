@@ -59,6 +59,19 @@ func NewCacheWithTTL(store Store, defaultTTL time.Duration) *Cache {
 
 // WithObserver attaches an observer to receive operation events.
 // @group Observability
+//
+// Example: attach observer
+//
+//	ctx := context.Background()
+//	c := cache.NewCache(cache.NewMemoryStore(ctx))
+//	c = c.WithObserver(cache.ObserverFunc(func(ctx context.Context, op, key string, hit bool, err error, dur time.Duration, driver cache.Driver) {
+//		// See docs/production-guide.md for a real metrics recipe.
+//		fmt.Println(op, driver, hit, err == nil)
+//		_ = ctx
+//		_ = key
+//		_ = dur
+//	}))
+//	_, _, _ = c.GetBytes("profile:42")
 func (c *Cache) WithObserver(o Observer) *Cache {
 	c.observer = o
 	return c
