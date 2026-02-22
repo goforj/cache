@@ -351,10 +351,35 @@ func selectPackage(pkgs map[string]*ast.Package) (string, error) {
 func renderAPI(funcs []*FuncDoc) string {
 	byGroup := map[string][]*FuncDoc{}
 	nameCounts := map[string]int{}
+	byKey := map[string]*FuncDoc{}
+	hide := map[string]bool{}
+	hasCtxVariant := map[string]bool{}
 
 	for _, fd := range funcs {
-		byGroup[fd.Group] = append(byGroup[fd.Group], fd)
 		nameCounts[fd.Name]++
+		byKey[fd.Key] = fd
+	}
+
+	for _, fd := range funcs {
+		if !isHideableCtxVariant(fd) {
+			continue
+		}
+		baseKey, ok := ctxBaseKey(fd)
+		if !ok {
+			continue
+		}
+		if _, ok := byKey[baseKey]; !ok {
+			continue
+		}
+		hide[fd.Key] = true
+		hasCtxVariant[baseKey] = true
+	}
+
+	for _, fd := range funcs {
+		if hide[fd.Key] {
+			continue
+		}
+		byGroup[fd.Group] = append(byGroup[fd.Group], fd)
 	}
 
 	groupNames := make([]string, 0, len(byGroup))
@@ -372,8 +397,8 @@ func renderAPI(funcs []*FuncDoc) string {
 
 	for _, group := range groupNames {
 		sort.Slice(byGroup[group], func(i, j int) bool {
-			li := renderName(byGroup[group][i], nameCounts)
-			lj := renderName(byGroup[group][j], nameCounts)
+			li := renderLabel(byGroup[group][i], nameCounts, hasCtxVariant)
+			lj := renderLabel(byGroup[group][j], nameCounts, hasCtxVariant)
 			if li == lj {
 				return byGroup[group][i].Anchor < byGroup[group][j].Anchor
 			}
@@ -382,7 +407,7 @@ func renderAPI(funcs []*FuncDoc) string {
 
 		var links []string
 		for _, fn := range byGroup[group] {
-			links = append(links, fmt.Sprintf("[%s](#%s)", renderName(fn, nameCounts), fn.Anchor))
+			links = append(links, fmt.Sprintf("[%s](#%s)", renderLabel(fn, nameCounts, hasCtxVariant), fn.Anchor))
 		}
 
 		buf.WriteString(fmt.Sprintf("| **%s** | %s |\n",
@@ -400,7 +425,7 @@ func renderAPI(funcs []*FuncDoc) string {
 		for _, fn := range byGroup[group] {
 			anchor := fn.Anchor
 
-			header := renderName(fn, nameCounts)
+			header := renderLabel(fn, nameCounts, hasCtxVariant)
 			if fn.Behavior != "" {
 				header += " · " + fn.Behavior
 			}
@@ -443,6 +468,32 @@ func renderName(fn *FuncDoc, nameCounts map[string]int) string {
 		return fn.Name
 	}
 	return fn.DisplayName
+}
+
+func renderLabel(fn *FuncDoc, nameCounts map[string]int, hasCtxVariant map[string]bool) string {
+	name := renderName(fn, nameCounts)
+	if hasCtxVariant[fn.Key] {
+		return name + " (+Ctx)"
+	}
+	return name
+}
+
+func isHideableCtxVariant(fn *FuncDoc) bool {
+	if !strings.HasSuffix(fn.Name, "Ctx") {
+		return false
+	}
+	desc := strings.TrimSpace(strings.ToLower(fn.Description))
+	if desc == "" {
+		return false
+	}
+	return strings.Contains(desc, "context-aware variant")
+}
+
+func ctxBaseKey(fn *FuncDoc) (string, bool) {
+	if !strings.HasSuffix(fn.Name, "Ctx") || !strings.HasSuffix(fn.Key, "Ctx") {
+		return "", false
+	}
+	return strings.TrimSuffix(fn.Key, "Ctx"), true
 }
 
 //
