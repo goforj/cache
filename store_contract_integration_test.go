@@ -1506,6 +1506,32 @@ func runDriverFactoryInvariantSuite(t *testing.T, fx storeFactory) {
 			}
 		}
 
+		t.Run("large_binary_roundtrip_real_backend_profiles", func(t *testing.T) {
+			largeSize := largeBinaryRoundtripSizeFor(driver)
+			payload := make([]byte, largeSize)
+			// Build a realistic binary payload: mostly random bytes with a repeated
+			// marker segment so compression+encryption paths see mixed entropy.
+			rng := rand.New(rand.NewSource(20260222))
+			if _, err := rng.Read(payload); err != nil {
+				t.Fatalf("random payload gen failed: %v", err)
+			}
+			for off := 0; off+32 <= len(payload); off += 4096 {
+				copy(payload[off:], []byte("CACHE-INTEGRATION-PAYLOAD-SEGMENT-00"))
+			}
+
+			key := "shape:combo:large-binary"
+			if err := comboCache.Set(key, payload, 2*time.Second); err != nil {
+				t.Fatalf("large binary combo set failed (driver=%s size=%d): %v", driver, largeSize, err)
+			}
+			got, ok, err := comboCache.Get(key)
+			if err != nil || !ok {
+				t.Fatalf("large binary combo get failed (driver=%s): ok=%v err=%v", driver, ok, err)
+			}
+			if !bytes.Equal(got, payload) {
+				t.Fatalf("large binary combo round-trip mismatch (driver=%s size=%d)", driver, largeSize)
+			}
+		})
+
 		storeMax, cleanupMax := fx.new(t, WithPrefix("itest_shape_max"), WithMaxValueBytes(16))
 		t.Cleanup(cleanupMax)
 		maxCache := NewCache(storeMax)
@@ -1542,7 +1568,65 @@ func runDriverFactoryInvariantSuite(t *testing.T, fx storeFactory) {
 		if _, ok, err := encryptedCache.Get("shape:corrupt:enc"); !errors.Is(err, ErrDecryptFailed) || ok {
 			t.Fatalf("expected decrypt failure, ok=%v err=%v", ok, err)
 		}
+
+		t.Run("backend_specific_max_item_edge_behavior", func(t *testing.T) {
+			switch driver {
+			case DriverMemcached:
+				near := make([]byte, 900*1024) // under default memcached 1MB item limit
+				for i := range near {
+					near[i] = byte(i)
+				}
+				if err := rawCompressedCache.Set("shape:backend:memcached:near", near, time.Second); err != nil {
+					t.Fatalf("expected near-limit memcached payload to succeed, got %v", err)
+				}
+				if got, ok, err := rawCompressedCache.Get("shape:backend:memcached:near"); err != nil || !ok || !bytes.Equal(got, near) {
+					t.Fatalf("memcached near-limit round-trip failed: ok=%v err=%v", ok, err)
+				}
+
+				over := make([]byte, 1200*1024) // above default memcached item limit
+				for i := range over {
+					over[i] = byte(i)
+				}
+				if err := rawCompressedCache.Set("shape:backend:memcached:over", over, time.Second); err == nil {
+					t.Fatalf("expected memcached oversized payload error")
+				}
+
+			case DriverDynamo:
+				near := make([]byte, 300*1024) // safely under dynamodb 400KB item limit accounting for attrs
+				for i := range near {
+					near[i] = byte(i)
+				}
+				if err := rawCompressedCache.Set("shape:backend:dynamo:near", near, time.Second); err != nil {
+					t.Fatalf("expected near-limit dynamo payload to succeed, got %v", err)
+				}
+				if got, ok, err := rawCompressedCache.Get("shape:backend:dynamo:near"); err != nil || !ok || !bytes.Equal(got, near) {
+					t.Fatalf("dynamo near-limit round-trip failed: ok=%v err=%v", ok, err)
+				}
+
+				over := make([]byte, 450*1024) // over 400KB item limit
+				for i := range over {
+					over[i] = byte(i)
+				}
+				if err := rawCompressedCache.Set("shape:backend:dynamo:over", over, time.Second); err == nil {
+					t.Fatalf("expected dynamo oversized payload error")
+				}
+
+			default:
+				t.Skip("backend-specific max item limit assertions currently covered for memcached and dynamodb")
+			}
+		})
 	})
+}
+
+func largeBinaryRoundtripSizeFor(driver Driver) int {
+	switch driver {
+	case DriverDynamo:
+		return 180 * 1024
+	case DriverMemcached, DriverNATS:
+		return 256 * 1024
+	default:
+		return 512 * 1024
+	}
 }
 
 type getErrorInjectStore struct {

@@ -15,7 +15,7 @@
     <a href="https://codecov.io/gh/goforj/cache"><img src="https://codecov.io/gh/goforj/cache/graph/badge.svg?token=B6ROULLKWU"/></a>
 <!-- test-count:embed:start -->
     <img src="https://img.shields.io/badge/unit_tests-318-brightgreen" alt="Unit tests (executed count)">
-    <img src="https://img.shields.io/badge/integration_tests-377-blue" alt="Integration tests (executed count)">
+    <img src="https://img.shields.io/badge/integration_tests-417-blue" alt="Integration tests (executed count)">
 <!-- test-count:embed:end -->
 </p>
 
@@ -35,6 +35,21 @@ An explicit cache abstraction with a minimal Store interface and ergonomic Cache
 |                <img src="https://img.shields.io/badge/nats-27AAE1?logo=natsdotio&logoColor=white" alt="NATS"> | Networked | ✓ | - | ✓ | ✓ | JetStream KeyValue-backed driver; inject an existing bucket via `WithNATSKeyValue`. |
 | <img src="https://img.shields.io/badge/dynamodb-4053D6?logo=amazon-dynamodb&logoColor=white" alt="DynamoDB"> | Networked | ✓ | ✓ | ✓ | ✓ | Backed by DynamoDB (supports localstack/dynamodb-local). |
 |    <img src="https://img.shields.io/badge/sql-336791?logo=postgresql&logoColor=white" alt="SQL"> | Networked / local | ✓ | ✓ | ✓ | ✓ | Postgres / MySQL / SQLite via database/sql; table schema managed automatically. |
+
+### Payload size caps (effective bytes written)
+
+| Driver | Hard / default cap | Configurable | Notes |
+| :--- | :--- | :---: | :--- |
+| `null` | N/A | N/A | No persistence. |
+| `memory` | Process memory | - | No backend hard cap. |
+| `file` | Disk / filesystem | - | No backend hard cap. |
+| `redis` | Backend practical (memory/SLO) | Server-side | No commonly hit low per-value hard cap in app use. |
+| `nats` | Server/bucket payload limits | Server-side | Depends on NATS/JetStream config. |
+| `memcached` | ~`1 MiB` per item (default) | ✓ (`memcached -I`) | Backend-enforced item limit. |
+| `dynamodb` | `400 KB` item hard cap | No | Includes key/metadata overhead, so usable value bytes are lower. |
+| `sql` (`sqlite`/`postgres`/`mysql`) | DB/engine config dependent | Server-side | Blob/row/packet limits vary by engine and deployment. |
+
+`WithMaxValueBytes` is the only uniform application-level cap across all drivers, and it applies to post-shaping bytes (after compression/encryption overhead).
 
 ## Installation
 

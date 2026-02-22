@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"strconv"
 	"strings"
@@ -82,7 +83,7 @@ func (s *memcachedStore) Get(ctx context.Context, key string) ([]byte, bool, err
 		return nil, false, fmt.Errorf("parse length: %w", err)
 	}
 	value := make([]byte, bytesLen)
-	if _, err := mc.reader.Read(value); err != nil {
+	if _, err := io.ReadFull(mc.reader, value); err != nil {
 		bad = true
 		return nil, false, err
 	}
