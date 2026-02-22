@@ -35,6 +35,7 @@ func TestStoreContract_AllDrivers(t *testing.T) {
 	for _, fx := range fixtures {
 		fx := fx
 		t.Run(fx.name, func(t *testing.T) {
+			t.Parallel()
 			for _, tc := range cases {
 				tc := tc
 				t.Run(tc.name, func(t *testing.T) {
@@ -53,12 +54,6 @@ func runStoreContractSuite(t *testing.T, store Store, tc contractCase) {
 	ctx := context.Background()
 	noOp := store.Driver() == DriverNull
 	skipCloneCheck := store.Driver() == DriverMemcached
-
-	// Memcached flush_all semantics can briefly affect keys written in the same
-	// second as a prior flush in a previous subtest.
-	if store.Driver() == DriverMemcached && tc.name != "baseline" {
-		time.Sleep(1100 * time.Millisecond)
-	}
 
 	ttl, wait := contractTTL(store.Driver())
 	caseKey := func(base string) string { return tc.name + ":" + base }
@@ -92,9 +87,8 @@ func runStoreContractSuite(t *testing.T, store Store, tc contractCase) {
 	if err := store.Set(ctx, caseKey("ttl"), []byte("v"), ttl); err != nil {
 		t.Fatalf("set ttl failed: %v", err)
 	}
-	time.Sleep(wait)
-	if _, ok, err := store.Get(ctx, caseKey("ttl")); err != nil || ok {
-		t.Fatalf("expected ttl key expired; ok=%v err=%v", ok, err)
+	if err := waitForStoreKeyMiss(ctx, store, caseKey("ttl"), wait); err != nil {
+		t.Fatalf("expected ttl key expired: %v", err)
 	}
 
 	// Add only when missing.
@@ -158,15 +152,17 @@ func runStoreContractSuite(t *testing.T, store Store, tc contractCase) {
 		t.Fatalf("expected key b deleted")
 	}
 
-	// Flush clears all keys.
-	if err := store.Set(ctx, caseKey("flush"), []byte("x"), time.Second); err != nil {
-		t.Fatalf("set flush failed: %v", err)
-	}
-	if err := store.Flush(ctx); err != nil {
-		t.Fatalf("flush failed: %v", err)
-	}
-	if _, ok, err := store.Get(ctx, caseKey("flush")); err != nil || ok {
-		t.Fatalf("expected flush to clear key; ok=%v err=%v", ok, err)
+	// Flush clears all keys (baseline only to avoid repeated memcached flush_all timing costs).
+	if tc.name == "baseline" {
+		if err := store.Set(ctx, caseKey("flush"), []byte("x"), time.Second); err != nil {
+			t.Fatalf("set flush failed: %v", err)
+		}
+		if err := store.Flush(ctx); err != nil {
+			t.Fatalf("flush failed: %v", err)
+		}
+		if _, ok, err := store.Get(ctx, caseKey("flush")); err != nil || ok {
+			t.Fatalf("expected flush to clear key; ok=%v err=%v", ok, err)
+		}
 	}
 
 	// Typed remember across drivers.
@@ -298,10 +294,9 @@ func runDefaultTTLWriteOpInvariant(t *testing.T, store Store, caseKey func(strin
 		}
 	}
 
-	time.Sleep(defaultTTLWait(store.Driver()))
 	for _, key := range keys {
-		if _, ok, err := store.Get(ctx, key); err != nil || ok {
-			t.Fatalf("expected default ttl key expired for key=%q; ok=%v err=%v", key, ok, err)
+		if err := waitForStoreKeyMiss(ctx, store, key, defaultTTLWait(store.Driver())); err != nil {
+			t.Fatalf("expected default ttl key expired for key=%q: %v", key, err)
 		}
 	}
 }
@@ -842,9 +837,8 @@ func runBatchHelperInvariantSuite(t *testing.T, cache *Cache, driver Driver, cas
 		if _, ok, err := bc.Get(key); err != nil || !ok {
 			t.Fatalf("expected batch-set key before expiry, ok=%v err=%v", ok, err)
 		}
-		time.Sleep(wait)
-		if _, ok, err := bc.Get(key); err != nil || ok {
-			t.Fatalf("expected batch-set key expired via cache default ttl, ok=%v err=%v", ok, err)
+		if err := waitForCacheKeyMiss(bc, key, wait); err != nil {
+			t.Fatalf("expected batch-set key expired via cache default ttl: %v", err)
 		}
 	})
 }
@@ -1145,6 +1139,40 @@ func alignRateLimitWindowStart(window time.Duration) {
 	}
 }
 
+func waitForStoreKeyMiss(ctx context.Context, store Store, key string, maxWait time.Duration) error {
+	deadline := time.Now().Add(maxWait)
+	for {
+		_, ok, err := store.Get(ctx, key)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return nil
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("key %q still present after %v", key, maxWait)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func waitForCacheKeyMiss(c *Cache, key string, maxWait time.Duration) error {
+	deadline := time.Now().Add(maxWait)
+	for {
+		_, ok, err := c.Get(key)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return nil
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("key %q still present after %v", key, maxWait)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
 func refreshAheadProfile(driver Driver) (ttl, refreshAhead, nearExpirySleep, asyncWait time.Duration) {
 	if driver == DriverMemcached {
 		return 2 * time.Second, 1500 * time.Millisecond, 700 * time.Millisecond, 3 * time.Second
@@ -1171,9 +1199,9 @@ func counterTTLRefreshProfile(driver Driver) (ttl, beforeRefresh, afterOriginalE
 		return time.Second, 700 * time.Millisecond, 700 * time.Millisecond, 700 * time.Millisecond
 	}
 	if driver == DriverMemcached {
-		// Memcached expirations are second-granularity; use a larger ttl and waits
-		// to avoid edge timing around second boundaries after touch-based refresh.
-		return 2 * time.Second, 1200 * time.Millisecond, 1000 * time.Millisecond, 1500 * time.Millisecond
+		// Memcached expirations are second-granularity; use a larger ttl and wider
+		// margins so checks are not near expiry boundaries after touch-based refresh.
+		return 3 * time.Second, 1500 * time.Millisecond, 1800 * time.Millisecond, 1800 * time.Millisecond
 	}
 	return 120 * time.Millisecond, 70 * time.Millisecond, 90 * time.Millisecond, 140 * time.Millisecond
 }

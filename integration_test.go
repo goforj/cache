@@ -6,6 +6,7 @@ import (
 	"context"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -42,6 +43,16 @@ func TestMain(m *testing.M) {
 	ctx := context.Background()
 	drivers := selectedIntegrationDrivers()
 
+	type startupResult struct {
+		name      string
+		container testcontainers.Container
+		addr      string
+		err       error
+	}
+
+	var wg sync.WaitGroup
+	results := make(chan startupResult, len(integrationBackends))
+
 	for name, enabled := range drivers {
 		if !enabled {
 			continue
@@ -50,12 +61,35 @@ func TestMain(m *testing.M) {
 		if !ok {
 			continue // driver without infra (e.g., memory)
 		}
-		container, addr, err := start(ctx)
-		if err != nil {
-			_, _ = os.Stderr.WriteString("failed to start " + name + " integration container: " + err.Error() + "\n")
-			os.Exit(1)
+		wg.Add(1)
+		go func(name string, startFn func(context.Context) (testcontainers.Container, string, error)) {
+			defer wg.Done()
+			container, addr, err := startFn(ctx)
+			results <- startupResult{name: name, container: container, addr: addr, err: err}
+		}(name, start)
+	}
+
+	wg.Wait()
+	close(results)
+
+	startupFailed := false
+	for res := range results {
+		if res.err != nil {
+			startupFailed = true
+			_, _ = os.Stderr.WriteString("failed to start " + res.name + " integration container: " + res.err.Error() + "\n")
+			continue
 		}
-		integrationRuntimes[name] = &integrationRuntime{container: container, addr: addr}
+		integrationRuntimes[res.name] = &integrationRuntime{container: res.container, addr: res.addr}
+	}
+	if startupFailed {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		for _, rt := range integrationRuntimes {
+			if rt != nil && rt.container != nil {
+				_ = rt.container.Terminate(shutdownCtx)
+			}
+		}
+		os.Exit(1)
 	}
 
 	exitCode := m.Run()
