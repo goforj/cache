@@ -203,14 +203,16 @@ func GetJSONCtx[T any](ctx context.Context, cache *Cache, key string) (T, bool, 
 // Get returns a typed value for key using the default codec (JSON) when present.
 // @group Reads
 //
-// Example: get typed value
+// Example: get typed values (struct + string)
 //
 //	type Profile struct { Name string `json:"name"` }
 //	ctx := context.Background()
 //	c := cache.NewCache(cache.NewMemoryStore(ctx))
 //	_ = cache.Set(c, "profile:42", Profile{Name: "Ada"}, time.Minute)
+//	_ = cache.Set(c, "settings:mode", "dark", time.Minute)
 //	profile, ok, err := cache.Get[Profile](c, "profile:42")
-//	fmt.Println(err == nil, ok, profile.Name) // true true Ada
+//	mode, ok2, err2 := cache.Get[string](c, "settings:mode")
+//	fmt.Println(err == nil, ok, profile.Name, err2 == nil, ok2, mode) // true true Ada true true dark
 func Get[T any](cache *Cache, key string) (T, bool, error) {
 	return GetCtx[T](context.Background(), cache, key)
 }
@@ -486,13 +488,14 @@ func SetJSONCtx[T any](ctx context.Context, cache *Cache, key string, value T, t
 // Set encodes value with the default codec (JSON) and writes it to key.
 // @group Writes
 //
-// Example: set typed value
+// Example: set typed values (struct + string)
 //
 //	type Settings struct { Enabled bool `json:"enabled"` }
 //	ctx := context.Background()
 //	c := cache.NewCache(cache.NewMemoryStore(ctx))
 //	err := cache.Set(c, "settings:alerts", Settings{Enabled: true}, time.Minute)
-//	fmt.Println(err == nil) // true
+//	err2 := cache.Set(c, "settings:mode", "dark", time.Minute)
+//	fmt.Println(err == nil, err2 == nil) // true true
 func Set[T any](cache *Cache, key string, value T, ttl time.Duration) error {
 	return SetCtx[T](context.Background(), cache, key, value, ttl)
 }

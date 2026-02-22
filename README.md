@@ -47,6 +47,7 @@ go get github.com/goforj/cache
 ```go
 import (
     "context"
+    "fmt"
     "time"
 
     "github.com/goforj/cache"
@@ -59,9 +60,21 @@ func main() {
     store := cache.NewMemoryStore(ctx, cache.WithDefaultTTL(5*time.Minute))
     c := cache.NewCache(store)
 
-    // Remember pattern.
     type Profile struct { Name string `json:"name"` }
 
+    // Typed lifecycle (generic helpers): set -> get -> delete
+    _ = cache.Set(c, "user:42:profile", Profile{Name: "Ada"}, time.Minute)
+    profile, ok, err := cache.Get[Profile](c, "user:42:profile")
+    fmt.Println(err == nil, ok, profile.Name) // true true Ada
+    _ = c.Delete("user:42:profile")
+
+    // String lifecycle: set -> get -> delete
+    _ = c.SetString("settings:mode", "dark", time.Minute)
+    mode, ok, err := c.GetString("settings:mode")
+    fmt.Println(err == nil, ok, mode) // true true dark
+    _ = c.Delete("settings:mode")
+
+    // Remember pattern.
     profile, err := cache.Remember[Profile](c, "user:42:profile", time.Minute, func() (Profile, error) {
         return Profile{Name: "Ada"}, nil
     })
@@ -923,7 +936,8 @@ type Profile struct { Name string `json:"name"` }
 ctx := context.Background()
 c := cache.NewCache(cache.NewMemoryStore(ctx))
 profile, ok, err := cache.Get[Profile](c, "profile:42")
-fmt.Println(err == nil, ok, profile.Name) // true true Ada
+mode, ok2, err2 := cache.Get[string](c, "settings:mode")
+fmt.Println(err == nil, ok, profile.Name, err2 == nil, ok2, mode) // true true Ada true true dark
 ```
 
 ### <a id="cache-getbytes"></a>GetBytes
@@ -1093,7 +1107,8 @@ type Settings struct { Enabled bool `json:"enabled"` }
 ctx := context.Background()
 c := cache.NewCache(cache.NewMemoryStore(ctx))
 err := cache.Set(c, "settings:alerts", Settings{Enabled: true}, time.Minute)
-fmt.Println(err == nil) // true
+err2 := cache.Set(c, "settings:mode", "dark", time.Minute)
+fmt.Println(err == nil, err2 == nil) // true true
 ```
 
 ### <a id="cache-setbytes"></a>SetBytes
