@@ -335,6 +335,57 @@ func TestNewCacheWithTTLDefaultsWhenNonPositive(t *testing.T) {
 	}
 }
 
+func TestCacheWriteOpsResolveDefaultTTLWhenNonPositive(t *testing.T) {
+	defaultTTL := 2 * time.Second
+	tests := []struct {
+		name string
+		run  func(*Cache, time.Duration) error
+	}{
+		{
+			name: "set",
+			run: func(c *Cache, ttl time.Duration) error {
+				return c.Set("ttl:set", []byte("v"), ttl)
+			},
+		},
+		{
+			name: "add",
+			run: func(c *Cache, ttl time.Duration) error {
+				_, err := c.Add("ttl:add", []byte("v"), ttl)
+				return err
+			},
+		},
+		{
+			name: "increment",
+			run: func(c *Cache, ttl time.Duration) error {
+				_, err := c.Increment("ttl:inc", 1, ttl)
+				return err
+			},
+		},
+		{
+			name: "decrement",
+			run: func(c *Cache, ttl time.Duration) error {
+				_, err := c.Decrement("ttl:dec", 1, ttl)
+				return err
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			for _, ttl := range []time.Duration{0, -1 * time.Second} {
+				store := &spyStore{driver: DriverMemory, addOK: true}
+				c := NewCacheWithTTL(store, defaultTTL)
+				if err := tt.run(c, ttl); err != nil {
+					t.Fatalf("op failed for ttl=%v: %v", ttl, err)
+				}
+				if len(store.ttls) != 1 || store.ttls[0] != defaultTTL {
+					t.Fatalf("expected default ttl %v for ttl=%v, got %v", defaultTTL, ttl, store.ttls)
+				}
+			}
+		})
+	}
+}
+
 func TestCacheGetStringError(t *testing.T) {
 	expected := errors.New("boom")
 	store := &spyStore{driver: DriverMemory, getErr: expected}
@@ -1048,6 +1099,57 @@ func TestCacheRefreshAheadValidationAndErrors(t *testing.T) {
 	}
 }
 
+func TestCacheRefreshAheadHitSkipsAsyncRefreshWithoutValidMetadata(t *testing.T) {
+	tests := []struct {
+		name     string
+		seedMeta func(t *testing.T, c *Cache, key string)
+	}{
+		{
+			name: "missing metadata key",
+			seedMeta: func(t *testing.T, c *Cache, key string) {
+				t.Helper()
+			},
+		},
+		{
+			name: "malformed metadata key",
+			seedMeta: func(t *testing.T, c *Cache, key string) {
+				t.Helper()
+				if err := c.Set(key+refreshMetaSuffix, []byte("not-an-int"), time.Second); err != nil {
+					t.Fatalf("seed malformed metadata failed: %v", err)
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := NewCache(NewMemoryStore(context.Background()))
+			key := "ra:no-meta:" + tt.name
+			if err := c.Set(key, []byte("cached"), time.Second); err != nil {
+				t.Fatalf("seed value failed: %v", err)
+			}
+			tt.seedMeta(t, c, key)
+
+			var calls atomic.Int64
+			body, err := c.RefreshAhead(key, time.Second, 500*time.Millisecond, func() ([]byte, error) {
+				calls.Add(1)
+				return []byte("refreshed"), nil
+			})
+			if err != nil {
+				t.Fatalf("refresh ahead failed: %v", err)
+			}
+			if got := string(body); got != "cached" {
+				t.Fatalf("expected cached value on hit, got %q", got)
+			}
+
+			time.Sleep(100 * time.Millisecond)
+			if got := calls.Load(); got != 0 {
+				t.Fatalf("expected no async refresh callback without valid metadata, got %d", got)
+			}
+		})
+	}
+}
+
 func TestRefreshAheadTyped(t *testing.T) {
 	type summary struct {
 		Text string `json:"text"`
@@ -1316,6 +1418,64 @@ func TestCacheRememberStaleNilCallback(t *testing.T) {
 	if _, _, err := c.RememberStaleBytes("stale:nil", time.Minute, time.Minute, nil); err == nil {
 		t.Fatalf("expected nil callback error")
 	}
+}
+
+func TestCacheRememberStaleNonPositiveStaleTTLBehavior(t *testing.T) {
+	t.Run("stale ttl falls back to primary ttl when primary ttl is positive", func(t *testing.T) {
+		c := NewCache(NewMemoryStore(context.Background()))
+		key := "stale:ttl-fallback"
+
+		val, stale, err := c.RememberStaleBytes(key, time.Minute, 0, func() ([]byte, error) {
+			return []byte("seed"), nil
+		})
+		if err != nil || stale || string(val) != "seed" {
+			t.Fatalf("seed remember stale failed: stale=%v val=%q err=%v", stale, string(val), err)
+		}
+		if err := c.Delete(key); err != nil {
+			t.Fatalf("delete fresh key failed: %v", err)
+		}
+
+		val, stale, err = c.RememberStaleBytes(key, time.Minute, 0, func() ([]byte, error) {
+			return nil, errors.New("upstream down")
+		})
+		if err != nil || !stale || string(val) != "seed" {
+			t.Fatalf("expected stale fallback via ttl-derived stale ttl, stale=%v val=%q err=%v", stale, string(val), err)
+		}
+	})
+
+	t.Run("no stale key written when both ttl and stale ttl are non-positive", func(t *testing.T) {
+		c := NewCacheWithTTL(NewMemoryStore(context.Background()), 200*time.Millisecond)
+		key := "stale:no-stale-write"
+
+		val, stale, err := c.RememberStaleBytes(key, 0, 0, func() ([]byte, error) {
+			return []byte("seed"), nil
+		})
+		if err != nil || stale || string(val) != "seed" {
+			t.Fatalf("seed remember stale failed: stale=%v val=%q err=%v", stale, string(val), err)
+		}
+		if _, ok, err := c.Get(key); err != nil || !ok {
+			t.Fatalf("expected fresh key to be written using default ttl, ok=%v err=%v", ok, err)
+		}
+		if _, ok, err := c.Get(key + staleSuffix); err != nil {
+			t.Fatalf("unexpected stale key read error: %v", err)
+		} else if ok {
+			t.Fatalf("expected no stale key when both ttl inputs are non-positive")
+		}
+		if err := c.Delete(key); err != nil {
+			t.Fatalf("delete fresh key failed: %v", err)
+		}
+
+		expected := errors.New("upstream down")
+		_, usedStale, err := c.RememberStaleBytes(key, 0, 0, func() ([]byte, error) {
+			return nil, expected
+		})
+		if usedStale {
+			t.Fatalf("expected no stale fallback when stale key was never written")
+		}
+		if !errors.Is(err, expected) {
+			t.Fatalf("expected original callback error, got %v", err)
+		}
+	})
 }
 
 func TestRememberStaleTypedFreshAndFallback(t *testing.T) {

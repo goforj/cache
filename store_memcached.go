@@ -240,6 +240,25 @@ func (s *memcachedStore) incr(ctx context.Context, key string, delta int64, ttl 
 		bad = true
 		return 0, err
 	}
+	if ttl > 0 {
+		seconds := int(ttl.Seconds())
+		if seconds < 1 {
+			seconds = 1
+		}
+		if _, err := fmt.Fprintf(mc.conn, "touch %s %d\r\n", full, seconds); err != nil {
+			bad = true
+			return 0, err
+		}
+		touchLine, err := mc.reader.ReadString('\n')
+		if err != nil {
+			bad = true
+			return 0, err
+		}
+		if !strings.HasPrefix(touchLine, "TOUCHED") && !strings.HasPrefix(touchLine, "NOT_FOUND") {
+			bad = true
+			return 0, fmt.Errorf("memcached touch failed: %s", strings.TrimSpace(touchLine))
+		}
+	}
 	return val, nil
 }
 

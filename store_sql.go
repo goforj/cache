@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -15,12 +16,20 @@ import (
 )
 
 type sqlStore struct {
-	db         *sql.DB
-	table      string
-	driverName string
-	prefix     string
-	defaultTTL time.Duration
+	db            *sql.DB
+	table         string
+	driverName    string
+	prefix        string
+	defaultTTL    time.Duration
+	getStmt       *sql.Stmt
+	upsertStmt    *sql.Stmt
+	addInsertStmt *sql.Stmt
+	addReuseStmt  *sql.Stmt
+	deleteStmt    *sql.Stmt
+	flushStmt     *sql.Stmt
 }
+
+var sqlIdentPartRE = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
 func newSQLStore(cfg StoreConfig) (Store, error) {
 	if cfg.SQLDriverName == "" || cfg.SQLDSN == "" {
@@ -37,6 +46,9 @@ func newSQLStore(cfg StoreConfig) (Store, error) {
 	if table == "" {
 		table = "cache_entries"
 	}
+	if err := validateSQLTableName(table); err != nil {
+		return nil, err
+	}
 	ttl := cfg.DefaultTTL
 	if ttl <= 0 {
 		ttl = defaultCacheTTL
@@ -49,6 +61,9 @@ func newSQLStore(cfg StoreConfig) (Store, error) {
 		defaultTTL: ttl,
 	}
 	if err := s.ensureSchema(); err != nil {
+		return nil, err
+	}
+	if err := s.prepareStatements(); err != nil {
 		return nil, err
 	}
 	return s, nil
@@ -85,10 +100,7 @@ func (s *sqlStore) ensureSchema() error {
 func (s *sqlStore) Get(ctx context.Context, key string) ([]byte, bool, error) {
 	var v []byte
 	var exp int64
-	err := s.db.QueryRowContext(ctx,
-		fmt.Sprintf("SELECT v, ea FROM %s WHERE k = %s", s.table, s.ph(1)),
-		s.cacheKey(key),
-	).Scan(&v, &exp)
+	err := s.getStmt.QueryRowContext(ctx, s.cacheKey(key)).Scan(&v, &exp)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, false, nil
 	}
@@ -107,8 +119,7 @@ func (s *sqlStore) Set(ctx context.Context, key string, value []byte, ttl time.D
 		ttl = s.defaultTTL
 	}
 	exp := time.Now().Add(ttl).UnixMilli()
-	q := s.upsertSQL()
-	_, err := s.db.ExecContext(ctx, q, s.cacheKey(key), value, exp, value, exp)
+	_, err := s.upsertStmt.ExecContext(ctx, s.cacheKey(key), value, exp, value, exp)
 	return err
 }
 
@@ -116,12 +127,23 @@ func (s *sqlStore) Add(ctx context.Context, key string, value []byte, ttl time.D
 	if ttl <= 0 {
 		ttl = s.defaultTTL
 	}
-	exp := time.Now().Add(ttl).UnixMilli()
-	q := fmt.Sprintf("INSERT INTO %s (k, v, ea) VALUES (%s, %s, %s)", s.table, s.ph(1), s.ph(2), s.ph(3))
-	_, err := s.db.ExecContext(ctx, q, s.cacheKey(key), value, exp)
+	nowMs := time.Now().UnixMilli()
+	exp := time.UnixMilli(nowMs).Add(ttl).UnixMilli()
+	cacheKey := s.cacheKey(key)
+	_, err := s.addInsertStmt.ExecContext(ctx, cacheKey, value, exp)
 	if err != nil {
 		if isDuplicateErr(err, s.driverName) {
-			return false, nil
+			// Treat logically expired rows as absent so Add semantics match stores
+			// that expire keys eagerly and so lock helpers can reacquire after TTL.
+			res, updateErr := s.addReuseStmt.ExecContext(ctx, value, exp, cacheKey, nowMs)
+			if updateErr != nil {
+				return false, updateErr
+			}
+			rows, rowsErr := res.RowsAffected()
+			if rowsErr != nil {
+				return false, rowsErr
+			}
+			return rows > 0, nil
 		}
 		return false, err
 	}
@@ -163,7 +185,9 @@ func (s *sqlStore) Increment(ctx context.Context, key string, delta int64, ttl t
 
 	next := current + delta
 	exp = time.Now().Add(ttl).UnixMilli()
-	_, err = tx.ExecContext(ctx, s.upsertSQL(), s.cacheKey(key), []byte(strconv.FormatInt(next, 10)), exp, []byte(strconv.FormatInt(next, 10)), exp)
+	upsertStmt := tx.StmtContext(ctx, s.upsertStmt)
+	defer upsertStmt.Close()
+	_, err = upsertStmt.ExecContext(ctx, s.cacheKey(key), []byte(strconv.FormatInt(next, 10)), exp, []byte(strconv.FormatInt(next, 10)), exp)
 	if err != nil {
 		return 0, err
 	}
@@ -178,7 +202,7 @@ func (s *sqlStore) Decrement(ctx context.Context, key string, delta int64, ttl t
 }
 
 func (s *sqlStore) Delete(ctx context.Context, key string) error {
-	_, err := s.db.ExecContext(ctx, fmt.Sprintf("DELETE FROM %s WHERE k = %s", s.table, s.ph(1)), s.cacheKey(key))
+	_, err := s.deleteStmt.ExecContext(ctx, s.cacheKey(key))
 	return err
 }
 
@@ -199,7 +223,7 @@ func (s *sqlStore) DeleteMany(ctx context.Context, keys ...string) error {
 }
 
 func (s *sqlStore) Flush(ctx context.Context) error {
-	_, err := s.db.ExecContext(ctx, fmt.Sprintf("DELETE FROM %s", s.table))
+	_, err := s.flushStmt.ExecContext(ctx)
 	return err
 }
 
@@ -223,6 +247,49 @@ func (s *sqlStore) upsertSQL() string {
 	}
 }
 
+func (s *sqlStore) getSQL() string {
+	return fmt.Sprintf("SELECT v, ea FROM %s WHERE k = %s", s.table, s.ph(1))
+}
+
+func (s *sqlStore) addInsertSQL() string {
+	return fmt.Sprintf("INSERT INTO %s (k, v, ea) VALUES (%s, %s, %s)", s.table, s.ph(1), s.ph(2), s.ph(3))
+}
+
+func (s *sqlStore) addReuseExpiredSQL() string {
+	return fmt.Sprintf("UPDATE %s SET v = %s, ea = %s WHERE k = %s AND ea < %s", s.table, s.ph(1), s.ph(2), s.ph(3), s.ph(4))
+}
+
+func (s *sqlStore) deleteSQL() string {
+	return fmt.Sprintf("DELETE FROM %s WHERE k = %s", s.table, s.ph(1))
+}
+
+func (s *sqlStore) flushSQL() string {
+	return fmt.Sprintf("DELETE FROM %s", s.table)
+}
+
+func (s *sqlStore) prepareStatements() error {
+	var err error
+	if s.getStmt, err = s.db.Prepare(s.getSQL()); err != nil {
+		return err
+	}
+	if s.upsertStmt, err = s.db.Prepare(s.upsertSQL()); err != nil {
+		return err
+	}
+	if s.addInsertStmt, err = s.db.Prepare(s.addInsertSQL()); err != nil {
+		return err
+	}
+	if s.addReuseStmt, err = s.db.Prepare(s.addReuseExpiredSQL()); err != nil {
+		return err
+	}
+	if s.deleteStmt, err = s.db.Prepare(s.deleteSQL()); err != nil {
+		return err
+	}
+	if s.flushStmt, err = s.db.Prepare(s.flushSQL()); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (s *sqlStore) ph(i int) string {
 	if s.driverName == "postgres" || s.driverName == "pgx" {
 		return fmt.Sprintf("$%d", i)
@@ -240,4 +307,16 @@ func isDuplicateErr(err error, driver string) bool {
 	default:
 		return strings.Contains(msg, "UNIQUE constraint failed") || strings.Contains(msg, "unique constraint")
 	}
+}
+
+func validateSQLTableName(name string) error {
+	if strings.TrimSpace(name) == "" {
+		return errors.New("sql table name is required")
+	}
+	for _, part := range strings.Split(name, ".") {
+		if !sqlIdentPartRE.MatchString(part) {
+			return fmt.Errorf("invalid sql table name %q", name)
+		}
+	}
+	return nil
 }

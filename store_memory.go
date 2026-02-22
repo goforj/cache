@@ -77,17 +77,13 @@ func (s *memoryStore) Increment(_ context.Context, key string, delta int64, ttl 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	current, ok, err := s.readInt64(key)
+	current, _, err := s.readInt64(key)
 	if err != nil {
 		return 0, err
 	}
 	next := current + delta
-	if !ok {
-		if ttl <= 0 {
-			ttl = s.defaultTTL
-		}
-	} else {
-		ttl = gocache.DefaultExpiration
+	if ttl <= 0 {
+		ttl = s.defaultTTL
 	}
 	s.cache.Set(key, []byte(strconv.FormatInt(next, 10)), ttl)
 	return next, nil

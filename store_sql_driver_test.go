@@ -69,3 +69,13 @@ func TestSQLPingError(t *testing.T) {
 		t.Fatalf("expected ping error")
 	}
 }
+
+func TestSQLTableNameValidation(t *testing.T) {
+	if err := validateSQLTableName("cache_entries; DROP TABLE users"); err == nil {
+		t.Fatalf("expected invalid table name error")
+	}
+
+	if err := validateSQLTableName("public.cache_entries"); err != nil {
+		t.Fatalf("expected dotted table name to be allowed: %v", err)
+	}
+}

@@ -85,8 +85,9 @@ func (s *dynamoStore) Driver() Driver { return DriverDynamo }
 
 func (s *dynamoStore) Get(ctx context.Context, key string) ([]byte, bool, error) {
 	out, err := s.client.GetItem(ctx, &dynamodb.GetItemInput{
-		TableName: aws.String(s.table),
-		Key:       map[string]types.AttributeValue{"k": &types.AttributeValueMemberS{Value: s.cacheKey(key)}},
+		TableName:      aws.String(s.table),
+		Key:            map[string]types.AttributeValue{"k": &types.AttributeValueMemberS{Value: s.cacheKey(key)}},
+		ConsistentRead: aws.Bool(true),
 	})
 	if err != nil {
 		return nil, false, err
@@ -128,7 +129,8 @@ func (s *dynamoStore) Add(ctx context.Context, key string, value []byte, ttl tim
 	if ttl <= 0 {
 		ttl = s.defaultTTL
 	}
-	exp := time.Now().Add(ttl).UnixMilli()
+	nowMs := time.Now().UnixMilli()
+	exp := time.UnixMilli(nowMs).Add(ttl).UnixMilli()
 	_, err := s.client.PutItem(ctx, &dynamodb.PutItemInput{
 		TableName: aws.String(s.table),
 		Item: map[string]types.AttributeValue{
@@ -136,7 +138,10 @@ func (s *dynamoStore) Add(ctx context.Context, key string, value []byte, ttl tim
 			"v":  &types.AttributeValueMemberB{Value: cloneBytes(value)},
 			"ea": &types.AttributeValueMemberN{Value: strconv.FormatInt(exp, 10)},
 		},
-		ConditionExpression: aws.String("attribute_not_exists(k)"),
+		ConditionExpression: aws.String("attribute_not_exists(k) OR ea < :now"),
+		ExpressionAttributeValues: map[string]types.AttributeValue{
+			":now": &types.AttributeValueMemberN{Value: strconv.FormatInt(nowMs, 10)},
+		},
 	})
 	if err != nil {
 		var cce *types.ConditionalCheckFailedException
@@ -184,18 +189,27 @@ func (s *dynamoStore) DeleteMany(ctx context.Context, keys ...string) error {
 	if len(keys) == 0 {
 		return nil
 	}
-	writes := make([]types.WriteRequest, 0, len(keys))
-	for _, k := range keys {
-		writes = append(writes, types.WriteRequest{
-			DeleteRequest: &types.DeleteRequest{
-				Key: map[string]types.AttributeValue{"k": &types.AttributeValueMemberS{Value: s.cacheKey(k)}},
-			},
-		})
+	const maxBatch = 25
+	for i := 0; i < len(keys); i += maxBatch {
+		end := i + maxBatch
+		if end > len(keys) {
+			end = len(keys)
+		}
+		writes := make([]types.WriteRequest, 0, end-i)
+		for _, k := range keys[i:end] {
+			writes = append(writes, types.WriteRequest{
+				DeleteRequest: &types.DeleteRequest{
+					Key: map[string]types.AttributeValue{"k": &types.AttributeValueMemberS{Value: s.cacheKey(k)}},
+				},
+			})
+		}
+		if _, err := s.client.BatchWriteItem(ctx, &dynamodb.BatchWriteItemInput{
+			RequestItems: map[string][]types.WriteRequest{s.table: writes},
+		}); err != nil {
+			return err
+		}
 	}
-	_, err := s.client.BatchWriteItem(ctx, &dynamodb.BatchWriteItemInput{
-		RequestItems: map[string][]types.WriteRequest{s.table: writes},
-	})
-	return err
+	return nil
 }
 
 func (s *dynamoStore) Flush(ctx context.Context) error {

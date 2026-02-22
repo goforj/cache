@@ -21,7 +21,7 @@ type fakeConn struct {
 	pingErr error
 }
 
-func (c *fakeConn) Prepare(string) (driver.Stmt, error) { return nil, errors.New("not impl") }
+func (c *fakeConn) Prepare(string) (driver.Stmt, error) { return &fakeStmt{}, nil }
 func (c *fakeConn) Close() error                        { return nil }
 func (c *fakeConn) Begin() (driver.Tx, error)           { return nil, errors.New("not impl") }
 
@@ -38,6 +38,15 @@ type fakeRows struct{}
 func (r *fakeRows) Columns() []string              { return []string{} }
 func (r *fakeRows) Close() error                   { return nil }
 func (r *fakeRows) Next(dest []driver.Value) error { return driver.ErrBadConn }
+
+type fakeStmt struct{}
+
+func (s *fakeStmt) Close() error  { return nil }
+func (s *fakeStmt) NumInput() int { return -1 }
+func (s *fakeStmt) Exec(args []driver.Value) (driver.Result, error) {
+	return driver.RowsAffected(1), nil
+}
+func (s *fakeStmt) Query(args []driver.Value) (driver.Rows, error) { return &fakeRows{}, nil }
 
 func init() {
 	sql.Register("pgfake", &fakeDriver{})

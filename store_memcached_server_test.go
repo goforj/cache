@@ -94,6 +94,16 @@ func handleMemcachedConn(conn net.Conn, data map[string][]byte) {
 			data[key] = []byte(strconv.FormatInt(val, 10))
 			w.WriteString(strconv.FormatInt(val, 10))
 			w.WriteString("\r\n")
+		case "touch":
+			if len(parts) < 3 {
+				continue
+			}
+			key := parts[1]
+			if _, ok := data[key]; ok {
+				w.WriteString("TOUCHED\r\n")
+			} else {
+				w.WriteString("NOT_FOUND\r\n")
+			}
 		case "delete":
 			if len(parts) < 2 {
 				continue
