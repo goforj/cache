@@ -350,9 +350,11 @@ func selectPackage(pkgs map[string]*ast.Package) (string, error) {
 
 func renderAPI(funcs []*FuncDoc) string {
 	byGroup := map[string][]*FuncDoc{}
+	nameCounts := map[string]int{}
 
 	for _, fd := range funcs {
 		byGroup[fd.Group] = append(byGroup[fd.Group], fd)
+		nameCounts[fd.Name]++
 	}
 
 	groupNames := make([]string, 0, len(byGroup))
@@ -370,15 +372,17 @@ func renderAPI(funcs []*FuncDoc) string {
 
 	for _, group := range groupNames {
 		sort.Slice(byGroup[group], func(i, j int) bool {
-			if byGroup[group][i].DisplayName == byGroup[group][j].DisplayName {
+			li := renderName(byGroup[group][i], nameCounts)
+			lj := renderName(byGroup[group][j], nameCounts)
+			if li == lj {
 				return byGroup[group][i].Anchor < byGroup[group][j].Anchor
 			}
-			return byGroup[group][i].DisplayName < byGroup[group][j].DisplayName
+			return li < lj
 		})
 
 		var links []string
 		for _, fn := range byGroup[group] {
-			links = append(links, fmt.Sprintf("[%s](#%s)", fn.DisplayName, fn.Anchor))
+			links = append(links, fmt.Sprintf("[%s](#%s)", renderName(fn, nameCounts), fn.Anchor))
 		}
 
 		buf.WriteString(fmt.Sprintf("| **%s** | %s |\n",
@@ -396,7 +400,7 @@ func renderAPI(funcs []*FuncDoc) string {
 		for _, fn := range byGroup[group] {
 			anchor := fn.Anchor
 
-			header := fn.DisplayName
+			header := renderName(fn, nameCounts)
 			if fn.Behavior != "" {
 				header += " · " + fn.Behavior
 			}
@@ -432,6 +436,13 @@ func renderAPI(funcs []*FuncDoc) string {
 	}
 
 	return strings.TrimRight(buf.String(), "\n")
+}
+
+func renderName(fn *FuncDoc, nameCounts map[string]int) string {
+	if nameCounts[fn.Name] <= 1 {
+		return fn.Name
+	}
+	return fn.DisplayName
 }
 
 //
