@@ -426,6 +426,7 @@ func runCacheHelperInvariantSuite(t *testing.T, store Store, caseKey func(string
 	runRememberStaleDeeperInvariantSuite(t, cache, store.Driver(), caseKey, noOp)
 	runBatchHelperInvariantSuite(t, cache, store.Driver(), caseKey, noOp)
 	runCounterHelperInvariantSuite(t, cache, store.Driver(), caseKey, noOp)
+	runContextCancellationHelperInvariantSuite(t, cache, store.Driver(), caseKey, noOp)
 }
 
 func runLockHelperInvariantSuite(t *testing.T, cache *Cache, driver Driver, caseKey func(string) string, noOp bool) {
@@ -508,9 +509,17 @@ func runLockHelperInvariantSuite(t *testing.T, cache *Cache, driver Driver, case
 		}
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
+		start := time.Now()
 		locked, err = cache.LockCtx(ctx, cancelKey, holdTTL, 10*time.Millisecond)
+		elapsed := time.Since(start)
 		if err == nil || locked {
 			t.Fatalf("expected lock ctx cancellation, got locked=%v err=%v", locked, err)
+		}
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("expected context.Canceled, got %v", err)
+		}
+		if elapsed > 150*time.Millisecond {
+			t.Fatalf("expected prompt lock ctx cancellation, took %v", elapsed)
 		}
 	})
 
@@ -527,6 +536,152 @@ func runLockHelperInvariantSuite(t *testing.T, cache *Cache, driver Driver, case
 			t.Fatalf("expected try lock after ttl expiry, locked=%v err=%v", locked, err)
 		}
 	})
+}
+
+func runContextCancellationHelperInvariantSuite(t *testing.T, cache *Cache, driver Driver, caseKey func(string) string, noOp bool) {
+	t.Helper()
+
+	ctxAwareStoreOps := driverPropagatesCanceledContext(driver)
+	maxElapsed := contextCancelMaxElapsed(driver)
+
+	t.Run("getctx_and_setctx_pre_canceled_context", func(t *testing.T) {
+		getCtx, cancelGet := context.WithCancel(context.Background())
+		cancelGet()
+
+		start := time.Now()
+		_, ok, err := cache.GetCtx(getCtx, caseKey("ctx:get"))
+		elapsed := time.Since(start)
+		if elapsed > maxElapsed {
+			t.Fatalf("GetCtx should return promptly on pre-canceled ctx, took %v", elapsed)
+		}
+		if ctxAwareStoreOps {
+			if ok || !errors.Is(err, context.Canceled) {
+				t.Fatalf("expected ctx-aware GetCtx cancellation, ok=%v err=%v", ok, err)
+			}
+		} else if ok {
+			t.Fatalf("expected miss for pre-canceled GetCtx on non-persisted key, got ok=true err=%v", err)
+		}
+
+		setCtx, cancelSet := context.WithCancel(context.Background())
+		cancelSet()
+
+		start = time.Now()
+		err = cache.SetCtx(setCtx, caseKey("ctx:set"), []byte("v"), time.Minute)
+		elapsed = time.Since(start)
+		if elapsed > maxElapsed {
+			t.Fatalf("SetCtx should return promptly on pre-canceled ctx, took %v", elapsed)
+		}
+		if ctxAwareStoreOps {
+			if !errors.Is(err, context.Canceled) {
+				t.Fatalf("expected ctx-aware SetCtx cancellation, got %v", err)
+			}
+			return
+		}
+		if err != nil {
+			t.Fatalf("expected non-ctx-aware SetCtx to either succeed or cancel, got %v", err)
+		}
+	})
+
+	t.Run("refresh_aheadctx_and_remember_ctx_pre_canceled_context", func(t *testing.T) {
+		checkNoHiddenCallbackRetry := func(name string, run func(ctx context.Context, calls *atomic.Int64) error) {
+			t.Helper()
+			ctx, cancel := context.WithCancel(context.Background())
+			cancel()
+
+			var calls atomic.Int64
+			start := time.Now()
+			err := run(ctx, &calls)
+			elapsed := time.Since(start)
+			if elapsed > maxElapsed {
+				t.Fatalf("%s should return promptly on pre-canceled ctx, took %v", name, elapsed)
+			}
+
+			gotCalls := calls.Load()
+			if gotCalls > 1 {
+				t.Fatalf("%s callback should run at most once, got %d", name, gotCalls)
+			}
+
+			if ctxAwareStoreOps {
+				if !errors.Is(err, context.Canceled) {
+					t.Fatalf("%s expected context.Canceled on ctx-aware driver, got %v", name, err)
+				}
+				if gotCalls != 0 {
+					t.Fatalf("%s callback should not run on ctx-aware canceled get path, got %d", name, gotCalls)
+				}
+				return
+			}
+
+			// Context-agnostic stores may proceed and invoke callback despite canceled ctx.
+			if err != nil && !errors.Is(err, context.Canceled) {
+				t.Fatalf("%s unexpected error on ctx-agnostic driver: %v", name, err)
+			}
+		}
+
+		checkNoHiddenCallbackRetry("RefreshAheadCtx", func(ctx context.Context, calls *atomic.Int64) error {
+			_, err := cache.RefreshAheadCtx(ctx, caseKey("ctx:refresh"), time.Minute, 10*time.Second, func(context.Context) ([]byte, error) {
+				calls.Add(1)
+				return []byte("v"), nil
+			})
+			return err
+		})
+
+		checkNoHiddenCallbackRetry("RememberCtx", func(ctx context.Context, calls *atomic.Int64) error {
+			_, err := cache.RememberCtx(ctx, caseKey("ctx:remember"), time.Minute, func(context.Context) ([]byte, error) {
+				calls.Add(1)
+				return []byte("v"), nil
+			})
+			return err
+		})
+
+		checkNoHiddenCallbackRetry("RememberStringCtx", func(ctx context.Context, calls *atomic.Int64) error {
+			_, err := cache.RememberStringCtx(ctx, caseKey("ctx:remember_string"), time.Minute, func(context.Context) (string, error) {
+				calls.Add(1)
+				return "v", nil
+			})
+			return err
+		})
+
+		checkNoHiddenCallbackRetry("RememberJSONCtx", func(ctx context.Context, calls *atomic.Int64) error {
+			type payload struct {
+				Name string `json:"name"`
+			}
+			_, err := RememberJSONCtx[payload](ctx, cache, caseKey("ctx:remember_json"), time.Minute, func(context.Context) (payload, error) {
+				calls.Add(1)
+				return payload{Name: "Ada"}, nil
+			})
+			return err
+		})
+
+		checkNoHiddenCallbackRetry("RememberStaleCtx", func(ctx context.Context, calls *atomic.Int64) error {
+			_, _, err := RememberStaleCtx[string](ctx, cache, caseKey("ctx:remember_stale"), time.Minute, 2*time.Minute, func(context.Context) (string, error) {
+				calls.Add(1)
+				return "v", nil
+			})
+			return err
+		})
+	})
+
+	if noOp {
+		return
+	}
+}
+
+func driverPropagatesCanceledContext(driver Driver) bool {
+	switch driver {
+	case DriverRedis, DriverDynamo, DriverSQL:
+		return true
+	default:
+		return false
+	}
+}
+
+func contextCancelMaxElapsed(driver Driver) time.Duration {
+	switch driver {
+	case DriverDynamo, DriverSQL:
+		return 750 * time.Millisecond
+	default:
+		return 300 * time.Millisecond
+	}
 }
 
 func runRateLimitHelperInvariantSuite(t *testing.T, cache *Cache, driver Driver, caseKey func(string) string, noOp bool) {
