@@ -407,7 +407,7 @@ func renderAPI(funcs []*FuncDoc) string {
 
 		var links []string
 		for _, fn := range byGroup[group] {
-			links = append(links, fmt.Sprintf("[%s](#%s)", renderLabel(fn, nameCounts, hasCtxVariant), fn.Anchor))
+			links = append(links, fmt.Sprintf("[%s](#%s)", renderName(fn, nameCounts), fn.Anchor))
 		}
 
 		buf.WriteString(fmt.Sprintf("| **%s** | %s |\n",
