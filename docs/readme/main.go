@@ -417,6 +417,7 @@ func renderAPI(funcs []*FuncDoc) string {
 	}
 
 	buf.WriteString("\n\n")
+	buf.WriteString("_Examples assume `ctx := context.Background()` and `c := cache.NewCache(cache.NewMemoryStore(ctx))` unless shown otherwise._\n\n")
 
 	// ---------------- Details ----------------
 	for _, group := range groupNames {
@@ -448,6 +449,12 @@ func renderAPI(funcs []*FuncDoc) string {
 				for _, line := range strings.Split(ex.Code, "\n") {
 					trimmed := strings.TrimSpace(line)
 					if trimmed == "" {
+						continue
+					}
+					if trimmed == "ctx := context.Background()" {
+						continue
+					}
+					if trimmed == "c := cache.NewCache(cache.NewMemoryStore(ctx))" {
 						continue
 					}
 					if strings.HasPrefix(trimmed, "_ =") {
