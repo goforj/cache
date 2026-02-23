@@ -15,7 +15,7 @@ INTEGRATION_PKGS="${INTEGRATION_PKGS:-./...}"
 INTEGRATION_TAGS="${INTEGRATION_TAGS:-integration}"
 INTEGRATION_MODULE_DIR="${INTEGRATION_MODULE_DIR:-integration}"
 INTEGRATION_MODULE_PKGS="${INTEGRATION_MODULE_PKGS:-./root ./all}"
-INTEGRATION_MODULE_COVERPKG="${INTEGRATION_MODULE_COVERPKG:-github.com/goforj/cache/...}"
+INTEGRATION_MODULE_COVERPKG="${INTEGRATION_MODULE_COVERPKG:-github.com/goforj/cache,github.com/goforj/cache/cachecore,github.com/goforj/cache/cachetest,github.com/goforj/cache/integration/...}"
 INTEGRATION_MODULE_DRIVERS="${INTEGRATION_MODULE_DRIVERS:-memory,file,null,sqlitecache}"
 
 UNIT_DIR="$TMP_ROOT/unit"

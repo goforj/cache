@@ -25,6 +25,8 @@ jobs:
         run: go test ./... -v
 
       - name: Run unit tests with coverage
+        env:
+          INTEGRATION_MODULE_DRIVERS: all
         run: scripts/coverage-codecov.sh
 
       - name: Upload results to Codecov
