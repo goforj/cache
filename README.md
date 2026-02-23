@@ -42,22 +42,30 @@ An explicit cache abstraction with a minimal Store interface and ergonomic Cache
 go get github.com/goforj/cache
 ```
 
-Optional backends are separate modules. Install only what you use, for example:
+Optional backends are separate modules. Install only what you use:
 
 ```bash
 go get github.com/goforj/cache/driver/rediscache
+go get github.com/goforj/cache/driver/memcachedcache
+go get github.com/goforj/cache/driver/natscache
+go get github.com/goforj/cache/driver/dynamocache
 go get github.com/goforj/cache/driver/sqlitecache
+go get github.com/goforj/cache/driver/postgrescache
+go get github.com/goforj/cache/driver/mysqlcache
 ```
 
 ## Module Layout
 
-- `github.com/goforj/cache`: root package (`memory`, `file`, `null`, `Cache` helpers)
-- `github.com/goforj/cache/cachecore`: shared contracts and base config (`Store`, `Driver`, `BaseConfig`)
-- `github.com/goforj/cache/cachetest`: shared store contract test harness
-- `github.com/goforj/cache/driver/*cache`: optional backend drivers
-- `github.com/goforj/cache/driver/sqlcore`: shared SQL implementation core (used by SQL dialect wrappers)
-- `github.com/goforj/cache/integration`: shared cross-driver integration matrix module
-- `github.com/goforj/cache/docs`: docs/bench tooling module
+- Core:
+  - `github.com/goforj/cache` (`Cache` helpers + root-backed stores: `memory`, `file`, `null`)
+  - `github.com/goforj/cache/cachecore` (shared contracts/types/config: `Store`, `Driver`, `BaseConfig`)
+  - `github.com/goforj/cache/cachetest` (shared store contract test harness)
+- Optional drivers:
+  - `github.com/goforj/cache/driver/*cache` (backend modules)
+  - `github.com/goforj/cache/driver/sqlcore` (shared SQL implementation used by SQL dialect wrappers)
+- Testing and tooling:
+  - `github.com/goforj/cache/integration` (integration suites: `root`, `all`)
+  - `github.com/goforj/cache/docs` (docs + benchmark tooling)
 
 ## Quick Start
 
