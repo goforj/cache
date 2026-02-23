@@ -34,7 +34,9 @@ An explicit cache abstraction with a minimal Store interface and ergonomic Cache
 |              <img src="https://img.shields.io/badge/redis-%23DC382D?logo=redis&logoColor=white" alt="Redis"> | Networked | ✓ | - | ✓ | ✓ | Shared | Shared | ✓ | ✓ | ✓ | Full feature set; counters refresh TTL (Redis counter TTL granularity currently 1s). |
 |                <img src="https://img.shields.io/badge/nats-27AAE1?logo=natsdotio&logoColor=white" alt="NATS"> | Networked | ✓ | - | ✓ | ✓ | Shared | Shared | ✓ | ✓ | ✓ | JetStream KV-backed driver; inject an existing bucket via `natscache.Config.KeyValue`. |
 | <img src="https://img.shields.io/badge/dynamodb-4053D6?logo=amazon-dynamodb&logoColor=white" alt="DynamoDB"> | Networked | ✓ | ✓ | ✓ | ✓ | Shared | Shared | ✓ | ✓ | ✓ | Backed by DynamoDB (supports localstack/dynamodb-local). |
-|    <img src="https://img.shields.io/badge/sql-336791?logo=postgresql&logoColor=white" alt="SQL"> | Networked / local | ✓ | ✓ | ✓ | ✓ | Shared | Shared | ✓ | ✓ | ✓ | Dialect wrappers (`sqlitecache`, `postgrescache`, `mysqlcache`) over shared `sqlcore`. |
+|    <img src="https://img.shields.io/badge/sqlite-003B57?logo=sqlite&logoColor=white" alt="SQLite"> | Local / file | - | ✓ | ✓ | ✓ | Local | Local | ✓ | ✓ | ✓ | `sqlitecache` (via `sqlcore`); great for embedded/local durable cache. |
+|    <img src="https://img.shields.io/badge/postgres-336791?logo=postgresql&logoColor=white" alt="Postgres"> | Networked | ✓ | ✓ | ✓ | ✓ | Shared | Shared | ✓ | ✓ | ✓ | `postgrescache` (via `sqlcore`); good shared durable backend. |
+|    <img src="https://img.shields.io/badge/mysql-4479A1?logo=mysql&logoColor=white" alt="MySQL"> | Networked | ✓ | ✓ | ✓ | ✓ | Shared | Shared | ✓ | ✓ | ✓ | `mysqlcache` (via `sqlcore`); good shared durable backend. |
 
 ## Installation
 
