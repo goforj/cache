@@ -4,11 +4,13 @@ import (
 	"context"
 	"testing"
 	"time"
+
+	"github.com/goforj/cache/cachecore"
 )
 
 func TestMemoStorePropagatesErrors(t *testing.T) {
 	ctx := context.Background()
-	store := NewMemoStore(&errorStore{driver: DriverMemory, err: expectedErr})
+	store := NewMemoStore(&errorStore{driver: cachecore.DriverMemory, err: expectedErr})
 
 	if _, _, err := store.Get(ctx, "k"); err == nil {
 		t.Fatalf("expected get error")

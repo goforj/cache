@@ -23,6 +23,13 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 
 	"github.com/goforj/cache"
+	"github.com/goforj/cache/cachecore"
+	"github.com/goforj/cache/driver/dynamocache"
+	"github.com/goforj/cache/driver/memcachedcache"
+	"github.com/goforj/cache/driver/natscache"
+	"github.com/goforj/cache/driver/rediscache"
+	"github.com/goforj/cache/driver/sqlcore"
+	"github.com/goforj/cache/driver/sqlitecache"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -84,15 +91,15 @@ func runBenchmarks(ctx context.Context) map[string][]benchRow {
 		setup func(context.Context, *cache.Cache)
 		run   func(context.Context, *cache.Cache)
 	}{
-		"set_bytes":            {run: doSetBytes},
-		"set_string":           {run: doSetString},
-		"set_typed_string":     {run: doSetTypedString},
-		"set_typed_struct":     {run: doSetTypedStruct},
-		"get_bytes":            {setup: setupGetBytes, run: doGetBytes},
-		"get_string":           {setup: setupGetString, run: doGetString},
-		"get_typed_string":     {setup: setupGetTypedString, run: doGetTypedString},
-		"get_typed_struct":     {setup: setupGetTypedStruct, run: doGetTypedStruct},
-		"delete":               {setup: setupDelete, run: doDelete},
+		"set_bytes":        {run: doSetBytes},
+		"set_string":       {run: doSetString},
+		"set_typed_string": {run: doSetTypedString},
+		"set_typed_struct": {run: doSetTypedStruct},
+		"get_bytes":        {setup: setupGetBytes, run: doGetBytes},
+		"get_string":       {setup: setupGetString, run: doGetString},
+		"get_typed_string": {setup: setupGetTypedString, run: doGetTypedString},
+		"get_typed_struct": {setup: setupGetTypedStruct, run: doGetTypedStruct},
+		"delete":           {setup: setupDelete, run: doDelete},
 	}
 
 	results := make(map[string][]benchRow)
@@ -129,10 +136,10 @@ func runBenchmarks(ctx context.Context) map[string][]benchRow {
 		}
 		variants := []struct {
 			name string
-			opts []cache.StoreOption
+			opts []benchStoreOption
 		}{
 			{name: "nats"},
-			{name: "nats_bucket_ttl", opts: []cache.StoreOption{cache.WithNATSBucketTTL(true)}},
+			{name: "nats_bucket_ttl", opts: []benchStoreOption{benchWithNATSBucketTTL(true)}},
 		}
 		var pairRows []benchRow
 		pairOK := true
@@ -686,15 +693,15 @@ func benchOpLabel(op string) string {
 
 func benchOpColors() map[string]string {
 	return map[string]string{
-		"get_bytes":         "#4e79a7",
-		"get_string":        "#6ea6d8",
-		"get_typed_string":  "#9fc5e8",
-		"get_typed_struct":  "#cfe2f3",
-		"set_bytes":         "#59a14f",
-		"set_string":        "#7bc96f",
-		"set_typed_string":  "#a8d08d",
-		"set_typed_struct":  "#c6e0b4",
-		"delete":            "#e15759",
+		"get_bytes":        "#4e79a7",
+		"get_string":       "#6ea6d8",
+		"get_typed_string": "#9fc5e8",
+		"get_typed_struct": "#cfe2f3",
+		"set_bytes":        "#59a14f",
+		"set_string":       "#7bc96f",
+		"set_typed_string": "#a8d08d",
+		"set_typed_struct": "#c6e0b4",
+		"delete":           "#e15759",
 	}
 }
 
@@ -757,17 +764,36 @@ func injectTable(readme, table string) string {
 }
 
 // Simplified builder: uses env when present, otherwise best-effort testcontainers for redis/memcached/postgres/mysql.
-func buildCache(ctx context.Context, name string, opts ...cache.StoreOption) (*cache.Cache, func(), bool) {
+func buildCache(ctx context.Context, name string, opts ...benchStoreOption) (*cache.Cache, func(), bool) {
 	switch name {
 	case "memory":
-		return cache.NewCache(cache.NewMemoryStore(ctx, opts...)), func() {}, true
+		benchCfg := applyBenchOptions(benchConfig{}, opts...)
+		return cache.NewCache(cache.NewMemoryStoreWithConfig(ctx, cache.StoreConfig{
+			BaseConfig:            benchCfg.BaseConfig,
+			MemoryCleanupInterval: 0,
+		})), func() {}, true
 	case "file":
 		dir, _ := os.MkdirTemp("", "cache-bench-file-*")
-		return cache.NewCache(cache.NewFileStore(ctx, dir, opts...)), func() { _ = os.RemoveAll(dir) }, true
+		benchCfg := applyBenchOptions(benchConfig{FileDir: dir}, opts...)
+		return cache.NewCache(cache.NewFileStoreWithConfig(ctx, cache.StoreConfig{
+			BaseConfig: benchCfg.BaseConfig,
+			FileDir:    benchCfg.FileDir,
+		})), func() { _ = os.RemoveAll(dir) }, true
 	case "redis":
 		if addr := os.Getenv("REDIS_ADDR"); addr != "" {
 			client := redis.NewClient(&redis.Options{Addr: addr})
-			store := cache.NewRedisStore(ctx, client, opts...)
+			cfg := rediscache.Config{Client: client}
+			for _, opt := range opts {
+				var benchCfg benchConfig
+				benchCfg = opt(benchCfg)
+				if benchCfg.DefaultTTL > 0 {
+					cfg.DefaultTTL = benchCfg.DefaultTTL
+				}
+				if benchCfg.Prefix != "" {
+					cfg.Prefix = benchCfg.Prefix
+				}
+			}
+			store := rediscache.New(cfg)
 			return cache.NewCache(store), func() { _ = client.Close() }, true
 		}
 		if c, cleanup, err := startRedis(ctx, opts...); err == nil {
@@ -788,7 +814,18 @@ func buildCache(ctx context.Context, name string, opts ...cache.StoreOption) (*c
 		}
 	case "memcached":
 		if addr := os.Getenv("MEMCACHED_ADDR"); addr != "" {
-			store := cache.NewMemcachedStore(ctx, []string{addr}, opts...)
+			cfg := memcachedcache.Config{Addresses: []string{addr}}
+			for _, opt := range opts {
+				var benchCfg benchConfig
+				benchCfg = opt(benchCfg)
+				if benchCfg.DefaultTTL > 0 {
+					cfg.DefaultTTL = benchCfg.DefaultTTL
+				}
+				if benchCfg.Prefix != "" {
+					cfg.Prefix = benchCfg.Prefix
+				}
+			}
+			store := memcachedcache.New(cfg)
 			return cache.NewCache(store), func() {}, true
 		}
 		if c, cleanup, err := startMemcached(ctx, opts...); err == nil {
@@ -798,13 +835,11 @@ func buildCache(ctx context.Context, name string, opts ...cache.StoreOption) (*c
 		}
 	case "dynamodb":
 		if endpoint := os.Getenv("DYNAMO_ENDPOINT"); endpoint != "" {
-			cfg := applyBenchOptions(cache.StoreConfig{
-				Driver:         cache.DriverDynamo,
-				DynamoEndpoint: endpoint,
-				DynamoTable:    "cache_entries",
-				DynamoRegion:   "us-east-1",
-			}, opts...)
-			store := cache.NewStore(ctx, cfg)
+			store, err := newDynamoRenderStore(ctx, endpoint, opts...)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, "benchrender: skip dynamodb:", err)
+				break
+			}
 			return cache.NewCache(store), func() {}, true
 		}
 		if c, cleanup, err := startDynamo(ctx, opts...); err == nil {
@@ -814,7 +849,11 @@ func buildCache(ctx context.Context, name string, opts ...cache.StoreOption) (*c
 		}
 	case "sql_postgres":
 		if dsn := os.Getenv("BENCH_PG_DSN"); dsn != "" {
-			store := cache.NewSQLStore(ctx, "pgx", dsn, "cache_entries", opts...)
+			store, err := newSQLRenderStore("pgx", dsn, opts...)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, "benchrender: skip postgres:", err)
+				break
+			}
 			return cache.NewCache(store), func() {}, true
 		}
 		if c, cleanup, err := startPostgres(ctx, opts...); err == nil {
@@ -824,7 +863,11 @@ func buildCache(ctx context.Context, name string, opts ...cache.StoreOption) (*c
 		}
 	case "sql_mysql":
 		if dsn := os.Getenv("BENCH_MYSQL_DSN"); dsn != "" {
-			store := cache.NewSQLStore(ctx, "mysql", dsn, "cache_entries", opts...)
+			store, err := newSQLRenderStore("mysql", dsn, opts...)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, "benchrender: skip mysql:", err)
+				break
+			}
 			return cache.NewCache(store), func() {}, true
 		}
 		if c, cleanup, err := startMySQL(ctx, opts...); err == nil {
@@ -834,7 +877,11 @@ func buildCache(ctx context.Context, name string, opts ...cache.StoreOption) (*c
 		}
 	case "sql_sqlite":
 		dsn := "file:" + filepath.Join(os.TempDir(), "bench.sqlite") + "?cache=shared&mode=rwc"
-		store := cache.NewSQLStore(ctx, "sqlite", dsn, "cache_entries", opts...)
+		store, err := newSQLRenderStore("sqlite", dsn, opts...)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "benchrender: skip sqlite:", err)
+			break
+		}
 		return cache.NewCache(store), func() {}, true
 	}
 	return nil, nil, false
@@ -842,60 +889,84 @@ func buildCache(ctx context.Context, name string, opts ...cache.StoreOption) (*c
 
 // --- container helpers (simplified; duplicated from bench_test) ---
 
-func startRedis(ctx context.Context, opts ...cache.StoreOption) (*cache.Cache, func(), error) {
+func startRedis(ctx context.Context, opts ...benchStoreOption) (*cache.Cache, func(), error) {
 	req := testcontainers.ContainerRequest{Image: "redis:7-bookworm", ExposedPorts: []string{"6379/tcp"}, WaitingFor: wait.ForListeningPort("6379/tcp").WithStartupTimeout(30 * time.Second)}
 	c, addr, err := startContainer(ctx, req, "6379/tcp")
 	if err != nil {
 		return nil, nil, err
 	}
 	client := redis.NewClient(&redis.Options{Addr: addr})
-	store := cache.NewRedisStore(ctx, client, opts...)
+	cfg := rediscache.Config{Client: client}
+	for _, opt := range opts {
+		var benchCfg benchConfig
+		benchCfg = opt(benchCfg)
+		if benchCfg.DefaultTTL > 0 {
+			cfg.DefaultTTL = benchCfg.DefaultTTL
+		}
+		if benchCfg.Prefix != "" {
+			cfg.Prefix = benchCfg.Prefix
+		}
+	}
+	store := rediscache.New(cfg)
 	cleanup := func() { _ = client.Close(); _ = c.Terminate(context.Background()) }
 	return cache.NewCache(store), cleanup, nil
 }
 
-func startMemcached(ctx context.Context, opts ...cache.StoreOption) (*cache.Cache, func(), error) {
+func startMemcached(ctx context.Context, opts ...benchStoreOption) (*cache.Cache, func(), error) {
 	req := testcontainers.ContainerRequest{Image: "memcached:1.6-bookworm", ExposedPorts: []string{"11211/tcp"}, WaitingFor: wait.ForListeningPort("11211/tcp").WithStartupTimeout(30 * time.Second)}
 	c, addr, err := startContainer(ctx, req, "11211/tcp")
 	if err != nil {
 		return nil, nil, err
 	}
-	store := cache.NewMemcachedStore(ctx, []string{addr}, opts...)
+	cfg := memcachedcache.Config{Addresses: []string{addr}}
+	for _, opt := range opts {
+		var benchCfg benchConfig
+		benchCfg = opt(benchCfg)
+		if benchCfg.DefaultTTL > 0 {
+			cfg.DefaultTTL = benchCfg.DefaultTTL
+		}
+		if benchCfg.Prefix != "" {
+			cfg.Prefix = benchCfg.Prefix
+		}
+	}
+	store := memcachedcache.New(cfg)
 	cleanup := func() { _ = c.Terminate(context.Background()) }
 	return cache.NewCache(store), cleanup, nil
 }
 
-func startDynamo(ctx context.Context, opts ...cache.StoreOption) (*cache.Cache, func(), error) {
+func startDynamo(ctx context.Context, opts ...benchStoreOption) (*cache.Cache, func(), error) {
 	req := testcontainers.ContainerRequest{Image: "amazon/dynamodb-local:latest", ExposedPorts: []string{"8000/tcp"}, WaitingFor: wait.ForListeningPort("8000/tcp").WithStartupTimeout(45 * time.Second)}
 	c, addr, err := startContainer(ctx, req, "8000/tcp")
 	if err != nil {
 		return nil, nil, err
 	}
 	endpoint := "http://" + addr
-	cfg := applyBenchOptions(cache.StoreConfig{
-		Driver:         cache.DriverDynamo,
-		DynamoEndpoint: endpoint,
-		DynamoTable:    "cache_entries",
-		DynamoRegion:   "us-east-1",
-	}, opts...)
-	store := cache.NewStore(ctx, cfg)
+	store, err := newDynamoRenderStore(ctx, endpoint, opts...)
+	if err != nil {
+		_ = c.Terminate(context.Background())
+		return nil, nil, err
+	}
 	cleanup := func() { _ = c.Terminate(context.Background()) }
 	return cache.NewCache(store), cleanup, nil
 }
 
-func startPostgres(ctx context.Context, opts ...cache.StoreOption) (*cache.Cache, func(), error) {
+func startPostgres(ctx context.Context, opts ...benchStoreOption) (*cache.Cache, func(), error) {
 	req := testcontainers.ContainerRequest{Image: "postgres:16-bookworm", Env: map[string]string{"POSTGRES_PASSWORD": "pass", "POSTGRES_USER": "user", "POSTGRES_DB": "app"}, ExposedPorts: []string{"5432/tcp"}, WaitingFor: wait.ForListeningPort("5432/tcp").WithStartupTimeout(60 * time.Second)}
 	c, addr, err := startContainer(ctx, req, "5432/tcp")
 	if err != nil {
 		return nil, nil, err
 	}
 	dsn := "postgres://user:pass@" + addr + "/app?sslmode=disable"
-	store := cache.NewSQLStore(ctx, "pgx", dsn, "cache_entries", opts...)
+	store, err := newSQLRenderStore("pgx", dsn, opts...)
+	if err != nil {
+		_ = c.Terminate(context.Background())
+		return nil, nil, err
+	}
 	cleanup := func() { _ = c.Terminate(context.Background()) }
 	return cache.NewCache(store), cleanup, nil
 }
 
-func startMySQL(ctx context.Context, opts ...cache.StoreOption) (*cache.Cache, func(), error) {
+func startMySQL(ctx context.Context, opts ...benchStoreOption) (*cache.Cache, func(), error) {
 	req := testcontainers.ContainerRequest{
 		Image:        "mysql:8",
 		Env:          map[string]string{"MYSQL_ROOT_PASSWORD": "pass", "MYSQL_DATABASE": "app", "MYSQL_USER": "user", "MYSQL_PASSWORD": "pass"},
@@ -910,12 +981,16 @@ func startMySQL(ctx context.Context, opts ...cache.StoreOption) (*cache.Cache, f
 		return nil, nil, err
 	}
 	dsn := "user:pass@tcp(" + addr + ")/app?parseTime=true"
-	store := cache.NewSQLStore(ctx, "mysql", dsn, "cache_entries", opts...)
+	store, err := newSQLRenderStore("mysql", dsn, opts...)
+	if err != nil {
+		_ = c.Terminate(context.Background())
+		return nil, nil, err
+	}
 	cleanup := func() { _ = c.Terminate(context.Background()) }
 	return cache.NewCache(store), cleanup, nil
 }
 
-func startNATS(ctx context.Context, opts ...cache.StoreOption) (*cache.Cache, func(), error) {
+func startNATS(ctx context.Context, opts ...benchStoreOption) (*cache.Cache, func(), error) {
 	req := testcontainers.ContainerRequest{
 		Image:        "nats:2",
 		Cmd:          []string{"-js"},
@@ -944,7 +1019,7 @@ func startNATS(ctx context.Context, opts ...cache.StoreOption) (*cache.Cache, fu
 	return cacheValue, cleanup, nil
 }
 
-func newNATSBenchCache(ctx context.Context, natsURL string, opts ...cache.StoreOption) (*cache.Cache, func(), error) {
+func newNATSBenchCache(ctx context.Context, natsURL string, opts ...benchStoreOption) (*cache.Cache, func(), error) {
 	nc, err := connectNATSWithRetry(natsURL, 5*time.Second)
 	if err != nil {
 		return nil, nil, err
@@ -960,13 +1035,86 @@ func newNATSBenchCache(ctx context.Context, natsURL string, opts ...cache.StoreO
 		nc.Close()
 		return nil, nil, err
 	}
-	store := cache.NewNATSStore(ctx, kv, opts...)
+	cfg := natscache.Config{KeyValue: kv}
+	for _, opt := range opts {
+		var benchCfg benchConfig
+		benchCfg = opt(benchCfg)
+		if benchCfg.DefaultTTL > 0 {
+			cfg.DefaultTTL = benchCfg.DefaultTTL
+		}
+		if benchCfg.Prefix != "" {
+			cfg.Prefix = benchCfg.Prefix
+		}
+		if benchCfg.NATSBucketTTL {
+			cfg.BucketTTL = true
+		}
+	}
+	store := natscache.New(cfg)
 	cleanup := func() {
 		_ = js.DeleteKeyValue(bucket)
 		_ = nc.Drain()
 		nc.Close()
 	}
 	return cache.NewCache(store), cleanup, nil
+}
+
+func newSQLRenderStore(driverName, dsn string, opts ...benchStoreOption) (cachecore.Store, error) {
+	cfg := sqlcore.Config{
+		DriverName: driverName,
+		DSN:        dsn,
+		Table:      "cache_entries",
+	}
+	for _, opt := range opts {
+		var benchCfg benchConfig
+		benchCfg = opt(benchCfg)
+		if benchCfg.DefaultTTL > 0 {
+			cfg.DefaultTTL = benchCfg.DefaultTTL
+		}
+		if benchCfg.Prefix != "" {
+			cfg.Prefix = benchCfg.Prefix
+		}
+	}
+	if driverName == "sqlite" {
+		return sqlitecache.New(sqlitecache.Config{
+			BaseConfig: cachecore.BaseConfig{Prefix: cfg.Prefix, DefaultTTL: cfg.DefaultTTL},
+			DSN:        cfg.DSN,
+			Table:      cfg.Table,
+		})
+	}
+	return sqlcore.New(cfg)
+}
+
+func newDynamoRenderStore(ctx context.Context, endpoint string, opts ...benchStoreOption) (cachecore.Store, error) {
+	cfg := dynamocache.Config{
+		Endpoint: endpoint,
+		Region:   "us-east-1",
+		Table:    "cache_entries",
+	}
+	for _, opt := range opts {
+		var benchCfg benchConfig
+		benchCfg = opt(benchCfg)
+		if benchCfg.DefaultTTL > 0 {
+			cfg.DefaultTTL = benchCfg.DefaultTTL
+		}
+		if benchCfg.Prefix != "" {
+			cfg.Prefix = benchCfg.Prefix
+		}
+		if benchCfg.DynamoClient != nil {
+			if client, ok := benchCfg.DynamoClient.(dynamocache.DynamoAPI); ok {
+				cfg.Client = client
+			}
+		}
+		if benchCfg.DynamoEndpoint != "" {
+			cfg.Endpoint = benchCfg.DynamoEndpoint
+		}
+		if benchCfg.DynamoRegion != "" {
+			cfg.Region = benchCfg.DynamoRegion
+		}
+		if benchCfg.DynamoTable != "" {
+			cfg.Table = benchCfg.DynamoTable
+		}
+	}
+	return dynamocache.New(ctx, cfg)
 }
 
 func connectNATSWithRetry(url string, timeout time.Duration) (*nats.Conn, error) {
@@ -1008,17 +1156,26 @@ func findRoot() string {
 	cwd, _ := os.Getwd()
 	for {
 		if _, err := os.Stat(filepath.Join(cwd, "go.mod")); err == nil {
-			return cwd
+			if _, err := os.Stat(filepath.Join(cwd, "factory.go")); err == nil {
+				if _, err := os.Stat(filepath.Join(cwd, "README.md")); err == nil {
+					return cwd
+				}
+			}
+		}
+		if _, err := os.Stat(filepath.Join(cwd, "factory.go")); err == nil {
+			if _, err := os.Stat(filepath.Join(cwd, "README.md")); err == nil {
+				return cwd
+			}
 		}
 		next := filepath.Dir(cwd)
 		if next == cwd {
-			panic("go.mod not found")
+			panic("cache repo root not found")
 		}
 		cwd = next
 	}
 }
 
-func applyBenchOptions(cfg cache.StoreConfig, opts ...cache.StoreOption) cache.StoreConfig {
+func applyBenchOptions(cfg benchConfig, opts ...benchStoreOption) benchConfig {
 	for _, opt := range opts {
 		cfg = opt(cfg)
 	}

@@ -1,12 +1,13 @@
 package cachefake
 
 import (
-    "context"
-    "sync"
-    "testing"
-    "time"
+	"context"
+	"sync"
+	"testing"
+	"time"
 
 	"github.com/goforj/cache"
+	"github.com/goforj/cache/cachecore"
 )
 
 // Op identifies a cache operation for assertions.
@@ -108,11 +109,11 @@ func (f *Fake) record(op Op, key string) {
 
 // countingStore wraps a Store to record calls.
 type countingStore struct {
-	inner   cache.Store
+	inner   cachecore.Store
 	onCount func(Op, string)
 }
 
-func (s *countingStore) Driver() cache.Driver { return s.inner.Driver() }
+func (s *countingStore) Driver() cachecore.Driver { return s.inner.Driver() }
 
 func (s *countingStore) Get(ctx context.Context, key string) ([]byte, bool, error) {
 	s.bump(OpGet, key)

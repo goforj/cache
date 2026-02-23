@@ -7,6 +7,8 @@ import (
 	"crypto/cipher"
 	"testing"
 	"time"
+
+	"github.com/goforj/cache/cachecore"
 )
 
 func TestEncryptingStoreRoundTrip(t *testing.T) {
@@ -63,7 +65,9 @@ func TestEncryptingStorePassThroughWhenDisabled(t *testing.T) {
 func TestFactoryAppliesEncryption(t *testing.T) {
 	ctx := context.Background()
 	key := []byte("01234567890123456789012345678901")
-	store := NewStoreWith(ctx, DriverMemory, WithEncryptionKey(key))
+	store := NewMemoryStoreWithConfig(ctx, StoreConfig{
+		BaseConfig: cachecore.BaseConfig{EncryptionKey: key},
+	})
 	if _, ok := store.(*encryptingStore); !ok {
 		t.Fatalf("expected encrypting store wrapper")
 	}

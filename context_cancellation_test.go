@@ -6,6 +6,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/goforj/cache/cachecore"
 )
 
 type blockingCtxStore struct {
@@ -18,7 +20,7 @@ type blockingCtxStore struct {
 	deleteCalls    int
 }
 
-func (s *blockingCtxStore) Driver() Driver { return DriverMemory }
+func (s *blockingCtxStore) Driver() cachecore.Driver { return cachecore.DriverMemory }
 
 func (s *blockingCtxStore) Get(ctx context.Context, key string) ([]byte, bool, error) {
 	s.mu.Lock()

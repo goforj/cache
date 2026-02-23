@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/goforj/cache/cachecore"
 	gocache "github.com/patrickmn/go-cache"
 )
 
@@ -17,7 +18,7 @@ type memoryStore struct {
 	mu         sync.Mutex
 }
 
-func newMemoryStore(defaultTTL, cleanupInterval time.Duration) Store {
+func newMemoryStore(defaultTTL, cleanupInterval time.Duration) cachecore.Store {
 	if defaultTTL <= 0 {
 		defaultTTL = defaultCacheTTL
 	}
@@ -30,8 +31,8 @@ func newMemoryStore(defaultTTL, cleanupInterval time.Duration) Store {
 	}
 }
 
-func (s *memoryStore) Driver() Driver {
-	return DriverMemory
+func (s *memoryStore) Driver() cachecore.Driver {
+	return cachecore.DriverMemory
 }
 
 func (s *memoryStore) Get(_ context.Context, key string) ([]byte, bool, error) {

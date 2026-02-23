@@ -6,14 +6,15 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/goforj/cache"
+	"github.com/goforj/cache/driver/dynamocache"
 )
 
 func main() {
-	// WithDynamoTable sets the table used by the DynamoDB driver.
-
-	// Example: custom dynamo table
+	// Example: custom dynamo table via explicit driver config.
 	ctx := context.Background()
-	store := cache.NewStoreWith(ctx, cache.DriverDynamo, cache.WithDynamoTable("cache_entries"))
+	store, err := dynamocache.New(ctx, dynamocache.Config{Table: "cache_entries"})
+	if err != nil {
+		panic(err)
+	}
 	fmt.Println(store.Driver()) // dynamodb
 }

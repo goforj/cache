@@ -5,16 +5,16 @@ This guide covers practical defaults and operational patterns for running cache 
 ## Recommended Defaults
 
 - Use explicit prefixes for shared backends:
-  - example: `WithPrefix("billing:v1")`
+  - example: `cachecore.BaseConfig{Prefix: "billing:v1"}`
 - Set a non-zero default TTL at store construction:
   - example: 5 to 15 minutes for read-mostly metadata
 - Use backend-specific strengths:
   - memory/file for local or single-node use
   - redis/memcached/nats/sql/dynamodb for shared multi-instance workloads
 - Enable shaping controls where needed:
-  - `WithCompression(CompressionGzip)` for larger payloads
-  - `WithMaxValueBytes(...)` to enforce payload budgets
-  - `WithEncryptionKey(...)` for at-rest value protection
+  - `BaseConfig.Compression = cache.CompressionGzip` for larger payloads
+  - `BaseConfig.MaxValueBytes = ...` to enforce payload budgets
+  - `BaseConfig.EncryptionKey = ...` for at-rest value protection
 
 ## Key Naming And Versioning
 
@@ -88,14 +88,14 @@ Attach an observer to capture hit/miss/error/latency by operation and driver:
 
 ```go
 type Observer interface {
-	OnCacheOp(ctx context.Context, op string, key string, hit bool, err error, dur time.Duration, driver cache.Driver)
+	OnCacheOp(ctx context.Context, op string, key string, hit bool, err error, dur time.Duration, driver cachecore.Driver)
 }
 ```
 
 Practical metrics pattern (Prometheus/OpenTelemetry):
 
 ```go
-c = c.WithObserver(cache.ObserverFunc(func(ctx context.Context, op, key string, hit bool, err error, dur time.Duration, driver cache.Driver) {
+c = c.WithObserver(cache.ObserverFunc(func(ctx context.Context, op, key string, hit bool, err error, dur time.Duration, driver cachecore.Driver) {
 	_ = ctx
 	_ = key // do not use raw keys as metric labels (high cardinality)
 

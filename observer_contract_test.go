@@ -6,6 +6,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/goforj/cache/cachecore"
 )
 
 type observerEvent struct {
@@ -13,7 +15,7 @@ type observerEvent struct {
 	key    string
 	hit    bool
 	err    error
-	driver Driver
+	driver cachecore.Driver
 	dur    time.Duration
 }
 
@@ -22,7 +24,7 @@ type observerRecorder struct {
 	events []observerEvent
 }
 
-func (r *observerRecorder) OnCacheOp(_ context.Context, op, key string, hit bool, err error, dur time.Duration, driver Driver) {
+func (r *observerRecorder) OnCacheOp(_ context.Context, op, key string, hit bool, err error, dur time.Duration, driver cachecore.Driver) {
 	r.mu.Lock()
 	r.events = append(r.events, observerEvent{
 		op:     op,
@@ -79,8 +81,8 @@ func TestObserverContract_HelperOpsEmitExpectedMetadata(t *testing.T) {
 		if wantErr != nil && !errors.Is(got.err, wantErr) {
 			t.Fatalf("expected error %v, got %v", wantErr, got.err)
 		}
-		if got.driver != DriverMemory {
-			t.Fatalf("expected driver=%q, got %q", DriverMemory, got.driver)
+		if got.driver != cachecore.DriverMemory {
+			t.Fatalf("expected driver=%q, got %q", cachecore.DriverMemory, got.driver)
 		}
 		if got.dur < 0 {
 			t.Fatalf("expected non-negative duration, got %v", got.dur)
@@ -219,7 +221,7 @@ func TestObserverContract_HelperOpsEmitExpectedMetadata(t *testing.T) {
 			t.Fatalf("expected 2 delete_many events, got %d (%+v)", len(events), events)
 		}
 		for i, key := range []string{"dm:a", "dm:b"} {
-			if events[i].op != "delete_many" || events[i].key != key || !events[i].hit || events[i].err != nil || events[i].driver != DriverMemory {
+			if events[i].op != "delete_many" || events[i].key != key || !events[i].hit || events[i].err != nil || events[i].driver != cachecore.DriverMemory {
 				t.Fatalf("unexpected delete_many event[%d]=%+v", i, events[i])
 			}
 		}
@@ -328,7 +330,7 @@ func TestObserverContract_ErrorPropagation(t *testing.T) {
 		if got.err == nil {
 			t.Fatalf("expected observer error for decode failure")
 		}
-		if got.driver != DriverMemory {
+		if got.driver != cachecore.DriverMemory {
 			t.Fatalf("expected driver memory, got %q", got.driver)
 		}
 	})

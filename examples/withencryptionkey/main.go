@@ -7,14 +7,15 @@ import (
 	"context"
 	"fmt"
 	"github.com/goforj/cache"
+	"github.com/goforj/cache/cachecore"
 )
 
 func main() {
-	// WithEncryptionKey enables at-rest encryption using the provided AES key (16/24/32 bytes).
-
-	// Example: encrypt values
+	// Example: encrypt values via explicit StoreConfig.
 	ctx := context.Background()
 	key := []byte("01234567890123456789012345678901")
-	store := cache.NewStoreWith(ctx, cache.DriverFile, cache.WithEncryptionKey(key))
+	store := cache.NewFileStoreWithConfig(ctx, cache.StoreConfig{
+		BaseConfig: cachecore.BaseConfig{EncryptionKey: key},
+	})
 	fmt.Println(store.Driver()) // file
 }

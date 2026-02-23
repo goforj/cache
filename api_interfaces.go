@@ -3,11 +3,13 @@ package cache
 import (
 	"context"
 	"time"
+
+	"github.com/goforj/cache/cachecore"
 )
 
 // CoreAPI exposes basic cache metadata.
 type CoreAPI interface {
-	Driver() Driver
+	Driver() cachecore.Driver
 }
 
 // ReadAPI exposes read-oriented cache operations.

@@ -236,7 +236,8 @@ func findRoot() (string, error) {
 	wd, _ := os.Getwd()
 	candidates := []string{wd, filepath.Join(wd, ".."), filepath.Join(wd, "..", ".."), filepath.Join(wd, "..", "..", "..")}
 	for _, c := range candidates {
-		if fileExists(filepath.Join(c, "go.mod")) {
+		c = filepath.Clean(c)
+		if fileExists(filepath.Join(c, "go.mod")) && fileExists(filepath.Join(c, "factory.go")) && fileExists(filepath.Join(c, "README.md")) {
 			return filepath.Clean(c), nil
 		}
 	}

@@ -7,14 +7,15 @@ import (
 	"context"
 	"fmt"
 	"github.com/goforj/cache"
+	"github.com/goforj/cache/cachecore"
 	"time"
 )
 
 func main() {
-	// WithDefaultTTL overrides the fallback TTL used when ttl <= 0.
-
-	// Example: override default TTL
+	// Example: override default TTL via explicit StoreConfig.
 	ctx := context.Background()
-	store := cache.NewStoreWith(ctx, cache.DriverMemory, cache.WithDefaultTTL(30*time.Second))
+	store := cache.NewMemoryStoreWithConfig(ctx, cache.StoreConfig{
+		BaseConfig: cachecore.BaseConfig{DefaultTTL: 30 * time.Second},
+	})
 	fmt.Println(store.Driver()) // memory
 }

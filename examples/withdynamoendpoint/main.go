@@ -6,14 +6,15 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/goforj/cache"
+	"github.com/goforj/cache/driver/dynamocache"
 )
 
 func main() {
-	// WithDynamoEndpoint sets the DynamoDB endpoint (useful for local testing).
-
-	// Example: dynamo local endpoint
+	// Example: Dynamo local endpoint via explicit driver config.
 	ctx := context.Background()
-	store := cache.NewStoreWith(ctx, cache.DriverDynamo, cache.WithDynamoEndpoint("http://localhost:8000"))
+	store, err := dynamocache.New(ctx, dynamocache.Config{Endpoint: "http://localhost:8000"})
+	if err != nil {
+		panic(err)
+	}
 	fmt.Println(store.Driver()) // dynamodb
 }

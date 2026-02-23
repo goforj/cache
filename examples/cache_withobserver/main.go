@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/goforj/cache"
+	"github.com/goforj/cache/cachecore"
 	"time"
 )
 
@@ -16,7 +17,7 @@ func main() {
 	// Example: attach observer
 	ctx := context.Background()
 	c := cache.NewCache(cache.NewMemoryStore(ctx))
-	c = c.WithObserver(cache.ObserverFunc(func(ctx context.Context, op, key string, hit bool, err error, dur time.Duration, driver cache.Driver) {
+	c = c.WithObserver(cache.ObserverFunc(func(ctx context.Context, op, key string, hit bool, err error, dur time.Duration, driver cachecore.Driver) {
 		// See docs/production-guide.md for a real metrics recipe.
 		fmt.Println(op, driver, hit, err == nil)
 		_ = ctx

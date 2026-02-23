@@ -10,7 +10,7 @@ import (
 )
 
 func main() {
-	// NewMemoryStore is a convenience for an in-process store with optional overrides.
+	// NewMemoryStore is a convenience for an in-process store using defaults.
 
 	// Example: memory helper
 	ctx := context.Background()

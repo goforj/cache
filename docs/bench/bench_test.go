@@ -21,6 +21,13 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 
 	"github.com/goforj/cache"
+	"github.com/goforj/cache/cachecore"
+	"github.com/goforj/cache/driver/dynamocache"
+	"github.com/goforj/cache/driver/memcachedcache"
+	"github.com/goforj/cache/driver/natscache"
+	"github.com/goforj/cache/driver/rediscache"
+	"github.com/goforj/cache/driver/sqlcore"
+	"github.com/goforj/cache/driver/sqlitecache"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -104,7 +111,7 @@ func BenchmarkCacheSetGet(b *testing.B) {
 				}
 			}
 			if include("nats_bucket_ttl") {
-				if c2, cleanup2, err2 := startNATS(ctx, cache.WithNATSBucketTTL(true)); err2 == nil {
+				if c2, cleanup2, err2 := startNATS(ctx, benchWithNATSBucketTTL(true)); err2 == nil {
 					cases = append(cases, benchCase{name: "nats_bucket_ttl", new: func(testing.TB) (*cache.Cache, func()) { return c2, cleanup2 }})
 				} else if wantedDriver == "nats_bucket_ttl" {
 					b.Fatalf("nats_bucket_ttl benchmark setup failed: %v", err2)
@@ -151,7 +158,10 @@ func BenchmarkCacheSetGet(b *testing.B) {
 			name: "sql_sqlite",
 			new: func(tb testing.TB) (*cache.Cache, func()) {
 				dsn := "file:" + filepath.Join(tb.TempDir(), "bench.sqlite") + "?cache=shared&mode=rwc"
-				store := cache.NewSQLStore(ctx, "sqlite", dsn, "cache_entries", cache.WithPrefix("bench"))
+				store, err := newSQLBenchStore("sqlite", dsn, benchWithPrefix("bench"))
+				if err != nil {
+					tb.Fatalf("sqlite benchmark setup failed: %v", err)
+				}
 				return cache.NewCache(store), func() {}
 			},
 		})
@@ -237,7 +247,7 @@ func redisCase(ctx context.Context, addr string) benchCase {
 		name: "redis",
 		new: func(testing.TB) (*cache.Cache, func()) {
 			client := redis.NewClient(&redis.Options{Addr: addr})
-			store := cache.NewRedisStore(ctx, client)
+			store := rediscache.New(rediscache.Config{Client: client})
 			return cache.NewCache(store), func() { _ = client.Close() }
 		},
 	}
@@ -247,7 +257,7 @@ func memcachedCase(ctx context.Context, addr string) benchCase {
 	return benchCase{
 		name: "memcached",
 		new: func(testing.TB) (*cache.Cache, func()) {
-			store := cache.NewMemcachedStore(ctx, []string{addr})
+			store := memcachedcache.New(memcachedcache.Config{Addresses: []string{addr}})
 			return cache.NewCache(store), func() {}
 		},
 	}
@@ -256,14 +266,11 @@ func memcachedCase(ctx context.Context, addr string) benchCase {
 func dynamoCase(ctx context.Context, endpoint string) benchCase {
 	return benchCase{
 		name: "dynamodb",
-		new: func(testing.TB) (*cache.Cache, func()) {
-			store := cache.NewStore(ctx, cache.StoreConfig{
-				Driver:         cache.DriverDynamo,
-				DynamoEndpoint: endpoint,
-				DynamoTable:    "cache_entries",
-				DynamoRegion:   "us-east-1",
-				DefaultTTL:     time.Minute,
-			})
+		new: func(tb testing.TB) (*cache.Cache, func()) {
+			store, err := newDynamoBenchStore(ctx, endpoint)
+			if err != nil {
+				tb.Fatalf("dynamo benchmark setup failed: %v", err)
+			}
 			return cache.NewCache(store), func() {}
 		},
 	}
@@ -286,7 +293,7 @@ func natsBucketTTLCase(ctx context.Context, natsURL string) benchCase {
 	return benchCase{
 		name: "nats_bucket_ttl",
 		new: func(tb testing.TB) (*cache.Cache, func()) {
-			c, cleanup, err := natsCacheForURL(ctx, natsURL, cache.WithNATSBucketTTL(true))
+			c, cleanup, err := natsCacheForURL(ctx, natsURL, benchWithNATSBucketTTL(true))
 			if err != nil {
 				tb.Fatalf("nats bucket ttl benchmark setup failed: %v", err)
 			}
@@ -298,8 +305,11 @@ func natsBucketTTLCase(ctx context.Context, natsURL string) benchCase {
 func postgresCase(ctx context.Context, dsn string) benchCase {
 	return benchCase{
 		name: "sql_postgres",
-		new: func(testing.TB) (*cache.Cache, func()) {
-			store := cache.NewSQLStore(ctx, "pgx", dsn, "cache_entries", cache.WithPrefix("bench"))
+		new: func(tb testing.TB) (*cache.Cache, func()) {
+			store, err := newSQLBenchStore("pgx", dsn, benchWithPrefix("bench"))
+			if err != nil {
+				tb.Fatalf("postgres benchmark setup failed: %v", err)
+			}
 			return cache.NewCache(store), func() {}
 		},
 	}
@@ -308,8 +318,11 @@ func postgresCase(ctx context.Context, dsn string) benchCase {
 func mysqlCase(ctx context.Context, dsn string) benchCase {
 	return benchCase{
 		name: "sql_mysql",
-		new: func(testing.TB) (*cache.Cache, func()) {
-			store := cache.NewSQLStore(ctx, "mysql", dsn, "cache_entries", cache.WithPrefix("bench"))
+		new: func(tb testing.TB) (*cache.Cache, func()) {
+			store, err := newSQLBenchStore("mysql", dsn, benchWithPrefix("bench"))
+			if err != nil {
+				tb.Fatalf("mysql benchmark setup failed: %v", err)
+			}
 			return cache.NewCache(store), func() {}
 		},
 	}
@@ -328,7 +341,7 @@ func startRedis(ctx context.Context) (*cache.Cache, func(), error) {
 		return nil, nil, err
 	}
 	client := redis.NewClient(&redis.Options{Addr: addr})
-	store := cache.NewRedisStore(ctx, client)
+	store := rediscache.New(rediscache.Config{Client: client})
 	cleanup := func() {
 		_ = client.Close()
 		_ = c.Terminate(context.Background())
@@ -346,7 +359,7 @@ func startMemcached(ctx context.Context) (*cache.Cache, func(), error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	store := cache.NewMemcachedStore(ctx, []string{addr})
+	store := memcachedcache.New(memcachedcache.Config{Addresses: []string{addr}})
 	cleanup := func() { _ = c.Terminate(context.Background()) }
 	return cache.NewCache(store), cleanup, nil
 }
@@ -362,18 +375,50 @@ func startDynamo(ctx context.Context) (*cache.Cache, func(), error) {
 		return nil, nil, err
 	}
 	endpoint := "http://" + addr
-	store := cache.NewStore(ctx, cache.StoreConfig{
-		Driver:         cache.DriverDynamo,
-		DynamoEndpoint: endpoint,
-		DynamoTable:    "cache_entries",
-		DynamoRegion:   "us-east-1",
-		DefaultTTL:     time.Minute,
-	})
+	store, err := newDynamoBenchStore(ctx, endpoint)
+	if err != nil {
+		_ = c.Terminate(context.Background())
+		return nil, nil, err
+	}
 	cleanup := func() { _ = c.Terminate(context.Background()) }
 	return cache.NewCache(store), cleanup, nil
 }
 
-func startNATS(ctx context.Context, opts ...cache.StoreOption) (*cache.Cache, func(), error) {
+func newDynamoBenchStore(ctx context.Context, endpoint string, opts ...benchStoreOption) (cachecore.Store, error) {
+	cfg := dynamocache.Config{
+		BaseConfig: cachecore.BaseConfig{DefaultTTL: time.Minute},
+		Endpoint:   endpoint,
+		Region:     "us-east-1",
+		Table:      "cache_entries",
+	}
+	for _, opt := range opts {
+		var benchCfg benchConfig
+		benchCfg = opt(benchCfg)
+		if benchCfg.DefaultTTL > 0 {
+			cfg.DefaultTTL = benchCfg.DefaultTTL
+		}
+		if benchCfg.Prefix != "" {
+			cfg.Prefix = benchCfg.Prefix
+		}
+		if benchCfg.DynamoClient != nil {
+			if client, ok := benchCfg.DynamoClient.(dynamocache.DynamoAPI); ok {
+				cfg.Client = client
+			}
+		}
+		if benchCfg.DynamoEndpoint != "" {
+			cfg.Endpoint = benchCfg.DynamoEndpoint
+		}
+		if benchCfg.DynamoRegion != "" {
+			cfg.Region = benchCfg.DynamoRegion
+		}
+		if benchCfg.DynamoTable != "" {
+			cfg.Table = benchCfg.DynamoTable
+		}
+	}
+	return dynamocache.New(ctx, cfg)
+}
+
+func startNATS(ctx context.Context, opts ...benchStoreOption) (*cache.Cache, func(), error) {
 	req := testcontainers.ContainerRequest{
 		Image:        "nats:2",
 		Cmd:          []string{"-js"},
@@ -407,7 +452,11 @@ func startPostgres(ctx context.Context) (*cache.Cache, func(), error) {
 		return nil, nil, err
 	}
 	dsn := "postgres://user:pass@" + addr + "/app?sslmode=disable"
-	store := cache.NewSQLStore(ctx, "pgx", dsn, "cache_entries", cache.WithPrefix("bench"))
+	store, err := newSQLBenchStore("pgx", dsn, benchWithPrefix("bench"))
+	if err != nil {
+		_ = c.Terminate(context.Background())
+		return nil, nil, err
+	}
 	cleanup := func() { _ = c.Terminate(context.Background()) }
 	return cache.NewCache(store), cleanup, nil
 }
@@ -432,9 +481,43 @@ func startMySQL(ctx context.Context) (*cache.Cache, func(), error) {
 		return nil, nil, err
 	}
 	dsn := "user:pass@tcp(" + addr + ")/app?parseTime=true"
-	store := cache.NewSQLStore(ctx, "mysql", dsn, "cache_entries", cache.WithPrefix("bench"))
+	store, err := newSQLBenchStore("mysql", dsn, benchWithPrefix("bench"))
+	if err != nil {
+		_ = c.Terminate(context.Background())
+		return nil, nil, err
+	}
 	cleanup := func() { _ = c.Terminate(context.Background()) }
 	return cache.NewCache(store), cleanup, nil
+}
+
+func newSQLBenchStore(driverName, dsn string, opts ...benchStoreOption) (cachecore.Store, error) {
+	cfg := sqlcore.Config{
+		DriverName: driverName,
+		DSN:        dsn,
+		Table:      "cache_entries",
+	}
+	for _, opt := range opts {
+		var benchCfg benchConfig
+		benchCfg = opt(benchCfg)
+		if benchCfg.DefaultTTL > 0 {
+			cfg.DefaultTTL = benchCfg.DefaultTTL
+		}
+		if benchCfg.Prefix != "" {
+			cfg.Prefix = benchCfg.Prefix
+		}
+	}
+	if driverName == "sqlite" {
+		return sqlitecache.New(sqlitecache.Config{
+			BaseConfig: cachecore.BaseConfig{Prefix: cfg.Prefix, DefaultTTL: cfg.DefaultTTL},
+			DSN:        cfg.DSN,
+			Table:      cfg.Table,
+		})
+	}
+	store, err := sqlcore.New(cfg)
+	if err != nil {
+		return nil, err
+	}
+	return store, nil
 }
 
 func startContainer(ctx context.Context, req testcontainers.ContainerRequest, port string) (testcontainers.Container, string, error) {
@@ -458,7 +541,7 @@ func startContainer(ctx context.Context, req testcontainers.ContainerRequest, po
 	return c, host + ":" + mapped.Port(), nil
 }
 
-func natsCacheForURL(ctx context.Context, natsURL string, opts ...cache.StoreOption) (*cache.Cache, func(), error) {
+func natsCacheForURL(ctx context.Context, natsURL string, opts ...benchStoreOption) (*cache.Cache, func(), error) {
 	nc, err := nats.Connect(natsURL)
 	if err != nil {
 		return nil, nil, err
@@ -474,7 +557,21 @@ func natsCacheForURL(ctx context.Context, natsURL string, opts ...cache.StoreOpt
 		nc.Close()
 		return nil, nil, err
 	}
-	store := cache.NewNATSStore(ctx, kv, opts...)
+	cfg := natscache.Config{KeyValue: kv}
+	for _, opt := range opts {
+		var benchCfg benchConfig
+		benchCfg = opt(benchCfg)
+		if benchCfg.DefaultTTL > 0 {
+			cfg.DefaultTTL = benchCfg.DefaultTTL
+		}
+		if benchCfg.Prefix != "" {
+			cfg.Prefix = benchCfg.Prefix
+		}
+		if benchCfg.NATSBucketTTL {
+			cfg.BucketTTL = true
+		}
+	}
+	store := natscache.New(cfg)
 	cleanup := func() {
 		_ = js.DeleteKeyValue(bucket)
 		_ = nc.Drain()

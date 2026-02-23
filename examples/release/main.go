@@ -11,7 +11,7 @@ import (
 
 func main() {
 	// Release unlocks the key if this handle previously acquired it.
-	// 
+	//
 	// It is safe to call multiple times; repeated calls become no-ops after the first
 	// successful release.
 

@@ -92,12 +92,11 @@ func run() error {
 
 func findRoot() (string, error) {
 	wd, _ := os.Getwd()
-	if fileExists(filepath.Join(wd, "go.mod")) {
-		return wd, nil
-	}
-	parent := filepath.Join(wd, "..")
-	if fileExists(filepath.Join(parent, "go.mod")) {
-		return filepath.Clean(parent), nil
+	for _, c := range []string{wd, filepath.Join(wd, ".."), filepath.Join(wd, "..", ".."), filepath.Join(wd, "..", "..", "..")} {
+		c = filepath.Clean(c)
+		if fileExists(filepath.Join(c, "go.mod")) && fileExists(filepath.Join(c, "factory.go")) && fileExists(filepath.Join(c, "README.md")) {
+			return c, nil
+		}
 	}
 	return "", fmt.Errorf("could not find project root")
 }

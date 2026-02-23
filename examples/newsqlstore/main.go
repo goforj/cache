@@ -4,26 +4,38 @@
 package main
 
 import (
-	"context"
 	"fmt"
-	"github.com/goforj/cache"
+	"github.com/goforj/cache/driver/mysqlcache"
+	"github.com/goforj/cache/driver/postgrescache"
+	"github.com/goforj/cache/driver/sqlitecache"
 )
 
 func main() {
-	// NewSQLStore builds a SQL-backed store (postgres, mysql, sqlite).
+	// SQL dialect driver constructors.
 
 	// Example: sqlite helper
-	ctx := context.Background()
-	store := cache.NewSQLStore(ctx, "sqlite", "file:cache.db?cache=shared&mode=rwc", "cache_entries")
+	store, err := sqlitecache.New(sqlitecache.Config{
+		DSN:   "file:cache.db?cache=shared&mode=rwc",
+		Table: "cache_entries",
+	})
+	if err != nil {
+		panic(err)
+	}
 	fmt.Println(store.Driver()) // sql
 
 	// Example: postgres helper
 	dsnPg := "postgres://user:pass@localhost:5432/app?sslmode=disable"
-	storePg := cache.NewSQLStore(ctx, "pgx", dsnPg, "cache_entries")
+	storePg, err := postgrescache.New(postgrescache.Config{DSN: dsnPg, Table: "cache_entries"})
+	if err != nil {
+		panic(err)
+	}
 	fmt.Println(storePg.Driver()) // sql
 
 	// Example: mysql helper
 	dsnMy := "user:pass@tcp(localhost:3306)/app?parseTime=true"
-	storeMy := cache.NewSQLStore(ctx, "mysql", dsnMy, "cache_entries")
+	storeMy, err := mysqlcache.New(mysqlcache.Config{DSN: dsnMy, Table: "cache_entries"})
+	if err != nil {
+		panic(err)
+	}
 	fmt.Println(storeMy.Driver()) // sql
 }

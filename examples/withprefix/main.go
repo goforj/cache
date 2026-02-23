@@ -4,16 +4,15 @@
 package main
 
 import (
-	"context"
 	"fmt"
-	"github.com/goforj/cache"
+	"github.com/goforj/cache/cachecore"
+	"github.com/goforj/cache/driver/rediscache"
 )
 
 func main() {
-	// WithPrefix sets the key prefix for shared backends (e.g., redis).
-
-	// Example: prefix keys
-	ctx := context.Background()
-	store := cache.NewStoreWith(ctx, cache.DriverRedis, cache.WithPrefix("svc"))
+	// Example: prefix keys via explicit Redis config.
+	store := rediscache.New(rediscache.Config{
+		BaseConfig: cachecore.BaseConfig{Prefix: "svc"},
+	})
 	fmt.Println(store.Driver()) // redis
 }

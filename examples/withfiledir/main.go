@@ -10,10 +10,8 @@ import (
 )
 
 func main() {
-	// WithFileDir sets the directory used by the file driver.
-
-	// Example: set file dir
+	// Example: set file dir via explicit StoreConfig.
 	ctx := context.Background()
-	store := cache.NewStoreWith(ctx, cache.DriverFile, cache.WithFileDir("/tmp/cache"))
+	store := cache.NewFileStoreWithConfig(ctx, cache.StoreConfig{FileDir: "/tmp/cache"})
 	fmt.Println(store.Driver()) // file
 }

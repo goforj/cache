@@ -9,6 +9,8 @@ import (
 	"errors"
 	"io"
 	"time"
+
+	"github.com/goforj/cache/cachecore"
 )
 
 var (
@@ -20,11 +22,11 @@ var (
 )
 
 type encryptingStore struct {
-	inner Store
+	inner cachecore.Store
 	aead  cipher.AEAD
 }
 
-func newEncryptingStore(inner Store, key []byte) (Store, error) {
+func newEncryptingStore(inner cachecore.Store, key []byte) (cachecore.Store, error) {
 	if len(key) == 0 {
 		return inner, nil
 	}
@@ -39,7 +41,7 @@ func newEncryptingStore(inner Store, key []byte) (Store, error) {
 	return &encryptingStore{inner: inner, aead: aead}, nil
 }
 
-func (s *encryptingStore) Driver() Driver { return s.inner.Driver() }
+func (s *encryptingStore) Driver() cachecore.Driver { return s.inner.Driver() }
 
 func (s *encryptingStore) Get(ctx context.Context, key string) ([]byte, bool, error) {
 	body, ok, err := s.inner.Get(ctx, key)

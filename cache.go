@@ -7,11 +7,13 @@ import (
 	"fmt"
 	"strconv"
 	"time"
+
+	"github.com/goforj/cache/cachecore"
 )
 
 // Cache provides an ergonomic cache API on top of Store.
 type Cache struct {
-	store      Store
+	store      cachecore.Store
 	defaultTTL time.Duration
 	observer   Observer
 }
@@ -34,7 +36,7 @@ type RateLimitStatus struct {
 //	s := cache.NewMemoryStore(ctx)
 //	c := cache.NewCache(s)
 //	fmt.Println(c.Driver()) // memory
-func NewCache(store Store) *Cache {
+func NewCache(store cachecore.Store) *Cache {
 	return NewCacheWithTTL(store, defaultCacheTTL)
 }
 
@@ -47,7 +49,7 @@ func NewCache(store Store) *Cache {
 //	s := cache.NewMemoryStore(ctx)
 //	c := cache.NewCacheWithTTL(s, 2*time.Minute)
 //	fmt.Println(c.Driver(), c != nil) // memory true
-func NewCacheWithTTL(store Store, defaultTTL time.Duration) *Cache {
+func NewCacheWithTTL(store cachecore.Store, defaultTTL time.Duration) *Cache {
 	if defaultTTL <= 0 {
 		defaultTTL = defaultCacheTTL
 	}
@@ -64,7 +66,7 @@ func NewCacheWithTTL(store Store, defaultTTL time.Duration) *Cache {
 //
 //	ctx := context.Background()
 //	c := cache.NewCache(cache.NewMemoryStore(ctx))
-//	c = c.WithObserver(cache.ObserverFunc(func(ctx context.Context, op, key string, hit bool, err error, dur time.Duration, driver cache.Driver) {
+//	c = c.WithObserver(cache.ObserverFunc(func(ctx context.Context, op, key string, hit bool, err error, dur time.Duration, driver cachecore.Driver) {
 //		// See docs/production-guide.md for a real metrics recipe.
 //		fmt.Println(op, driver, hit, err == nil)
 //		_ = ctx
@@ -85,13 +87,13 @@ func (c *Cache) WithObserver(o Observer) *Cache {
 //	ctx := context.Background()
 //	c := cache.NewCache(cache.NewMemoryStore(ctx))
 //	fmt.Println(c.Store().Driver()) // memory
-func (c *Cache) Store() Store {
+func (c *Cache) Store() cachecore.Store {
 	return c.store
 }
 
 // Driver reports the underlying store driver.
 // @group Core
-func (c *Cache) Driver() Driver {
+func (c *Cache) Driver() cachecore.Driver {
 	return c.store.Driver()
 }
 

@@ -4,21 +4,13 @@
 package main
 
 import (
-	"context"
 	"fmt"
-	"github.com/goforj/cache"
+	"github.com/goforj/cache/driver/natscache"
 )
 
 func main() {
-	// WithNATSBucketTTL toggles bucket-level TTL mode for DriverNATS.
-	// When enabled, values are stored as raw bytes and per-operation ttl values are ignored.
-
-	// Example: enable NATS bucket-level TTL mode
-	ctx := context.Background()
-	var kv cache.NATSKeyValue // provided by your NATS setup
-	store := cache.NewStoreWith(ctx, cache.DriverNATS,
-		cache.WithNATSKeyValue(kv),
-		cache.WithNATSBucketTTL(true),
-	)
+	// Example: enable NATS bucket-level TTL mode via explicit driver config.
+	var kv natscache.KeyValue // provided by your NATS setup
+	store := natscache.New(natscache.Config{KeyValue: kv, BucketTTL: true})
 	fmt.Println(store.Driver()) // nats
 }

@@ -8,6 +8,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/goforj/cache/cachecore"
 )
 
 type testPayload struct {
@@ -217,7 +219,7 @@ func TestCacheDeleteManyFlushAndErrors(t *testing.T) {
 }
 
 type spyStore struct {
-	driver   Driver
+	driver   cachecore.Driver
 	getBody  []byte
 	getOK    bool
 	getErr   error
@@ -235,7 +237,7 @@ type spyStore struct {
 
 var expectedErr = errors.New("expected")
 
-func (s *spyStore) Driver() Driver { return s.driver }
+func (s *spyStore) Driver() cachecore.Driver { return s.driver }
 
 func (s *spyStore) Get(context.Context, string) ([]byte, bool, error) {
 	s.getCalls++
@@ -271,18 +273,18 @@ func (s *spyStore) DeleteMany(context.Context, ...string) error { return s.delMa
 func (s *spyStore) Flush(context.Context) error { return s.flushErr }
 
 func TestCacheStoreAndDriver(t *testing.T) {
-	store := &spyStore{driver: DriverMemory}
+	store := &spyStore{driver: cachecore.DriverMemory}
 	c := NewCache(store)
 	if c.Store() != store {
 		t.Fatalf("expected Store to return underlying store")
 	}
-	if c.Driver() != DriverMemory {
+	if c.Driver() != cachecore.DriverMemory {
 		t.Fatalf("expected driver to propagate")
 	}
 }
 
 func TestCacheRememberStringUsesResolvedTTL(t *testing.T) {
-	store := &spyStore{driver: DriverMemory}
+	store := &spyStore{driver: cachecore.DriverMemory}
 	c := NewCacheWithTTL(store, 2*time.Second)
 	ctx := context.Background()
 
@@ -310,7 +312,7 @@ func TestCacheRememberStringUsesResolvedTTL(t *testing.T) {
 }
 
 func TestCacheSetUsesProvidedTTL(t *testing.T) {
-	store := &spyStore{driver: DriverMemory}
+	store := &spyStore{driver: cachecore.DriverMemory}
 	c := NewCacheWithTTL(store, time.Minute)
 	ctx := context.Background()
 
@@ -323,7 +325,7 @@ func TestCacheSetUsesProvidedTTL(t *testing.T) {
 }
 
 func TestNewCacheWithTTLDefaultsWhenNonPositive(t *testing.T) {
-	store := &spyStore{driver: DriverMemory}
+	store := &spyStore{driver: cachecore.DriverMemory}
 	c := NewCacheWithTTL(store, -1)
 	ctx := context.Background()
 
@@ -373,7 +375,7 @@ func TestCacheWriteOpsResolveDefaultTTLWhenNonPositive(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			for _, ttl := range []time.Duration{0, -1 * time.Second} {
-				store := &spyStore{driver: DriverMemory, addOK: true}
+				store := &spyStore{driver: cachecore.DriverMemory, addOK: true}
 				c := NewCacheWithTTL(store, defaultTTL)
 				if err := tt.run(c, ttl); err != nil {
 					t.Fatalf("op failed for ttl=%v: %v", ttl, err)
@@ -388,7 +390,7 @@ func TestCacheWriteOpsResolveDefaultTTLWhenNonPositive(t *testing.T) {
 
 func TestCacheGetStringError(t *testing.T) {
 	expected := errors.New("boom")
-	store := &spyStore{driver: DriverMemory, getErr: expected}
+	store := &spyStore{driver: cachecore.DriverMemory, getErr: expected}
 	c := NewCache(store)
 	ctx := context.Background()
 	_, _, err := c.GetStringCtx(ctx, "k")
@@ -398,7 +400,7 @@ func TestCacheGetStringError(t *testing.T) {
 }
 
 func TestCacheGetStringSuccess(t *testing.T) {
-	store := &spyStore{driver: DriverMemory, getOK: true, getBody: []byte("ok")}
+	store := &spyStore{driver: cachecore.DriverMemory, getOK: true, getBody: []byte("ok")}
 	c := NewCache(store)
 	ctx := context.Background()
 	val, ok, err := c.GetStringCtx(ctx, "k")
@@ -408,7 +410,7 @@ func TestCacheGetStringSuccess(t *testing.T) {
 }
 
 func TestCacheSetJSONMarshalError(t *testing.T) {
-	store := &spyStore{driver: DriverMemory}
+	store := &spyStore{driver: cachecore.DriverMemory}
 	c := NewCache(store)
 	ctx := context.Background()
 	ch := make(chan int)
@@ -418,7 +420,7 @@ func TestCacheSetJSONMarshalError(t *testing.T) {
 }
 
 func TestCachePullDeleteError(t *testing.T) {
-	store := &spyStore{driver: DriverMemory, getOK: true, getBody: []byte("x"), delErr: expectedErr}
+	store := &spyStore{driver: cachecore.DriverMemory, getOK: true, getBody: []byte("x"), delErr: expectedErr}
 	c := NewCache(store)
 	_, _, err := c.PullBytes("k")
 	if !errors.Is(err, expectedErr) {
@@ -427,7 +429,7 @@ func TestCachePullDeleteError(t *testing.T) {
 }
 
 func TestCacheRememberSetError(t *testing.T) {
-	store := &spyStore{driver: DriverMemory, setErr: expectedErr}
+	store := &spyStore{driver: cachecore.DriverMemory, setErr: expectedErr}
 	c := NewCache(store)
 	ctx := context.Background()
 	_, err := c.RememberBytesCtx(ctx, "k", time.Second, func(context.Context) ([]byte, error) {
@@ -439,7 +441,7 @@ func TestCacheRememberSetError(t *testing.T) {
 }
 
 func TestCacheRememberGetError(t *testing.T) {
-	store := &spyStore{driver: DriverMemory, getErr: expectedErr}
+	store := &spyStore{driver: cachecore.DriverMemory, getErr: expectedErr}
 	c := NewCache(store)
 	ctx := context.Background()
 	if _, err := c.RememberBytesCtx(ctx, "k", time.Second, func(context.Context) ([]byte, error) { return []byte("x"), nil }); !errors.Is(err, expectedErr) {
@@ -448,7 +450,7 @@ func TestCacheRememberGetError(t *testing.T) {
 }
 
 func TestCacheRememberJSONCallbackError(t *testing.T) {
-	store := &spyStore{driver: DriverMemory}
+	store := &spyStore{driver: cachecore.DriverMemory}
 	c := NewCache(store)
 	ctx := context.Background()
 	expected := errors.New("cb")
@@ -461,7 +463,7 @@ func TestCacheRememberJSONCallbackError(t *testing.T) {
 }
 
 func TestCacheRememberJSONSetError(t *testing.T) {
-	store := &spyStore{driver: DriverMemory, setErr: expectedErr}
+	store := &spyStore{driver: cachecore.DriverMemory, setErr: expectedErr}
 	c := NewCache(store)
 	ctx := context.Background()
 	_, err := RememberCtx[int](ctx, c, "k", time.Second, func(context.Context) (int, error) { return 5, nil })
@@ -471,7 +473,7 @@ func TestCacheRememberJSONSetError(t *testing.T) {
 }
 
 func TestCacheRememberStringCallbackError(t *testing.T) {
-	store := &spyStore{driver: DriverMemory}
+	store := &spyStore{driver: cachecore.DriverMemory}
 	c := NewCache(store)
 	ctx := context.Background()
 	expected := errors.New("cb")
@@ -483,7 +485,7 @@ func TestCacheRememberStringCallbackError(t *testing.T) {
 }
 
 func TestCacheRememberStringUsesCachedValueWithoutCallback(t *testing.T) {
-	store := &spyStore{driver: DriverMemory, getOK: true, getBody: []byte(`"cached"`)}
+	store := &spyStore{driver: cachecore.DriverMemory, getOK: true, getBody: []byte(`"cached"`)}
 	c := NewCache(store)
 	ctx := context.Background()
 	calls := 0
@@ -501,7 +503,7 @@ func TestCacheRememberJSONReturnsCachedValue(t *testing.T) {
 		V string `json:"v"`
 	}{V: "cached"}
 	body, _ := json.Marshal(payload)
-	store := &spyStore{driver: DriverMemory, getOK: true, getBody: body}
+	store := &spyStore{driver: cachecore.DriverMemory, getOK: true, getBody: body}
 	c := NewCache(store)
 	ctx := context.Background()
 	calls := 0
@@ -519,7 +521,7 @@ func TestCacheRememberJSONReturnsCachedValue(t *testing.T) {
 }
 
 func TestCacheRememberJSONNilCallback(t *testing.T) {
-	store := &spyStore{driver: DriverMemory}
+	store := &spyStore{driver: cachecore.DriverMemory}
 	c := NewCache(store)
 	ctx := context.Background()
 	if _, err := RememberCtx[int](ctx, c, "k", time.Second, nil); err == nil {
@@ -528,7 +530,7 @@ func TestCacheRememberJSONNilCallback(t *testing.T) {
 }
 
 func TestCacheRememberJSONGetError(t *testing.T) {
-	store := &spyStore{driver: DriverMemory, getOK: true, getBody: []byte("not-json")}
+	store := &spyStore{driver: cachecore.DriverMemory, getOK: true, getBody: []byte("not-json")}
 	c := NewCache(store)
 	ctx := context.Background()
 	if _, err := RememberCtx[int](ctx, c, "k", time.Second, func(context.Context) (int, error) { return 1, nil }); err == nil {
@@ -537,7 +539,7 @@ func TestCacheRememberJSONGetError(t *testing.T) {
 }
 
 func TestCacheGetStringMissing(t *testing.T) {
-	store := &spyStore{driver: DriverMemory, getOK: false}
+	store := &spyStore{driver: cachecore.DriverMemory, getOK: false}
 	c := NewCache(store)
 	ctx := context.Background()
 	_, ok, err := c.GetStringCtx(ctx, "missing")
@@ -550,7 +552,7 @@ func TestCacheGetStringMissing(t *testing.T) {
 }
 
 func TestCacheGetJSONDecodeError(t *testing.T) {
-	store := &spyStore{driver: DriverMemory, getOK: true, getBody: []byte("not-json")}
+	store := &spyStore{driver: cachecore.DriverMemory, getOK: true, getBody: []byte("not-json")}
 	c := NewCache(store)
 	ctx := context.Background()
 	_, ok, err := GetJSONCtx[struct{}](ctx, c, "bad")
@@ -560,7 +562,7 @@ func TestCacheGetJSONDecodeError(t *testing.T) {
 }
 
 func TestCachePullMissing(t *testing.T) {
-	store := &spyStore{driver: DriverMemory, getOK: false}
+	store := &spyStore{driver: cachecore.DriverMemory, getOK: false}
 	c := NewCache(store)
 	_, ok, err := c.PullBytes("none")
 	if err != nil {
@@ -572,7 +574,7 @@ func TestCachePullMissing(t *testing.T) {
 }
 
 func TestCacheRememberPropagatesCallbackError(t *testing.T) {
-	store := &spyStore{driver: DriverMemory}
+	store := &spyStore{driver: cachecore.DriverMemory}
 	c := NewCache(store)
 	ctx := context.Background()
 	expected := errors.New("boom")
@@ -741,23 +743,23 @@ func TestRememberValueWithCodecBranches(t *testing.T) {
 		Encode: func(v int) ([]byte, error) { return []byte("1"), nil },
 		Decode: func(_ []byte) (int, error) { return 0, errors.New("decode boom") },
 	}
-	store := &spyStore{driver: DriverMemory, getOK: true, getBody: []byte("cached")}
+	store := &spyStore{driver: cachecore.DriverMemory, getOK: true, getBody: []byte("cached")}
 	cache := NewCache(store)
 	if _, err := rememberValueWithCodecCtx[int](ctx, cache, "k", time.Second, func() (int, error) { return 1, nil }, decodeErrCodec); err == nil {
 		t.Fatalf("expected decode error")
 	}
 
-	getErrStore := &spyStore{driver: DriverMemory, getErr: expectedErr}
+	getErrStore := &spyStore{driver: cachecore.DriverMemory, getErr: expectedErr}
 	if _, err := rememberValueWithCodecCtx[int](ctx, NewCache(getErrStore), "k", time.Second, func() (int, error) { return 1, nil }, defaultValueCodec[int]()); !errors.Is(err, expectedErr) {
 		t.Fatalf("expected get error, got %v", err)
 	}
 
-	missStore := &spyStore{driver: DriverMemory, getOK: false}
+	missStore := &spyStore{driver: cachecore.DriverMemory, getOK: false}
 	if _, err := rememberValueWithCodecCtx[int](ctx, NewCache(missStore), "k", time.Second, nil, defaultValueCodec[int]()); err == nil {
 		t.Fatalf("expected nil callback error")
 	}
 
-	fnErrStore := &spyStore{driver: DriverMemory, getOK: false}
+	fnErrStore := &spyStore{driver: cachecore.DriverMemory, getOK: false}
 	fnErr := errors.New("fn boom")
 	if _, err := rememberValueWithCodecCtx[int](ctx, NewCache(fnErrStore), "k", time.Second, func() (int, error) { return 0, fnErr }, defaultValueCodec[int]()); !errors.Is(err, fnErr) {
 		t.Fatalf("expected fn error, got %v", err)
@@ -768,7 +770,7 @@ func TestRememberValueWithCodecBranches(t *testing.T) {
 		Encode: func(v int) ([]byte, error) { return nil, encodeErr },
 		Decode: func(b []byte) (int, error) { return 0, nil },
 	}
-	encodeErrStore := &spyStore{driver: DriverMemory, getOK: false}
+	encodeErrStore := &spyStore{driver: cachecore.DriverMemory, getOK: false}
 	if _, err := rememberValueWithCodecCtx[int](ctx, NewCache(encodeErrStore), "k", time.Second, func() (int, error) { return 5, nil }, encodeErrCodec); !errors.Is(err, encodeErr) {
 		t.Fatalf("expected encode error, got %v", err)
 	}
@@ -836,7 +838,7 @@ func TestCacheRateLimitValidatesInput(t *testing.T) {
 }
 
 func TestCacheRateLimitPropagatesIncrementError(t *testing.T) {
-	c := NewCache(&spyStore{driver: DriverMemory, incErr: expectedErr})
+	c := NewCache(&spyStore{driver: cachecore.DriverMemory, incErr: expectedErr})
 	if _, err := c.RateLimit("rl:k", 1, time.Second); !errors.Is(err, expectedErr) {
 		t.Fatalf("expected increment error, got %v", err)
 	}
@@ -898,7 +900,7 @@ func TestCacheRateLimitValidationAndError(t *testing.T) {
 		t.Fatalf("expected window validation error")
 	}
 
-	cErr := NewCache(&spyStore{driver: DriverMemory, incErr: expectedErr})
+	cErr := NewCache(&spyStore{driver: cachecore.DriverMemory, incErr: expectedErr})
 	if _, err := cErr.RateLimit("rl:err", 1, time.Second); !errors.Is(err, expectedErr) {
 		t.Fatalf("expected increment error, got %v", err)
 	}
@@ -930,14 +932,14 @@ func TestCacheBatchSetAndBatchGet(t *testing.T) {
 }
 
 func TestCacheBatchGetPropagatesError(t *testing.T) {
-	c := NewCache(&spyStore{driver: DriverMemory, getErr: expectedErr})
+	c := NewCache(&spyStore{driver: cachecore.DriverMemory, getErr: expectedErr})
 	if _, err := c.BatchGetBytes("a", "b"); !errors.Is(err, expectedErr) {
 		t.Fatalf("expected get error, got %v", err)
 	}
 }
 
 func TestCacheBatchSetPropagatesError(t *testing.T) {
-	c := NewCache(&spyStore{driver: DriverMemory, setErr: expectedErr})
+	c := NewCache(&spyStore{driver: cachecore.DriverMemory, setErr: expectedErr})
 	if err := c.BatchSetBytes(map[string][]byte{"a": []byte("1")}, time.Second); !errors.Is(err, expectedErr) {
 		t.Fatalf("expected set error, got %v", err)
 	}
@@ -1209,7 +1211,7 @@ func TestCacheTryLockValidationAndError(t *testing.T) {
 		t.Fatalf("expected ttl validation error")
 	}
 
-	cErr := NewCache(&spyStore{driver: DriverMemory, addErr: expectedErr})
+	cErr := NewCache(&spyStore{driver: cachecore.DriverMemory, addErr: expectedErr})
 	if _, err := cErr.TryLock("lock:err", time.Second); !errors.Is(err, expectedErr) {
 		t.Fatalf("expected add error, got %v", err)
 	}

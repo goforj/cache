@@ -4,6 +4,8 @@ import (
 	"context"
 	"sync"
 	"time"
+
+	"github.com/goforj/cache/cachecore"
 )
 
 type memoEntry struct {
@@ -30,7 +32,7 @@ type memoEntry struct {
 //	memo := cache.NewMemoStore(base)
 //	c := cache.NewCache(memo)
 //	fmt.Println(c.Driver()) // memory
-func NewMemoStore(store Store) Store {
+func NewMemoStore(store cachecore.Store) cachecore.Store {
 	return &memoStore{
 		store: store,
 		items: make(map[string]memoEntry),
@@ -38,12 +40,12 @@ func NewMemoStore(store Store) Store {
 }
 
 type memoStore struct {
-	store Store
+	store cachecore.Store
 	mu    sync.RWMutex
 	items map[string]memoEntry
 }
 
-func (s *memoStore) Driver() Driver {
+func (s *memoStore) Driver() cachecore.Driver {
 	return s.store.Driver()
 }
 

@@ -7,13 +7,14 @@ import (
 	"context"
 	"fmt"
 	"github.com/goforj/cache"
+	"github.com/goforj/cache/cachecore"
 )
 
 func main() {
-	// WithMaxValueBytes sets a per-entry size limit (0 disables the check).
-
-	// Example: limit value size
+	// Example: limit value size via explicit StoreConfig.
 	ctx := context.Background()
-	store := cache.NewStoreWith(ctx, cache.DriverMemory, cache.WithMaxValueBytes(1024))
+	store := cache.NewMemoryStoreWithConfig(ctx, cache.StoreConfig{
+		BaseConfig: cachecore.BaseConfig{MaxValueBytes: 1024},
+	})
 	fmt.Println(store.Driver()) // memory
 }

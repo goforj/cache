@@ -5,15 +5,17 @@ import (
 	"compress/gzip"
 	"errors"
 	"io"
+
+	"github.com/goforj/cache/cachecore"
 )
 
 // CompressionCodec represents a value compression algorithm.
-type CompressionCodec string
+type CompressionCodec = cachecore.CompressionCodec
 
 const (
-	CompressionNone   CompressionCodec = "none"
-	CompressionGzip   CompressionCodec = "gzip"
-	CompressionSnappy CompressionCodec = "snappy"
+	CompressionNone   = cachecore.CompressionNone
+	CompressionGzip   = cachecore.CompressionGzip
+	CompressionSnappy = cachecore.CompressionSnappy
 )
 
 var (

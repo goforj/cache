@@ -7,25 +7,24 @@ import (
 	"context"
 	"fmt"
 	"github.com/goforj/cache"
+	"github.com/goforj/cache/cachecore"
+	"github.com/goforj/cache/driver/rediscache"
 	"github.com/redis/go-redis/v9"
-	"time"
 )
 
 func main() {
-	// NewStoreWith builds a store using a driver and a set of functional options.
-	// Required data (e.g., Redis client) must be provided via options when needed.
+	// Explicit constructors are preferred over the removed generic factory.
 
-	// Example: memory store (options)
+	// Example: memory store
 	ctx := context.Background()
-	store := cache.NewStoreWith(ctx, cache.DriverMemory)
+	store := cache.NewMemoryStore(ctx)
 	fmt.Println(store.Driver()) // memory
 
-	// Example: redis store (options)
+	// Example: redis driver constructor
 	redisClient := redis.NewClient(&redis.Options{Addr: "127.0.0.1:6379"})
-	store = cache.NewStoreWith(ctx, cache.DriverRedis,
-		cache.WithRedisClient(redisClient),
-		cache.WithPrefix("app"),
-		cache.WithDefaultTTL(5*time.Minute),
-	)
+	store = rediscache.New(rediscache.Config{
+		BaseConfig: cachecore.BaseConfig{Prefix: "app"},
+		Client:     redisClient,
+	})
 	fmt.Println(store.Driver()) // redis
 }

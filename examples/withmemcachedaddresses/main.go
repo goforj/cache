@@ -4,16 +4,14 @@
 package main
 
 import (
-	"context"
 	"fmt"
-	"github.com/goforj/cache"
+	"github.com/goforj/cache/driver/memcachedcache"
 )
 
 func main() {
-	// WithMemcachedAddresses sets memcached server addresses (host:port).
-
-	// Example: memcached cluster
-	ctx := context.Background()
-	store := cache.NewStoreWith(ctx, cache.DriverMemcached, cache.WithMemcachedAddresses("127.0.0.1:11211"))
+	// Example: memcached cluster via explicit driver config.
+	store := memcachedcache.New(memcachedcache.Config{
+		Addresses: []string{"127.0.0.1:11211"},
+	})
 	fmt.Println(store.Driver()) // memcached
 }

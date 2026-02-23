@@ -13,6 +13,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"time"
+
+	"github.com/goforj/cache/cachecore"
 )
 
 var (
@@ -32,7 +34,7 @@ type fileStore struct {
 	defaultTTL time.Duration
 }
 
-func newFileStore(dir string, defaultTTL time.Duration) Store {
+func newFileStore(dir string, defaultTTL time.Duration) cachecore.Store {
 	if dir == "" {
 		dir = defaultFileDir()
 	}
@@ -46,8 +48,8 @@ func newFileStore(dir string, defaultTTL time.Duration) Store {
 	}
 }
 
-func (s *fileStore) Driver() Driver {
-	return DriverFile
+func (s *fileStore) Driver() cachecore.Driver {
+	return cachecore.DriverFile
 }
 
 func (s *fileStore) Get(_ context.Context, key string) ([]byte, bool, error) {

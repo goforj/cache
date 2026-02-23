@@ -7,13 +7,14 @@ import (
 	"context"
 	"fmt"
 	"github.com/goforj/cache"
+	"github.com/goforj/cache/cachecore"
 )
 
 func main() {
-	// WithCompression enables value compression using the chosen codec.
-
-	// Example: gzip compression
+	// Example: gzip compression via explicit StoreConfig.
 	ctx := context.Background()
-	store := cache.NewStoreWith(ctx, cache.DriverMemory, cache.WithCompression(cache.CompressionGzip))
+	store := cache.NewMemoryStoreWithConfig(ctx, cache.StoreConfig{
+		BaseConfig: cachecore.BaseConfig{Compression: cache.CompressionGzip},
+	})
 	fmt.Println(store.Driver()) // memory
 }

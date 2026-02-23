@@ -4,13 +4,15 @@ import (
 	"context"
 	"testing"
 	"time"
+
+	"github.com/goforj/cache/cachecore"
 )
 
 type observerSpy struct {
 	ops []string
 }
 
-func (o *observerSpy) OnCacheOp(_ context.Context, op string, key string, hit bool, err error, dur time.Duration, driver Driver) {
+func (o *observerSpy) OnCacheOp(_ context.Context, op string, key string, hit bool, err error, dur time.Duration, driver cachecore.Driver) {
 	_ = key
 	_ = hit
 	_ = err

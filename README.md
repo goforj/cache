@@ -14,8 +14,8 @@
     <a href="https://goreportcard.com/report/github.com/goforj/cache"><img src="https://goreportcard.com/badge/github.com/goforj/cache" alt="Go Report Card"></a>
     <a href="https://codecov.io/gh/goforj/cache"><img src="https://codecov.io/gh/goforj/cache/graph/badge.svg?token=B6ROULLKWU"/></a>
 <!-- test-count:embed:start -->
-    <img src="https://img.shields.io/badge/unit_tests-353-brightgreen" alt="Unit tests (executed count)">
-    <img src="https://img.shields.io/badge/integration_tests-435-blue" alt="Integration tests (executed count)">
+    <img src="https://img.shields.io/badge/unit_tests-274-brightgreen" alt="Unit tests (executed count)">
+    <img src="https://img.shields.io/badge/integration_tests-119-blue" alt="Integration tests (executed count)">
 <!-- test-count:embed:end -->
 </p>
 
@@ -28,19 +28,36 @@ An explicit cache abstraction with a minimal Store interface and ergonomic Cache
 |                                                                                             Driver / Backend | Mode | Shared | Durable | TTL | Counters | Locks | RateLimit | Prefix | Batch | Shaping | Notes |
 |-------------------------------------------------------------------------------------------------------------:| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :--- |
 |                  <img src="https://img.shields.io/badge/null-9e9e9e?logo=probot&logoColor=white" alt="Null"> | No-op | - | - | - | - | No-op | No-op | ✓ | ✓ | ✓ | Great for tests: cache calls are no-ops and never persist. |
-|                   <img src="https://img.shields.io/badge/file-3f51b5?logo=files&logoColor=white" alt="File"> | Local filesystem | - | ✓ | ✓ | ✓ | Local | Local | - | ✓ | ✓ | Simple durability on a single host; point `WithFileDir` to writable disk. |
+|                   <img src="https://img.shields.io/badge/file-3f51b5?logo=files&logoColor=white" alt="File"> | Local filesystem | - | ✓ | ✓ | ✓ | Local | Local | - | ✓ | ✓ | Simple durability on a single host; set `StoreConfig.FileDir` (or use `NewFileStore`). |
 |              <img src="https://img.shields.io/badge/memory-5c5c5c?logo=cachet&logoColor=white" alt="Memory"> | In-process | - | - | ✓ | ✓ | Local | Local | - | ✓ | ✓ | Fastest; per-process only, best for single-node or short-lived data. |
-|        <img src="https://img.shields.io/badge/memcached-0198c4?logo=buffer&logoColor=white" alt="Memcached"> | Networked | ✓ | - | ✓ | ✓ | Shared | Shared | ✓ | ✓ | ✓ | TTL resolution is 1s; use multiple nodes via `WithMemcachedAddresses`. |
+|        <img src="https://img.shields.io/badge/memcached-0198c4?logo=buffer&logoColor=white" alt="Memcached"> | Networked | ✓ | - | ✓ | ✓ | Shared | Shared | ✓ | ✓ | ✓ | TTL resolution is 1s; configure addresses via `memcachedcache.Config.Addresses`. |
 |              <img src="https://img.shields.io/badge/redis-%23DC382D?logo=redis&logoColor=white" alt="Redis"> | Networked | ✓ | - | ✓ | ✓ | Shared | Shared | ✓ | ✓ | ✓ | Full feature set; counters refresh TTL (Redis counter TTL granularity currently 1s). |
-|                <img src="https://img.shields.io/badge/nats-27AAE1?logo=natsdotio&logoColor=white" alt="NATS"> | Networked | ✓ | - | ✓ | ✓ | Shared | Shared | ✓ | ✓ | ✓ | JetStream KV-backed driver; inject an existing bucket via `WithNATSKeyValue`. |
+|                <img src="https://img.shields.io/badge/nats-27AAE1?logo=natsdotio&logoColor=white" alt="NATS"> | Networked | ✓ | - | ✓ | ✓ | Shared | Shared | ✓ | ✓ | ✓ | JetStream KV-backed driver; inject an existing bucket via `natscache.Config.KeyValue`. |
 | <img src="https://img.shields.io/badge/dynamodb-4053D6?logo=amazon-dynamodb&logoColor=white" alt="DynamoDB"> | Networked | ✓ | ✓ | ✓ | ✓ | Shared | Shared | ✓ | ✓ | ✓ | Backed by DynamoDB (supports localstack/dynamodb-local). |
-|    <img src="https://img.shields.io/badge/sql-336791?logo=postgresql&logoColor=white" alt="SQL"> | Networked / local | ✓ | ✓ | ✓ | ✓ | Shared | Shared | ✓ | ✓ | ✓ | Postgres / MySQL / SQLite via database/sql; table schema managed automatically. |
+|    <img src="https://img.shields.io/badge/sql-336791?logo=postgresql&logoColor=white" alt="SQL"> | Networked / local | ✓ | ✓ | ✓ | ✓ | Shared | Shared | ✓ | ✓ | ✓ | Dialect wrappers (`sqlitecache`, `postgrescache`, `mysqlcache`) over shared `sqlcore`. |
 
 ## Installation
 
 ```bash
 go get github.com/goforj/cache
 ```
+
+Optional backends are separate modules. Install only what you use, for example:
+
+```bash
+go get github.com/goforj/cache/driver/rediscache
+go get github.com/goforj/cache/driver/sqlitecache
+```
+
+## Module Layout
+
+- `github.com/goforj/cache`: root package (`memory`, `file`, `null`, `Cache` helpers)
+- `github.com/goforj/cache/cachecore`: shared contracts and base config (`Store`, `Driver`, `BaseConfig`)
+- `github.com/goforj/cache/cachetest`: shared store contract test harness
+- `github.com/goforj/cache/driver/*cache`: optional backend drivers
+- `github.com/goforj/cache/driver/sqlcore`: shared SQL implementation core (used by SQL dialect wrappers)
+- `github.com/goforj/cache/integration`: shared cross-driver integration matrix module
+- `github.com/goforj/cache/docs`: docs/bench tooling module
 
 ## Quick Start
 
@@ -51,13 +68,17 @@ import (
     "time"
 
     "github.com/goforj/cache"
+    "github.com/goforj/cache/cachecore"
+    "github.com/goforj/cache/driver/rediscache"
     "github.com/redis/go-redis/v9"
 )
 
 func main() {
     ctx := context.Background()
 
-    store := cache.NewMemoryStore(ctx, cache.WithDefaultTTL(5*time.Minute))
+    store := cache.NewMemoryStoreWithConfig(ctx, cache.StoreConfig{
+        BaseConfig: cachecore.BaseConfig{DefaultTTL: 5 * time.Minute},
+    })
     c := cache.NewCache(store)
 
     type Profile struct { Name string `json:"name"` }
@@ -82,21 +103,43 @@ func main() {
 
     // Switch to Redis (dependency injection, no code changes below).
     client := redis.NewClient(&redis.Options{Addr: "127.0.0.1:6379"})
-    store = cache.NewRedisStore(ctx, client, cache.WithPrefix("app"), cache.WithDefaultTTL(5*time.Minute))
+    store = rediscache.New(rediscache.Config{
+        BaseConfig: cachecore.BaseConfig{
+            Prefix:     "app",
+            DefaultTTL: 5 * time.Minute,
+        },
+        Client: client,
+    })
     c = cache.NewCache(store)
 }
 ```
 
 ## StoreConfig
 
-StoreConfig keeps configuration explicit:
+`StoreConfig` now applies only to root-owned stores (`memory`, `file`, `null`) and shared wrappers.
 
-- Driver: explicit backend (null, file, memory, memcached, redis, nats, dynamodb, sql)
-- DefaultTTL: fallback TTL when a call provides ttl <= 0
-- MemoryCleanupInterval: sweep interval for memory driver
-- Prefix: key prefix for shared backends
-- RedisClient / NATSKeyValue / MemcachedAddresses / DynamoClient / SQLDriverName+DSN: driver-specific inputs
-- Compression / MaxValueBytes / EncryptionKey: shaping and security controls
+- `BaseConfig` (`cachecore.BaseConfig`):
+  - `DefaultTTL`: fallback TTL when a call provides `ttl <= 0`
+  - `Prefix`: key prefix for shared backends/wrappers
+  - `Compression` / `MaxValueBytes` / `EncryptionKey`: shaping and security controls
+- `MemoryCleanupInterval`: sweep interval for memory store
+- `FileDir`: directory for file store
+
+For optional backends, use driver-local configs:
+- `rediscache.Config`
+- `natscache.Config`
+- `memcachedcache.Config`
+- `dynamocache.Config`
+- `sqlitecache.Config` / `postgrescache.Config` / `mysqlcache.Config`
+
+## Breaking Changes (Current Layout)
+
+- Removed root generic factory APIs: `NewStore`, `NewStoreWith`
+- Removed root `With*` store options and `StoreOption`
+- Removed root optional-backend constructors (`NewRedisStore`, `NewNATSStore`, `NewMemcachedStore`, `NewDynamoStore`, `NewSQLStore`)
+- Root no longer re-exports `Store` / `Driver`; use `cachecore.Store` and `cachecore.Driver`
+- Optional backends are constructed from driver modules (`rediscache.New(...)`, `natscache.New(...)`, etc.)
+- SQL is split into `sqlcore` + dialect wrappers (`sqlitecache`, `postgrescache`, `mysqlcache`)
 
 ## Behavior Semantics
 
@@ -128,18 +171,24 @@ memoRepo := cache.NewCache(memoStore)
 
 ## Testing
 
-Unit tests cover the public helpers. Integration tests use `testcontainers-go` to run the cross-driver contract suite (Redis, NATS, Memcached, DynamoDB local, and SQL backends where enabled):
+Unit tests cover the public helpers. Shared cross-driver integration coverage runs from the `integration` module (with `testcontainers-go` for container-backed backends):
 
 ```bash
-go test -tags=integration ./...
+cd integration
+go test -tags=integration ./all
 ```
 
-Use `INTEGRATION_DRIVER=redis` (comma-separated; defaults to `all`) to select which drivers start containers and run the contract suite.
+Use `INTEGRATION_DRIVER=sqlitecache` (comma-separated) to select which fixtures run, or use the repo helper:
+
+```bash
+bash scripts/test-all-modules.sh
+```
 
 ## Benchmarks
 
 ```bash
-go test -tags benchrender ./docs/bench -run TestRenderBenchmarks -count=1 -v
+cd docs
+go test -tags benchrender ./bench -run TestRenderBenchmarks -count=1 -v
 ```
 
 Note: NATS numbers can look slower than Redis/memory because the NATS driver preserves per-operation TTL semantics by storing per-key expiry metadata (envelope encode/decode) and may do extra compare/update steps for some operations.
@@ -152,7 +201,7 @@ Note: DynamoDB is intentionally omitted from these local charts because emulator
 NATS variants in these charts:
 
 - `nats`: per-key TTL semantics using a binary envelope (`magic/expiresAt/value`). This preserves per-key expiry parity with other drivers, with modest metadata overhead.
-- `nats_bucket_ttl`: bucket-level TTL mode (`WithNATSBucketTTL(true)`), raw value path; faster but different expiry semantics.
+- `nats_bucket_ttl`: bucket-level TTL mode (`natscache.Config.BucketTTL = true`), raw value path; faster but different expiry semantics.
 
 ### Latency (ns/op)
 
@@ -201,13 +250,12 @@ The API section below is autogenerated; do not edit between the markers.
 
 | Group | Functions |
 |------:|:-----------|
-| **Constructors** | [NewDynamoStore](#newdynamostore) [NewFileStore](#newfilestore) [NewMemcachedStore](#newmemcachedstore) [NewMemoryStore](#newmemorystore) [NewNATSStore](#newnatsstore) [NewNullStore](#newnullstore) [NewRedisStore](#newredisstore) [NewSQLStore](#newsqlstore) [NewStore](#newstore) [NewStoreWith](#newstorewith) |
+| **Constructors** | [NewFileStore](#newfilestore) [NewFileStoreWithConfig](#newfilestorewithconfig) [NewMemoryStore](#newmemorystore) [NewMemoryStoreWithConfig](#newmemorystorewithconfig) [NewNullStore](#newnullstore) [NewNullStoreWithConfig](#newnullstorewithconfig) |
 | **Core** | [Driver](#cache-driver) [NewCache](#newcache) [NewCacheWithTTL](#newcachewithttl) [Store](#cache-store) |
 | **Invalidation** | [Delete](#cache-delete) [DeleteMany](#cache-deletemany) [Flush](#cache-flush) [Pull](#pull) [PullBytes](#cache-pullbytes) |
 | **Locking** | [Acquire](#lockhandle-acquire) [Block](#lockhandle-block) [Lock](#cache-lock) [LockCtx](#cache-lockctx) [LockHandle.Get](#lockhandle-get) [NewLockHandle](#cache-newlockhandle) [Release](#lockhandle-release) [TryLock](#cache-trylock) [Unlock](#cache-unlock) |
 | **Memoization** | [NewMemoStore](#newmemostore) |
 | **Observability** | [WithObserver](#cache-withobserver) |
-| **Options** | [WithCompression](#withcompression) [WithDefaultTTL](#withdefaultttl) [WithDynamoClient](#withdynamoclient) [WithDynamoEndpoint](#withdynamoendpoint) [WithDynamoRegion](#withdynamoregion) [WithDynamoTable](#withdynamotable) [WithEncryptionKey](#withencryptionkey) [WithFileDir](#withfiledir) [WithMaxValueBytes](#withmaxvaluebytes) [WithMemcachedAddresses](#withmemcachedaddresses) [WithMemoryCleanupInterval](#withmemorycleanupinterval) [WithNATSBucketTTL](#withnatsbucketttl) [WithNATSKeyValue](#withnatskeyvalue) [WithPrefix](#withprefix) [WithRedisClient](#withredisclient) [WithSQL](#withsql) |
 | **Other** | [OnCacheOp](#observerfunc-oncacheop) |
 | **Rate Limiting** | [RateLimit](#cache-ratelimit) |
 | **Read Through** | [Remember](#remember) [RememberBytes](#cache-rememberbytes) [RememberStale](#rememberstale) [RememberStaleBytes](#cache-rememberstalebytes) [RememberStaleCtx](#rememberstalectx) |
@@ -220,15 +268,6 @@ _Examples assume `ctx := context.Background()` and `c := cache.NewCache(cache.Ne
 
 ## Constructors
 
-### <a id="newdynamostore"></a>NewDynamoStore
-
-NewDynamoStore is a convenience for a DynamoDB-backed store.
-
-```go
-store := cache.NewDynamoStore(ctx, cache.StoreConfig{DynamoEndpoint: "http://localhost:8000"})
-fmt.Println(store.Driver()) // dynamodb
-```
-
 ### <a id="newfilestore"></a>NewFileStore
 
 NewFileStore is a convenience for a filesystem-backed store.
@@ -238,32 +277,44 @@ store := cache.NewFileStore(ctx, "/tmp/my-cache")
 fmt.Println(store.Driver()) // file
 ```
 
-### <a id="newmemcachedstore"></a>NewMemcachedStore
+### <a id="newfilestorewithconfig"></a>NewFileStoreWithConfig
 
-NewMemcachedStore is a convenience for a memcached-backed store.
+NewFileStoreWithConfig builds a filesystem-backed store using explicit root config.
 
 ```go
-store := cache.NewMemcachedStore(ctx, []string{"127.0.0.1:11211"})
-fmt.Println(store.Driver()) // memcached
+store := cache.NewFileStoreWithConfig(ctx, cache.StoreConfig{
+	BaseConfig: cachecore.BaseConfig{
+		EncryptionKey: []byte("01234567890123456789012345678901"),
+		MaxValueBytes: 4096,
+		Compression:   cache.CompressionGzip,
+	},
+	FileDir: "/tmp/my-cache",
+})
+fmt.Println(store.Driver()) // file
 ```
 
 ### <a id="newmemorystore"></a>NewMemoryStore
 
-NewMemoryStore is a convenience for an in-process store with optional overrides.
+NewMemoryStore is a convenience for an in-process store using defaults.
 
 ```go
 store := cache.NewMemoryStore(ctx)
 fmt.Println(store.Driver()) // memory
 ```
 
-### <a id="newnatsstore"></a>NewNATSStore
+### <a id="newmemorystorewithconfig"></a>NewMemoryStoreWithConfig
 
-NewNATSStore is a convenience for a NATS JetStream KeyValue-backed store.
+NewMemoryStoreWithConfig builds an in-process store using explicit root config.
 
 ```go
-var kv cache.NATSKeyValue // provided by your NATS setup
-store := cache.NewNATSStore(ctx, kv, cache.WithPrefix("app"))
-fmt.Println(store.Driver()) // nats
+store := cache.NewMemoryStoreWithConfig(ctx, cache.StoreConfig{
+	BaseConfig: cachecore.BaseConfig{
+		DefaultTTL:  30 * time.Second,
+		Compression: cache.CompressionGzip,
+	},
+	MemoryCleanupInterval: 5 * time.Minute,
+})
+fmt.Println(store.Driver()) // memory
 ```
 
 ### <a id="newnullstore"></a>NewNullStore
@@ -275,77 +326,18 @@ store := cache.NewNullStore(ctx)
 fmt.Println(store.Driver()) // null
 ```
 
-### <a id="newredisstore"></a>NewRedisStore
+### <a id="newnullstorewithconfig"></a>NewNullStoreWithConfig
 
-NewRedisStore is a convenience for a redis-backed store. Redis client is required.
-
-```go
-redisClient := redis.NewClient(&redis.Options{Addr: "127.0.0.1:6379"})
-store := cache.NewRedisStore(ctx, redisClient, cache.WithPrefix("app"))
-fmt.Println(store.Driver()) // redis
-```
-
-### <a id="newsqlstore"></a>NewSQLStore
-
-NewSQLStore builds a SQL-backed store (postgres, mysql, sqlite).
-
-_Example: sqlite helper_
+NewNullStoreWithConfig builds a null store with shared wrappers (compression/encryption/limits).
 
 ```go
-store := cache.NewSQLStore(ctx, "sqlite", "file:cache.db?cache=shared&mode=rwc", "cache_entries")
-fmt.Println(store.Driver()) // sql
-```
-
-_Example: postgres helper_
-
-```go
-dsnPg := "postgres://user:pass@localhost:5432/app?sslmode=disable"
-storePg := cache.NewSQLStore(ctx, "pgx", dsnPg, "cache_entries")
-fmt.Println(storePg.Driver()) // sql
-```
-
-_Example: mysql helper_
-
-```go
-dsnMy := "user:pass@tcp(localhost:3306)/app?parseTime=true"
-storeMy := cache.NewSQLStore(ctx, "mysql", dsnMy, "cache_entries")
-fmt.Println(storeMy.Driver()) // sql
-```
-
-### <a id="newstore"></a>NewStore
-
-NewStore returns a concrete store for the requested driver.
-Caller is responsible for providing any driver-specific dependencies.
-
-```go
-store := cache.NewStore(ctx, cache.StoreConfig{
-	Driver: cache.DriverMemory,
+store := cache.NewNullStoreWithConfig(ctx, cache.StoreConfig{
+	BaseConfig: cachecore.BaseConfig{
+		Compression:   cache.CompressionGzip,
+		MaxValueBytes: 1024,
+	},
 })
-fmt.Println(store.Driver()) // memory
-```
-
-### <a id="newstorewith"></a>NewStoreWith
-
-NewStoreWith builds a store using a driver and a set of functional options.
-Required data (e.g., Redis client) must be provided via options when needed.
-
-_Example: memory store (options)_
-
-```go
-store := cache.NewStoreWith(ctx, cache.DriverMemory)
-fmt.Println(store.Driver()) // memory
-```
-
-_Example: redis store (options)_
-
-```go
-redisClient := redis.NewClient(&redis.Options{Addr: "127.0.0.1:6379"})
-store = cache.NewStoreWith(ctx, cache.DriverRedis,
-	cache.WithRedisClient(redisClient),
-	cache.WithPrefix("app"),
-	cache.WithDefaultTTL(5*time.Minute),
-)
-fmt.Println(store.Driver()) // redis
+fmt.Println(store.Driver()) // null
 ```
 
 ## Core
@@ -553,169 +545,11 @@ fmt.Println(c.Driver()) // memory
 WithObserver attaches an observer to receive operation events.
 
 ```go
-c = c.WithObserver(cache.ObserverFunc(func(ctx context.Context, op, key string, hit bool, err error, dur time.Duration, driver cache.Driver) {
+c = c.WithObserver(cache.ObserverFunc(func(ctx context.Context, op, key string, hit bool, err error, dur time.Duration, driver cachecore.Driver) {
 	// See docs/production-guide.md for a real metrics recipe.
 	fmt.Println(op, driver, hit, err == nil)
 }))
 _, _, _ = c.GetBytes("profile:42")
-```
-
-## Options
-
-### <a id="withcompression"></a>WithCompression
-
-WithCompression enables value compression using the chosen codec.
-
-```go
-store := cache.NewStoreWith(ctx, cache.DriverMemory, cache.WithCompression(cache.CompressionGzip))
-fmt.Println(store.Driver()) // memory
-```
-
-### <a id="withdefaultttl"></a>WithDefaultTTL
-
-WithDefaultTTL overrides the fallback TTL used when ttl <= 0.
-
-```go
-store := cache.NewStoreWith(ctx, cache.DriverMemory, cache.WithDefaultTTL(30*time.Second))
-fmt.Println(store.Driver()) // memory
-```
-
-### <a id="withdynamoclient"></a>WithDynamoClient
-
-WithDynamoClient injects a pre-built DynamoDB client.
-
-```go
-var client cache.DynamoAPI // assume already configured
-store := cache.NewStoreWith(ctx, cache.DriverDynamo, cache.WithDynamoClient(client))
-fmt.Println(store.Driver()) // dynamodb
-```
-
-### <a id="withdynamoendpoint"></a>WithDynamoEndpoint
-
-WithDynamoEndpoint sets the DynamoDB endpoint (useful for local testing).
-
-```go
-store := cache.NewStoreWith(ctx, cache.DriverDynamo, cache.WithDynamoEndpoint("http://localhost:8000"))
-fmt.Println(store.Driver()) // dynamodb
-```
-
-### <a id="withdynamoregion"></a>WithDynamoRegion
-
-WithDynamoRegion sets the DynamoDB region for requests.
-
-```go
-store := cache.NewStoreWith(ctx, cache.DriverDynamo, cache.WithDynamoRegion("us-west-2"))
-fmt.Println(store.Driver()) // dynamodb
-```
-
-### <a id="withdynamotable"></a>WithDynamoTable
-
-WithDynamoTable sets the table used by the DynamoDB driver.
-
-```go
-store := cache.NewStoreWith(ctx, cache.DriverDynamo, cache.WithDynamoTable("cache_entries"))
-fmt.Println(store.Driver()) // dynamodb
-```
-
-### <a id="withencryptionkey"></a>WithEncryptionKey
-
-WithEncryptionKey enables at-rest encryption using the provided AES key (16/24/32 bytes).
-
-```go
-key := []byte("01234567890123456789012345678901")
-store := cache.NewStoreWith(ctx, cache.DriverFile, cache.WithEncryptionKey(key))
-fmt.Println(store.Driver()) // file
-```
-
-### <a id="withfiledir"></a>WithFileDir
-
-WithFileDir sets the directory used by the file driver.
-
-```go
-store := cache.NewStoreWith(ctx, cache.DriverFile, cache.WithFileDir("/tmp/cache"))
-fmt.Println(store.Driver()) // file
-```
-
-### <a id="withmaxvaluebytes"></a>WithMaxValueBytes
-
-WithMaxValueBytes sets a per-entry size limit (0 disables the check).
-
-```go
-store := cache.NewStoreWith(ctx, cache.DriverMemory, cache.WithMaxValueBytes(1024))
-fmt.Println(store.Driver()) // memory
-```
-
-### <a id="withmemcachedaddresses"></a>WithMemcachedAddresses
-
-WithMemcachedAddresses sets memcached server addresses (host:port).
-
-```go
-store := cache.NewStoreWith(ctx, cache.DriverMemcached, cache.WithMemcachedAddresses("127.0.0.1:11211"))
-fmt.Println(store.Driver()) // memcached
-```
-
-### <a id="withmemorycleanupinterval"></a>WithMemoryCleanupInterval
-
-WithMemoryCleanupInterval overrides the sweep interval for the memory driver.
-
-```go
-store := cache.NewStoreWith(ctx, cache.DriverMemory, cache.WithMemoryCleanupInterval(5*time.Minute))
-fmt.Println(store.Driver()) // memory
-```
-
-### <a id="withnatsbucketttl"></a>WithNATSBucketTTL
-
-WithNATSBucketTTL toggles bucket-level TTL mode for DriverNATS.
-When enabled, values are stored as raw bytes and per-operation ttl values are ignored.
-
-```go
-var kv cache.NATSKeyValue // provided by your NATS setup
-store := cache.NewStoreWith(ctx, cache.DriverNATS,
-	cache.WithNATSKeyValue(kv),
-	cache.WithNATSBucketTTL(true),
-)
-fmt.Println(store.Driver()) // nats
-```
-
-### <a id="withnatskeyvalue"></a>WithNATSKeyValue
-
-WithNATSKeyValue sets the NATS JetStream KeyValue bucket; required when using DriverNATS.
-
-```go
-var kv cache.NATSKeyValue // provided by your NATS setup
-store := cache.NewStoreWith(ctx, cache.DriverNATS, cache.WithNATSKeyValue(kv))
-fmt.Println(store.Driver()) // nats
-```
-
-### <a id="withprefix"></a>WithPrefix
-
-WithPrefix sets the key prefix for shared backends (e.g., redis).
-
-```go
-store := cache.NewStoreWith(ctx, cache.DriverRedis, cache.WithPrefix("svc"))
-fmt.Println(store.Driver()) // redis
-```
-
-### <a id="withredisclient"></a>WithRedisClient
-
-WithRedisClient sets the redis client; required when using DriverRedis.
-
-```go
-rdb := redis.NewClient(&redis.Options{Addr: "127.0.0.1:6379"})
-store := cache.NewStoreWith(ctx, cache.DriverRedis, cache.WithRedisClient(rdb))
-fmt.Println(store.Driver()) // redis
-```
-
-### <a id="withsql"></a>WithSQL
-
-WithSQL configures the SQL driver (driver name + DSN + optional table).
-
-```go
-store := cache.NewStoreWith(ctx, cache.DriverSQL,
-	cache.WithSQL("sqlite", "file::memory:?cache=shared", "cache_entries"),
-	cache.WithPrefix("svc"),
-)
-fmt.Println(store.Driver()) // sql
 ```
 
 ## Other
@@ -973,14 +807,14 @@ fmt.Println(c.SetString("user:42:name", "Ada", time.Minute) == nil) // true
 | **DynamoDB** | 400 KB item hard cap | No | Includes key/metadata overhead, so usable value bytes are lower. |
 | **SQL** | DB/engine config dependent | Server-side | Blob/row/packet limits vary by engine and deployment. |
 
-`WithMaxValueBytes` is the only uniform application-level cap across all drivers, and it applies to post-shaping bytes (after compression/encryption overhead).
+`StoreConfig.MaxValueBytes` (root-backed stores) is the uniform application-level cap, and it applies to post-shaping bytes (after compression/encryption overhead).
 
 ## Integration Coverage
 
 | Area | What is validated | Scope |
 | :--- | :--- | :--- |
 | Core store contract | `Set/Get`, TTL expiry, `Add`, counters, `Delete/DeleteMany`, `Flush`, typed `Remember` | All drivers |
-| Option contracts | `prefix`, `compression`, `encryption`, `prefix+compression+encryption`, `WithMaxValueBytes`, `WithDefaultTTL` | All drivers (per option case) |
+| Option contracts | `prefix`, `compression`, `encryption`, `prefix+compression+encryption`, `max_value_bytes`, `default_ttl` | All drivers (per option case) |
 | Locking | single-winner contention, timeout/cancel, TTL expiry reacquire, unlock safety | All drivers |
 | Rate limiting | monotonic counts, `remaining >= 0`, window rollover reset | All drivers |
 | Refresh-ahead | miss/hit behavior, async refresh success/error, malformed metadata handling | All drivers |
@@ -993,11 +827,11 @@ fmt.Println(c.SetString("user:42:name", "Ada", time.Minute) == nil) // true
 | Payload shaping / corruption | compression+encryption round-trips, corrupted compressed/encrypted payload errors | Shared/persistent backends |
 | Payload size limits | large binary payload round-trips; backend-specific near/over-limit checks (Memcached, DynamoDB) | Driver-specific where meaningful |
 | Cross-store scope | shared vs local semantics across store instances (e.g. rate-limit counters) | Driver-specific expectations |
-| Backend fault / recovery | backend restart mid-suite, outage errors, post-recovery round-trip/lock/refresh/stale flows | Container-backed drivers (`INTEGRATION_FAULT=1`) |
+| Backend fault / recovery | backend restart mid-suite, outage errors, post-recovery round-trip/lock/refresh/stale flows | Container-backed drivers (runs automatically when container-backed fixtures are selected) |
 | Observer metadata | op names, hit/miss flags, propagated errors, driver labels | Unit contract tests (integration helper paths exercise emissions indirectly) |
 | Memo store caveats | per-process memoization, local-only invalidation, cross-process staleness behavior | Unit tests |
 
-Default integration runs cover the contract suite above. Fault/recovery restart tests are opt-in because they restart shared testcontainers and are slower/flakier by nature.
+Default integration runs cover the contract suite above. Fault/recovery restart tests run automatically when the selected integration suite includes container-backed fixtures.
 
 ## Contributing (README updates)
 
@@ -1036,4 +870,4 @@ go run ./docs/readme/testcounts/main.go
 Notes:
 
 - The badge watcher runs real tests, so it is slower than API/example regeneration.
-- Fault/recovery integration tests are opt-in (`INTEGRATION_FAULT=1`).
+- Fault/recovery integration tests run with the integration suite when container-backed fixtures are selected.

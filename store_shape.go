@@ -3,24 +3,26 @@ package cache
 import (
 	"context"
 	"time"
+
+	"github.com/goforj/cache/cachecore"
 )
 
 // shapingStore enforces data shaping concerns (compression, size limits)
 // transparently on top of any concrete Store implementation.
 type shapingStore struct {
-	inner Store
+	inner cachecore.Store
 	codec CompressionCodec
 	max   int
 }
 
-func newShapingStore(inner Store, codec CompressionCodec, max int) Store {
+func newShapingStore(inner cachecore.Store, codec CompressionCodec, max int) cachecore.Store {
 	if codec == CompressionNone && max <= 0 {
 		return inner
 	}
 	return &shapingStore{inner: inner, codec: codec, max: max}
 }
 
-func (s *shapingStore) Driver() Driver { return s.inner.Driver() }
+func (s *shapingStore) Driver() cachecore.Driver { return s.inner.Driver() }
 
 func (s *shapingStore) Get(ctx context.Context, key string) ([]byte, bool, error) {
 	body, ok, err := s.inner.Get(ctx, key)

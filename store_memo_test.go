@@ -4,6 +4,8 @@ import (
 	"context"
 	"testing"
 	"time"
+
+	"github.com/goforj/cache/cachecore"
 )
 
 func TestMemoStoreCachesReadsAndInvalidatesOnMutation(t *testing.T) {
@@ -103,7 +105,7 @@ func TestMemoStoreDeleteInvalidates(t *testing.T) {
 	if ok {
 		t.Fatalf("expected memo + backing deletion")
 	}
-	if store.Driver() != DriverMemory {
+	if store.Driver() != cachecore.DriverMemory {
 		t.Fatalf("expected driver passthrough")
 	}
 }

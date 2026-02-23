@@ -6,14 +6,15 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/goforj/cache"
+	"github.com/goforj/cache/driver/dynamocache"
 )
 
 func main() {
-	// WithDynamoRegion sets the DynamoDB region for requests.
-
-	// Example: set dynamo region
+	// Example: set dynamo region via explicit driver config.
 	ctx := context.Background()
-	store := cache.NewStoreWith(ctx, cache.DriverDynamo, cache.WithDynamoRegion("us-west-2"))
+	store, err := dynamocache.New(ctx, dynamocache.Config{Region: "us-west-2"})
+	if err != nil {
+		panic(err)
+	}
 	fmt.Println(store.Driver()) // dynamodb
 }

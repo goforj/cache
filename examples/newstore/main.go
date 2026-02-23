@@ -10,13 +10,8 @@ import (
 )
 
 func main() {
-	// NewStore returns a concrete store for the requested driver.
-	// Caller is responsible for providing any driver-specific dependencies.
-
-	// Example: select driver explicitly
+	// Example: explicit memory constructor.
 	ctx := context.Background()
-	store := cache.NewStore(ctx, cache.StoreConfig{
-		Driver: cache.DriverMemory,
-	})
+	store := cache.NewMemoryStore(ctx)
 	fmt.Println(store.Driver()) // memory
 }

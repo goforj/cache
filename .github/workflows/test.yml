@@ -56,7 +56,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        driver: [null, memory, file, redis, nats, memcached, dynamodb, sql_sqlite, sql_postgres, sql_mysql]
+        driver: [null, memory, file, rediscache, natscache, memcachedcache, dynamocache, sqlitecache, postgrescache, mysqlcache]
     env:
       GOCACHE: /tmp/go-build-cache
       INTEGRATION_DRIVER: ${{ matrix.driver }}
@@ -70,14 +70,17 @@ jobs:
           go-version: "stable"
 
       - name: Download dependencies
-        run: go mod download
+        run: |
+          go mod download
+          cd integration
+          GOWORK=off go mod download
 
       - name: Run integration tests (per driver, with retries)
         run: |
           set -euo pipefail
           for attempt in 1 2 3; do
             echo "Integration attempt ${attempt}/3 for driver=${INTEGRATION_DRIVER}"
-            if go test -tags integration ./... -count=1; then
+            if (cd integration && GOWORK=off go test -tags=integration -v -count=1 ./root ./all); then
               exit 0
             fi
             if [ "${attempt}" -eq 3 ]; then

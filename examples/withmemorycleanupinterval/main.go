@@ -11,10 +11,8 @@ import (
 )
 
 func main() {
-	// WithMemoryCleanupInterval overrides the sweep interval for the memory driver.
-
-	// Example: custom memory sweep
+	// Example: custom memory sweep via explicit StoreConfig.
 	ctx := context.Background()
-	store := cache.NewStoreWith(ctx, cache.DriverMemory, cache.WithMemoryCleanupInterval(5*time.Minute))
+	store := cache.NewMemoryStoreWithConfig(ctx, cache.StoreConfig{MemoryCleanupInterval: 5 * time.Minute})
 	fmt.Println(store.Driver()) // memory
 }

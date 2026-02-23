@@ -5,6 +5,8 @@ import (
 	"errors"
 	"testing"
 	"time"
+
+	"github.com/goforj/cache/cachecore"
 )
 
 func TestShapingStoreGzipRoundTrip(t *testing.T) {
@@ -73,7 +75,12 @@ func TestDecodeValueCorrupt(t *testing.T) {
 
 func TestFactoryAppliesShaping(t *testing.T) {
 	ctx := context.Background()
-	store := NewStoreWith(ctx, DriverMemory, WithCompression(CompressionGzip), WithMaxValueBytes(1024))
+	store := NewMemoryStoreWithConfig(ctx, StoreConfig{
+		BaseConfig: cachecore.BaseConfig{
+			Compression:   CompressionGzip,
+			MaxValueBytes: 1024,
+		},
+	})
 	if _, ok := store.(*shapingStore); !ok {
 		t.Fatalf("expected shaping store wrapper")
 	}

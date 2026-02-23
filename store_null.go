@@ -1,5 +1,7 @@
 package cache
 
+import "github.com/goforj/cache/cachecore"
+
 import (
 	"context"
 	"time"
@@ -7,9 +9,9 @@ import (
 
 type nullStore struct{}
 
-func newNullStore() Store { return &nullStore{} }
+func newNullStore() cachecore.Store { return &nullStore{} }
 
-func (s *nullStore) Driver() Driver { return DriverNull }
+func (s *nullStore) Driver() cachecore.Driver { return cachecore.DriverNull }
 
 func (s *nullStore) Get(context.Context, string) ([]byte, bool, error) {
 	return nil, false, nil

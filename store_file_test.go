@@ -9,9 +9,11 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/goforj/cache/cachecore"
 )
 
-func newTempFileStore(t *testing.T) Store {
+func newTempFileStore(t *testing.T) cachecore.Store {
 	t.Helper()
 	dir := t.TempDir()
 	return newFileStore(dir, 0)
