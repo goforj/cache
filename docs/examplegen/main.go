@@ -431,6 +431,9 @@ func writeMain(base string, fd *FuncDoc, importPath string) error {
 		if strings.Contains(ex.Code, "context.") {
 			imports["context"] = true
 		}
+		if strings.Contains(ex.Code, "cachecore.") {
+			imports["github.com/goforj/cache/cachecore"] = true
+		}
 		if strings.Contains(ex.Code, "regexp.") {
 			imports["regexp"] = true
 		}
