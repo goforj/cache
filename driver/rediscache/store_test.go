@@ -38,6 +38,17 @@ func TestNewNilClientErrors(t *testing.T) {
 	}
 }
 
+func TestNewWithAddrCreatesClient(t *testing.T) {
+	s := New(Config{Addr: "127.0.0.1:6379"})
+	impl, ok := s.(*store)
+	if !ok {
+		t.Fatalf("expected *store, got %T", s)
+	}
+	if impl.client == nil {
+		t.Fatalf("expected client to be auto-created when Addr is set")
+	}
+}
+
 func TestOperationsWithStubClient(t *testing.T) {
 	ctx := context.Background()
 	client := newStubClient()

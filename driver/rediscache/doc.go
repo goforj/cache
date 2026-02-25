@@ -8,7 +8,7 @@
 //	)
 //
 //	store := rediscache.New(rediscache.Config{
-//		Client: rdb,
+//		Addr:   "127.0.0.1:6379",
 //		Prefix: "app",
 //	})
 //	c := cache.NewCache(store)

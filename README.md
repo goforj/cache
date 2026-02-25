@@ -78,7 +78,6 @@ import (
 	"github.com/goforj/cache/driver/postgrescache"
 	"github.com/goforj/cache/driver/rediscache"
 	"github.com/goforj/cache/driver/sqlitecache"
-	"github.com/redis/go-redis/v9"
 )
 
 func main() {
@@ -89,8 +88,7 @@ func main() {
 	cache.NewFileStore(ctx, "./cache-data") // local file-backed
 	cache.NewNullStore(ctx)                 // disabled / drop-only
 
-	rdb := redis.NewClient(&redis.Options{Addr: "127.0.0.1:6379"})
-	redisStore := rediscache.New(rediscache.Config{BaseConfig: base, Client: rdb})
+	redisStore := rediscache.New(rediscache.Config{BaseConfig: base, Addr: "127.0.0.1:6379"})
 	_ = redisStore
 
 	memcachedStore := memcachedcache.New(memcachedcache.Config{
@@ -156,7 +154,6 @@ import (
     "github.com/goforj/cache"
     "github.com/goforj/cache/cachecore"
     "github.com/goforj/cache/driver/rediscache"
-    "github.com/redis/go-redis/v9"
 )
 
 func main() {
@@ -188,13 +185,12 @@ func main() {
     fmt.Println(profile.Name) // Ada
 
     // Switch to Redis (dependency injection, no code changes below).
-    client := redis.NewClient(&redis.Options{Addr: "127.0.0.1:6379"})
     store = rediscache.New(rediscache.Config{
         BaseConfig: cachecore.BaseConfig{
             Prefix:     "app",
             DefaultTTL: 5 * time.Minute,
         },
-        Client: client,
+        Addr: "127.0.0.1:6379",
     })
     c = cache.NewCache(store)
 }
@@ -607,16 +603,17 @@ fmt.Println(store.Driver()) // sql
 Defaults:
 - DefaultTTL: 5*time.Minute when zero
 - Prefix: "app" when empty
-- Client: nil allowed (operations return errors until a client is provided)
+- Addr: empty by default (no client auto-created unless Addr is set)
+- Client: optional advanced override (takes precedence when set)
+- If neither Client nor Addr is set, operations return errors until a client is provided
 
 ```go
-rdb := redis.NewClient(&redis.Options{Addr: "127.0.0.1:6379"})
 store := rediscache.New(rediscache.Config{
 	BaseConfig: cachecore.BaseConfig{
 		DefaultTTL: 5 * time.Minute,
 		Prefix:     "app",
 	},
-	Client: rdb,
+	Addr: "127.0.0.1:6379",
 })
 fmt.Println(store.Driver()) // redis
 ```

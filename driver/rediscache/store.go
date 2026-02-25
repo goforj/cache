@@ -2,6 +2,7 @@ package rediscache
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"time"
@@ -29,7 +30,12 @@ type Client interface {
 // Config configures a Redis-backed cache store.
 type Config struct {
 	cachecore.BaseConfig
-	Client Client
+	Addr      string
+	Username  string
+	Password  string
+	DB        int
+	TLSConfig *tls.Config
+	Client    Client
 }
 
 type store struct {
@@ -43,17 +49,18 @@ type store struct {
 // Defaults:
 // - DefaultTTL: 5*time.Minute when zero
 // - Prefix: "app" when empty
-// - Client: nil allowed (operations return errors until a client is provided)
+// - Addr: empty by default (no client auto-created unless Addr is set)
+// - Client: optional advanced override (takes precedence when set)
+// - If neither Client nor Addr is set, operations return errors until a client is provided
 //
 // Example: explicit Redis driver config
 //
-//	rdb := redis.NewClient(&redis.Options{Addr: "127.0.0.1:6379"})
 //	store := rediscache.New(rediscache.Config{
 //		BaseConfig: cachecore.BaseConfig{
 //			DefaultTTL: 5 * time.Minute,
 //			Prefix:     "app",
 //		},
-//		Client: rdb,
+//		Addr: "127.0.0.1:6379",
 //	})
 //	fmt.Println(store.Driver()) // redis
 func New(cfg Config) cachecore.Store {
@@ -65,8 +72,18 @@ func New(cfg Config) cachecore.Store {
 	if prefix == "" {
 		prefix = defaultPrefix
 	}
+	client := cfg.Client
+	if client == nil && cfg.Addr != "" {
+		client = redis.NewClient(&redis.Options{
+			Addr:      cfg.Addr,
+			Username:  cfg.Username,
+			Password:  cfg.Password,
+			DB:        cfg.DB,
+			TLSConfig: cfg.TLSConfig,
+		})
+	}
 	return &store{
-		client:     cfg.Client,
+		client:     client,
 		defaultTTL: ttl,
 		prefix:     prefix,
 	}
