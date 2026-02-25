@@ -33,6 +33,12 @@ type Fake struct {
 }
 
 // New creates a Fake using an in-memory store.
+// @group Testing Helpers
+// Example:
+//
+//	f := cachefake.New()
+//	c := f.Cache()
+//	_ = c.SetString("settings:mode", "dark", 0)
 func New() *Fake {
 	store := &countingStore{inner: cache.NewMemoryStore(context.Background())}
 	f := &Fake{
@@ -44,9 +50,21 @@ func New() *Fake {
 }
 
 // Cache returns the cache facade to inject into code under test.
+// @group Testing Helpers
+// Example:
+//
+//	f := cachefake.New()
+//	c := f.Cache()
+//	_, _, _ = c.GetBytes("settings:mode")
 func (f *Fake) Cache() *cache.Cache { return f.cache }
 
 // Reset clears recorded counts.
+// @group Testing Helpers
+// Example:
+//
+//	f := cachefake.New()
+//	_ = f.Cache().SetString("settings:mode", "dark", 0)
+//	f.Reset()
 func (f *Fake) Reset() {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -54,6 +72,14 @@ func (f *Fake) Reset() {
 }
 
 // AssertCalled verifies key was touched by op the expected number of times.
+// @group Testing Helpers
+// Example:
+//
+//	f := cachefake.New()
+//	c := f.Cache()
+//	_ = c.SetString("settings:mode", "dark", 0)
+//	t := &testing.T{}
+//	f.AssertCalled(t, cachefake.OpSet, "settings:mode", 1)
 func (f *Fake) AssertCalled(t *testing.T, op Op, key string, times int) {
 	t.Helper()
 	if got := f.Count(op, key); got != times {
@@ -62,6 +88,12 @@ func (f *Fake) AssertCalled(t *testing.T, op Op, key string, times int) {
 }
 
 // AssertNotCalled ensures key was never touched by op.
+// @group Testing Helpers
+// Example:
+//
+//	f := cachefake.New()
+//	t := &testing.T{}
+//	f.AssertNotCalled(t, cachefake.OpDelete, "settings:mode")
 func (f *Fake) AssertNotCalled(t *testing.T, op Op, key string) {
 	t.Helper()
 	if got := f.Count(op, key); got != 0 {
@@ -70,6 +102,15 @@ func (f *Fake) AssertNotCalled(t *testing.T, op Op, key string) {
 }
 
 // AssertTotal ensures the total call count for an op matches times.
+// @group Testing Helpers
+// Example:
+//
+//	f := cachefake.New()
+//	c := f.Cache()
+//	_ = c.Delete("a")
+//	_ = c.Delete("b")
+//	t := &testing.T{}
+//	f.AssertTotal(t, cachefake.OpDelete, 2)
 func (f *Fake) AssertTotal(t *testing.T, op Op, times int) {
 	t.Helper()
 	if got := f.Total(op); got != times {
@@ -78,6 +119,14 @@ func (f *Fake) AssertTotal(t *testing.T, op Op, times int) {
 }
 
 // Count returns calls for op+key.
+// @group Testing Helpers
+// Example:
+//
+//	f := cachefake.New()
+//	c := f.Cache()
+//	_ = c.SetString("settings:mode", "dark", 0)
+//	n := f.Count(cachefake.OpSet, "settings:mode")
+//	_ = n
 func (f *Fake) Count(op Op, key string) int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -88,6 +137,15 @@ func (f *Fake) Count(op Op, key string) int {
 }
 
 // Total returns total calls for an op across keys.
+// @group Testing Helpers
+// Example:
+//
+//	f := cachefake.New()
+//	c := f.Cache()
+//	_ = c.Delete("a")
+//	_ = c.Delete("b")
+//	n := f.Total(cachefake.OpDelete)
+//	_ = n
 func (f *Fake) Total(op Op) int {
 	f.mu.Lock()
 	defer f.mu.Unlock()

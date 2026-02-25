@@ -10,11 +10,26 @@ This guide covers practical defaults and operational patterns for running cache 
   - example: 5 to 15 minutes for read-mostly metadata
 - Use backend-specific strengths:
   - memory/file for local or single-node use
-  - redis/memcached/nats/sql/dynamodb for shared multi-instance workloads
+  - `driver/rediscache`, `driver/memcachedcache`, `driver/natscache`, `driver/dynamocache`
+  - `driver/sqlitecache`, `driver/postgrescache`, `driver/mysqlcache` (with `driver/sqlcore` as the shared SQL implementation)
 - Enable shaping controls where needed:
-  - `BaseConfig.Compression = cache.CompressionGzip` for larger payloads
+  - `BaseConfig.Compression = cachecore.CompressionGzip` for larger payloads
   - `BaseConfig.MaxValueBytes = ...` to enforce payload budgets
   - `BaseConfig.EncryptionKey = ...` for at-rest value protection
+
+Example optional-driver construction shape:
+
+```go
+cfg := rediscache.Config{
+	BaseConfig: cachecore.BaseConfig{
+		DefaultTTL: 10 * time.Minute,
+		Prefix:     "billing:v1",
+	},
+	Addr: "127.0.0.1:6379",
+}
+store := rediscache.New(cfg)
+c := cache.NewCache(store)
+```
 
 ## Key Naming And Versioning
 
@@ -137,7 +152,8 @@ Recommended logging:
 
 ## Rollout Checklist
 
-- Validate with integration tests for selected production drivers.
+- Validate with integration tests for selected production drivers (from the `integration` module):
+  - `cd integration && INTEGRATION_DRIVER=all go test -tags=integration ./all`
 - Run with race detector in CI for contention-sensitive paths.
 - Load test hot-key behavior (`Remember*`, `RefreshAhead*`, locks).
 - Monitor hit ratio and upstream dependency load before/after rollout.

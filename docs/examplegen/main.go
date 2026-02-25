@@ -44,6 +44,9 @@ func run() error {
 	if err := collectExamplesFromDir(funcs, root, modPath, ""); err != nil {
 		return err
 	}
+	if err := collectExamplesFromDir(funcs, filepath.Join(root, "cachefake"), modPath+"/cachefake", ""); err != nil {
+		return err
+	}
 	for _, rel := range []string{
 		"driver/rediscache",
 		"driver/memcachedcache",
@@ -465,6 +468,9 @@ func writeMain(base string, fd *FuncDoc, importPath string) error {
 		}
 		if strings.Contains(ex.Code, "context.") {
 			imports["context"] = true
+		}
+		if strings.Contains(ex.Code, "testing.") {
+			imports["testing"] = true
 		}
 		if strings.Contains(ex.Code, "cachecore.") {
 			imports["github.com/goforj/cache/cachecore"] = true

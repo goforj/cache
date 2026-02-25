@@ -96,7 +96,15 @@ var (
 )
 
 func parseFuncs(root string) ([]*FuncDoc, error) {
-	return parseFuncsInDir(root)
+	funcs, err := parseFuncsInDir(root)
+	if err != nil {
+		return nil, err
+	}
+	cachefakeFuncs, err := parseFuncsInDir(filepath.Join(root, "cachefake"))
+	if err != nil {
+		return nil, err
+	}
+	return append(funcs, cachefakeFuncs...), nil
 }
 
 func parseFuncsInDir(dir string) ([]*FuncDoc, error) {
@@ -127,6 +135,9 @@ func parseFuncsInDir(dir string) ([]*FuncDoc, error) {
 	funcs := map[string]*FuncDoc{}
 
 	for _, file := range pkg.Files {
+		if hasBuildTag(file, "integration") {
+			continue
+		}
 		for _, decl := range file.Decls {
 			fn, ok := decl.(*ast.FuncDecl)
 			if !ok || fn.Doc == nil {
@@ -176,6 +187,18 @@ func parseFuncsInDir(dir string) ([]*FuncDoc, error) {
 	}
 
 	return out, nil
+}
+
+func hasBuildTag(file *ast.File, tag string) bool {
+	want := "//go:build " + tag
+	for _, cg := range file.Comments {
+		for _, c := range cg.List {
+			if strings.TrimSpace(c.Text) == want {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func extractGroup(group *ast.CommentGroup) string {

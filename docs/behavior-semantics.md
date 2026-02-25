@@ -2,12 +2,18 @@
 
 This document defines runtime behavior for TTL/default TTL, stale and refresh-ahead flows, and lock/rate-limit guarantees.
 
+Configuration references in this document use the current layout:
+
+- `cache.NewCacheWithTTL(...)` for cache-level default TTL
+- root store constructors with config (`NewMemoryStoreWithConfig`, `NewFileStoreWithConfig`, `NewNullStoreWithConfig`)
+- optional driver configs that embed `cachecore.BaseConfig` (for example `rediscache.Config`, `natscache.Config`)
+
 ## TTL And Default TTL Matrix
 
 Cache resolves TTL with:
 
 - if ttl > 0: use ttl
-- otherwise: use Cache.defaultTTL (configured by NewCacheWithTTL or store config)
+- otherwise: use `Cache.defaultTTL` (configured by `NewCacheWithTTL` or the store's `cachecore.BaseConfig.DefaultTTL`)
 
 | API | TTL Input | Effective TTL Written |
 |---|---|---|
@@ -21,7 +27,7 @@ Cache resolves TTL with:
 | Increment / IncrementCtx | ttl <= 0 | defaultTTL |
 | Decrement / DecrementCtx | ttl > 0 | ttl |
 | Decrement / DecrementCtx | ttl <= 0 | defaultTTL |
-| BatchSet / BatchSetCtx | each key uses same rule as Set | per-key resolved TTL |
+| BatchSetBytes / BatchSetBytesCtx | each key uses same rule as Set | per-key resolved TTL |
 | Remember* (non-stale) | forwards ttl to SetCtx | resolved as above |
 | RememberStale* primary key | forwards ttl to SetCtx | resolved as above |
 | RateLimit* bucket key | uses window as TTL | exactly window (must be > 0) |
@@ -93,15 +99,16 @@ Refresh-ahead caveats:
   - Unlock deletes lock key without owner token validation
   - use short TTLs and keep critical sections bounded
 
-## Rate limiting (RateLimit, RateLimitWithRemaining)
+## Rate limiting (RateLimit, RateLimitCtx)
 
 - Algorithm: fixed-window counter.
 - Keying: bucketKey = key + ":" + floor(now/window).
 - Each call increments bucket counter with TTL=window.
-- Returns:
-  - allowed = count <= limit
-  - count current bucket count
-  - optional remaining and resetAt
+- Returns `RateLimitStatus`:
+  - `Allowed` (`count <= limit`)
+  - `Count` (current bucket count)
+  - `Remaining`
+  - `ResetAt`
 
 Scope and semantics:
 
