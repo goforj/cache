@@ -60,13 +60,13 @@ go get github.com/goforj/cache/driver/mysqlcache
 
 | Category | Module | Purpose |
 | --- | --- | --- |
-| Core | [github.com/goforj/cache](.) | `Cache` helpers + root-backed stores (`memory`, `file`, `null`) |
-| Core | [github.com/goforj/cache/cachecore](cachecore) | Shared contracts/types/config (`Store`, `Driver`, `BaseConfig`) |
-| Core | [github.com/goforj/cache/cachetest](cachetest) | Shared store contract test harness |
-| Optional drivers | [github.com/goforj/cache/driver/*cache](driver) | Backend driver modules |
-| Optional drivers | [github.com/goforj/cache/driver/sqlcore](driver/sqlcore) | Shared SQL implementation used by SQL dialect wrappers |
-| Testing and tooling | [github.com/goforj/cache/integration](integration) | Integration suites (`root`, `all`) |
-| Testing and tooling | [github.com/goforj/cache/docs](docs) | Docs + benchmark tooling |
+| Core | [github.com/goforj/cache](https://github.com/goforj/cache/tree/main) | Cache API and root-backed stores (memory, file, null) |
+| Core | [github.com/goforj/cache/cachecore](https://github.com/goforj/cache/tree/main/cachecore) | Shared contracts, types, and base config |
+| Core | [github.com/goforj/cache/cachetest](https://github.com/goforj/cache/tree/main/cachetest) | Shared store contract test harness |
+| Optional drivers | [github.com/goforj/cache/driver/*cache](https://github.com/goforj/cache/tree/main/driver) | Backend driver modules |
+| Optional drivers | [github.com/goforj/cache/driver/sqlcore](https://github.com/goforj/cache/tree/main/driver/sqlcore) | Shared SQL implementation for dialect wrappers |
+| Testing and tooling | [github.com/goforj/cache/integration](https://github.com/goforj/cache/tree/main/integration) | Integration suites (root, all) |
+| Testing and tooling | [github.com/goforj/cache/docs](https://github.com/goforj/cache/tree/main/docs) | Docs + benchmark tooling |
 
 ## Quick Start
 
