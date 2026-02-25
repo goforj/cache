@@ -353,6 +353,7 @@ func selectPackage(pkgs map[string]*ast.Package) (string, error) {
 //
 
 func renderAPI(root string, funcs []*FuncDoc) string {
+	const driverConfigsGroup = "Driver Configs"
 	byGroup := map[string][]*FuncDoc{}
 	nameCounts := map[string]int{}
 	byKey := map[string]*FuncDoc{}
@@ -391,6 +392,8 @@ func renderAPI(root string, funcs []*FuncDoc) string {
 		groupNames = append(groupNames, g)
 	}
 	sort.Strings(groupNames)
+	allGroupNames := append(append([]string(nil), groupNames...), driverConfigsGroup)
+	sort.Strings(allGroupNames)
 
 	var buf bytes.Buffer
 
@@ -399,7 +402,11 @@ func renderAPI(root string, funcs []*FuncDoc) string {
 	buf.WriteString("| Group | Functions |\n")
 	buf.WriteString("|------:|:-----------|\n")
 
-	for _, group := range groupNames {
+	for _, group := range allGroupNames {
+		if group == driverConfigsGroup {
+			buf.WriteString(renderDriverConfigIndexRow(root))
+			continue
+		}
 		sort.Slice(byGroup[group], func(i, j int) bool {
 			li := renderLabel(byGroup[group][i], nameCounts, hasCtxVariant)
 			lj := renderLabel(byGroup[group][j], nameCounts, hasCtxVariant)
@@ -420,15 +427,15 @@ func renderAPI(root string, funcs []*FuncDoc) string {
 		))
 	}
 
-	buf.WriteString(renderDriverConfigIndexRow(root))
-
 	buf.WriteString("\n\n")
 	buf.WriteString("_Examples assume `ctx := context.Background()` and `c := cache.NewCache(cache.NewMemoryStore(ctx))` unless shown otherwise._\n\n")
-	buf.WriteString(renderDriverConfigIndex(root))
-	buf.WriteString("\n")
-
 	// ---------------- Details ----------------
-	for _, group := range groupNames {
+	for _, group := range allGroupNames {
+		if group == driverConfigsGroup {
+			buf.WriteString(renderDriverConfigIndex(root))
+			buf.WriteString("\n")
+			continue
+		}
 		buf.WriteString("## " + group + "\n\n")
 
 		for _, fn := range byGroup[group] {
@@ -598,10 +605,11 @@ func renderDriverConfigIndexRow(root string) string {
 func renderDriverConfigIndex(root string) string {
 	var buf bytes.Buffer
 
-	buf.WriteString("### <a id=\"driver-configs\"></a>Driver Config Examples (Optional Backends)\n\n")
+	buf.WriteString("## <a id=\"driver-configs\"></a>Driver Configs\n\n")
+	buf.WriteString("Optional backend config examples (compile-checked from generated examples and driver `New(...)` docs).\n\n")
 	docs := driverConfigDocs(root)
 	for _, d := range docs {
-		buf.WriteString(fmt.Sprintf("#### <a id=\"%s\"></a>%s\n\n", d.Anchor, d.Heading))
+		buf.WriteString(fmt.Sprintf("### <a id=\"%s\"></a>%s\n\n", d.Anchor, d.Heading))
 		if d.Description != "" {
 			buf.WriteString(d.Description + "\n\n")
 		}
