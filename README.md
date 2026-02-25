@@ -182,7 +182,7 @@ type Config struct {
 }
 ```
 
-See the API Index `Driver Configs` section for per-driver defaults and compile-checked examples for:
+See the [API Index](#api-index) `Driver Configs` section for per-driver defaults and compile-checked examples for:
 `rediscache`, `memcachedcache`, `natscache`, `dynamocache`, `sqlitecache`, `postgrescache`, `mysqlcache`, and `sqlcore`.
 
 ## Behavior Semantics
