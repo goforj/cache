@@ -211,10 +211,12 @@ func TestStoreContract_AllDrivers(t *testing.T) {
 				ctx := context.Background()
 				container, addr := startPostgresContainer(t, ctx)
 				dsn := "postgres://user:pass@" + addr + "/app?sslmode=disable"
-				store, err := postgrescache.New(postgrescache.Config{
-					BaseConfig: cachecore.BaseConfig{DefaultTTL: 2 * time.Second, Prefix: "itest"},
-					DSN:        dsn,
-					Table:      "cache_entries",
+				store, err := retryStoreInit(5*time.Second, 100*time.Millisecond, func() (cachetest.Store, error) {
+					return postgrescache.New(postgrescache.Config{
+						BaseConfig: cachecore.BaseConfig{DefaultTTL: 2 * time.Second, Prefix: "itest"},
+						DSN:        dsn,
+						Table:      "cache_entries",
+					})
 				})
 				if err != nil {
 					shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -239,10 +241,12 @@ func TestStoreContract_AllDrivers(t *testing.T) {
 				ctx := context.Background()
 				container, addr := startMySQLContainer(t, ctx)
 				dsn := "user:pass@tcp(" + addr + ")/app?parseTime=true"
-				store, err := mysqlcache.New(mysqlcache.Config{
-					BaseConfig: cachecore.BaseConfig{DefaultTTL: 2 * time.Second, Prefix: "itest"},
-					DSN:        dsn,
-					Table:      "cache_entries",
+				store, err := retryStoreInit(5*time.Second, 100*time.Millisecond, func() (cachetest.Store, error) {
+					return mysqlcache.New(mysqlcache.Config{
+						BaseConfig: cachecore.BaseConfig{DefaultTTL: 2 * time.Second, Prefix: "itest"},
+						DSN:        dsn,
+						Table:      "cache_entries",
+					})
 				})
 				if err != nil {
 					shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -279,6 +283,22 @@ func TestStoreContract_AllDrivers(t *testing.T) {
 
 func integrationDriverEnabled(name string) bool {
 	return selectedIntegrationDrivers()[strings.ToLower(name)]
+}
+
+func retryStoreInit(timeout, interval time.Duration, fn func() (cachetest.Store, error)) (cachetest.Store, error) {
+	deadline := time.Now().Add(timeout)
+	var lastErr error
+	for {
+		store, err := fn()
+		if err == nil {
+			return store, nil
+		}
+		lastErr = err
+		if time.Now().After(deadline) {
+			return nil, lastErr
+		}
+		time.Sleep(interval)
+	}
 }
 
 func selectedIntegrationDrivers() map[string]bool {

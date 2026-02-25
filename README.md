@@ -22,21 +22,6 @@
 ## What cache is
  
 An explicit cache abstraction with a minimal Store interface and ergonomic Cache helpers. Drivers are chosen when you construct the store, so swapping backends is a dependency-injection change instead of a refactor.
- 
-## Drivers
-
-|                                                                                             Driver / Backend | Mode | Shared | Durable | TTL | Counters | Locks | RateLimit | Prefix | Batch | Shaping | Notes |
-|-------------------------------------------------------------------------------------------------------------:| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :--- |
-|                  <img src="https://img.shields.io/badge/null-9e9e9e?logo=probot&logoColor=white" alt="Null"> | No-op | - | - | - | - | No-op | No-op | ✓ | ✓ | ✓ | Great for tests: cache calls are no-ops and never persist. |
-|                   <img src="https://img.shields.io/badge/file-3f51b5?logo=files&logoColor=white" alt="File"> | Local filesystem | - | ✓ | ✓ | ✓ | Local | Local | - | ✓ | ✓ | Simple durability on a single host; set `StoreConfig.FileDir` (or use `NewFileStore`). |
-|              <img src="https://img.shields.io/badge/memory-5c5c5c?logo=cachet&logoColor=white" alt="Memory"> | In-process | - | - | ✓ | ✓ | Local | Local | - | ✓ | ✓ | Fastest; per-process only, best for single-node or short-lived data. |
-|        <img src="https://img.shields.io/badge/memcached-0198c4?logo=buffer&logoColor=white" alt="Memcached"> | Networked | ✓ | - | ✓ | ✓ | Shared | Shared | ✓ | ✓ | ✓ | TTL resolution is 1s; configure addresses via `memcachedcache.Config.Addresses`. |
-|              <img src="https://img.shields.io/badge/redis-%23DC382D?logo=redis&logoColor=white" alt="Redis"> | Networked | ✓ | - | ✓ | ✓ | Shared | Shared | ✓ | ✓ | ✓ | Full feature set; counters refresh TTL (Redis counter TTL granularity currently 1s). |
-|                <img src="https://img.shields.io/badge/nats-27AAE1?logo=natsdotio&logoColor=white" alt="NATS"> | Networked | ✓ | - | ✓ | ✓ | Shared | Shared | ✓ | ✓ | ✓ | JetStream KV-backed driver; inject an existing bucket via `natscache.Config.KeyValue`. |
-| <img src="https://img.shields.io/badge/dynamodb-4053D6?logo=amazon-dynamodb&logoColor=white" alt="DynamoDB"> | Networked | ✓ | ✓ | ✓ | ✓ | Shared | Shared | ✓ | ✓ | ✓ | Backed by DynamoDB (supports localstack/dynamodb-local). |
-|    <img src="https://img.shields.io/badge/sqlite-003B57?logo=sqlite&logoColor=white" alt="SQLite"> | Local / file | - | ✓ | ✓ | ✓ | Local | Local | ✓ | ✓ | ✓ | `sqlitecache` (via `sqlcore`); great for embedded/local durable cache. |
-|    <img src="https://img.shields.io/badge/postgres-336791?logo=postgresql&logoColor=white" alt="Postgres"> | Networked | ✓ | ✓ | ✓ | ✓ | Shared | Shared | ✓ | ✓ | ✓ | `postgrescache` (via `sqlcore`); good shared durable backend. |
-|    <img src="https://img.shields.io/badge/mysql-4479A1?logo=mysql&logoColor=white" alt="MySQL"> | Networked | ✓ | ✓ | ✓ | ✓ | Shared | Shared | ✓ | ✓ | ✓ | `mysqlcache` (via `sqlcore`); good shared durable backend. |
 
 ## Installation
 
@@ -54,6 +39,98 @@ go get github.com/goforj/cache/driver/dynamocache
 go get github.com/goforj/cache/driver/sqlitecache
 go get github.com/goforj/cache/driver/postgrescache
 go get github.com/goforj/cache/driver/mysqlcache
+```
+ 
+## Drivers
+
+|                                                                                             Driver / Backend | Mode | Shared | Durable | TTL | Counters | Locks | RateLimit | Prefix | Batch | Shaping | Notes |
+|-------------------------------------------------------------------------------------------------------------:| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :--- |
+|                  <img src="https://img.shields.io/badge/null-9e9e9e?logo=probot&logoColor=white" alt="Null"> | No-op | - | - | - | - | No-op | No-op | ✓ | ✓ | ✓ | Great for tests: cache calls are no-ops and never persist. |
+|                   <img src="https://img.shields.io/badge/file-3f51b5?logo=files&logoColor=white" alt="File"> | Local filesystem | - | ✓ | ✓ | ✓ | Local | Local | - | ✓ | ✓ | Simple durability on a single host; set `StoreConfig.FileDir` (or use `NewFileStore`). |
+|              <img src="https://img.shields.io/badge/memory-5c5c5c?logo=cachet&logoColor=white" alt="Memory"> | In-process | - | - | ✓ | ✓ | Local | Local | - | ✓ | ✓ | Fastest; per-process only, best for single-node or short-lived data. |
+|        <img src="https://img.shields.io/badge/memcached-0198c4?logo=buffer&logoColor=white" alt="Memcached"> | Networked | ✓ | - | ✓ | ✓ | Shared | Shared | ✓ | ✓ | ✓ | TTL resolution is 1s; configure addresses via `memcachedcache.Config.Addresses`. |
+|              <img src="https://img.shields.io/badge/redis-%23DC382D?logo=redis&logoColor=white" alt="Redis"> | Networked | ✓ | - | ✓ | ✓ | Shared | Shared | ✓ | ✓ | ✓ | Full feature set; counters refresh TTL (Redis counter TTL granularity currently 1s). |
+|                <img src="https://img.shields.io/badge/nats-27AAE1?logo=natsdotio&logoColor=white" alt="NATS"> | Networked | ✓ | - | ✓ | ✓ | Shared | Shared | ✓ | ✓ | ✓ | JetStream KV-backed driver; inject an existing bucket via `natscache.Config.KeyValue`. |
+| <img src="https://img.shields.io/badge/dynamodb-4053D6?logo=amazon-dynamodb&logoColor=white" alt="DynamoDB"> | Networked | ✓ | ✓ | ✓ | ✓ | Shared | Shared | ✓ | ✓ | ✓ | Backed by DynamoDB (supports localstack/dynamodb-local). |
+|    <img src="https://img.shields.io/badge/sqlite-003B57?logo=sqlite&logoColor=white" alt="SQLite"> | Local / file | - | ✓ | ✓ | ✓ | Local | Local | ✓ | ✓ | ✓ | `sqlitecache` (via `sqlcore`); great for embedded/local durable cache. |
+|    <img src="https://img.shields.io/badge/postgres-336791?logo=postgresql&logoColor=white" alt="Postgres"> | Networked | ✓ | ✓ | ✓ | ✓ | Shared | Shared | ✓ | ✓ | ✓ | `postgrescache` (via `sqlcore`); good shared durable backend. |
+|    <img src="https://img.shields.io/badge/mysql-4479A1?logo=mysql&logoColor=white" alt="MySQL"> | Networked | ✓ | ✓ | ✓ | ✓ | Shared | Shared | ✓ | ✓ | ✓ | `mysqlcache` (via `sqlcore`); good shared durable backend. |
+
+## Driver constructor quick examples
+
+Use root constructors for in-process backends, and driver-module constructors for external backends.
+Driver backends live in separate modules so applications only import/link the optional backend dependencies they actually use.
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"time"
+
+	"github.com/goforj/cache"
+	"github.com/goforj/cache/cachecore"
+	"github.com/goforj/cache/driver/dynamocache"
+	"github.com/goforj/cache/driver/memcachedcache"
+	"github.com/goforj/cache/driver/mysqlcache"
+	"github.com/goforj/cache/driver/natscache"
+	"github.com/goforj/cache/driver/postgrescache"
+	"github.com/goforj/cache/driver/rediscache"
+	"github.com/goforj/cache/driver/sqlitecache"
+	"github.com/redis/go-redis/v9"
+)
+
+func main() {
+	ctx := context.Background()
+	base := cachecore.BaseConfig{DefaultTTL: 5 * time.Minute, Prefix: "app"}
+
+	cache.NewMemoryStore(ctx)               // in-process memory
+	cache.NewFileStore(ctx, "./cache-data") // local file-backed
+	cache.NewNullStore(ctx)                 // disabled / drop-only
+
+	rdb := redis.NewClient(&redis.Options{Addr: "127.0.0.1:6379"})
+	redisStore := rediscache.New(rediscache.Config{BaseConfig: base, Client: rdb})
+	_ = redisStore
+
+	memcachedStore := memcachedcache.New(memcachedcache.Config{
+		BaseConfig: base,
+		Addresses:  []string{"127.0.0.1:11211"},
+	})
+	_ = memcachedStore
+
+	var kv natscache.KeyValue // create via your NATS JetStream setup
+	natsStore := natscache.New(natscache.Config{BaseConfig: base, KeyValue: kv})
+	_ = natsStore
+
+	dynamoStore, err := dynamocache.New(ctx, dynamocache.Config{
+		BaseConfig: base,
+		Region:     "us-east-1",
+		Table:      "cache_entries",
+	})
+	fmt.Println(dynamoStore, err)
+
+	sqliteStore, err := sqlitecache.New(sqlitecache.Config{
+		BaseConfig: base,
+		DSN:        "file::memory:?cache=shared",
+		Table:      "cache_entries",
+	})
+	fmt.Println(sqliteStore, err)
+
+	postgresStore, err := postgrescache.New(postgrescache.Config{
+		BaseConfig: base,
+		DSN:        "postgres://user:pass@127.0.0.1:5432/app?sslmode=disable",
+		Table:      "cache_entries",
+	})
+	fmt.Println(postgresStore, err)
+
+	mysqlStore, err := mysqlcache.New(mysqlcache.Config{
+		BaseConfig: base,
+		DSN:        "user:pass@tcp(127.0.0.1:3306)/app?parseTime=true",
+		Table:      "cache_entries",
+	})
+	fmt.Println(mysqlStore, err)
+}
 ```
 
 ## Module Layout
