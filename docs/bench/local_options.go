@@ -19,7 +19,7 @@ type benchStoreOption func(benchConfig) benchConfig
 
 func benchWithPrefix(prefix string) benchStoreOption {
 	return func(cfg benchConfig) benchConfig {
-		cfg.Prefix = prefix
+		cfg.BaseConfig.Prefix = prefix
 		return cfg
 	}
 }

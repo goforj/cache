@@ -394,11 +394,11 @@ func newDynamoBenchStore(ctx context.Context, endpoint string, opts ...benchStor
 	for _, opt := range opts {
 		var benchCfg benchConfig
 		benchCfg = opt(benchCfg)
-		if benchCfg.DefaultTTL > 0 {
-			cfg.DefaultTTL = benchCfg.DefaultTTL
+		if benchCfg.BaseConfig.DefaultTTL > 0 {
+			cfg.DefaultTTL = benchCfg.BaseConfig.DefaultTTL
 		}
-		if benchCfg.Prefix != "" {
-			cfg.Prefix = benchCfg.Prefix
+		if benchCfg.BaseConfig.Prefix != "" {
+			cfg.Prefix = benchCfg.BaseConfig.Prefix
 		}
 		if benchCfg.DynamoClient != nil {
 			if client, ok := benchCfg.DynamoClient.(dynamocache.DynamoAPI); ok {
@@ -499,11 +499,11 @@ func newSQLBenchStore(driverName, dsn string, opts ...benchStoreOption) (cacheco
 	for _, opt := range opts {
 		var benchCfg benchConfig
 		benchCfg = opt(benchCfg)
-		if benchCfg.DefaultTTL > 0 {
-			cfg.DefaultTTL = benchCfg.DefaultTTL
+		if benchCfg.BaseConfig.DefaultTTL > 0 {
+			cfg.DefaultTTL = benchCfg.BaseConfig.DefaultTTL
 		}
-		if benchCfg.Prefix != "" {
-			cfg.Prefix = benchCfg.Prefix
+		if benchCfg.BaseConfig.Prefix != "" {
+			cfg.Prefix = benchCfg.BaseConfig.Prefix
 		}
 	}
 	if driverName == "sqlite" {
@@ -561,11 +561,11 @@ func natsCacheForURL(ctx context.Context, natsURL string, opts ...benchStoreOpti
 	for _, opt := range opts {
 		var benchCfg benchConfig
 		benchCfg = opt(benchCfg)
-		if benchCfg.DefaultTTL > 0 {
-			cfg.DefaultTTL = benchCfg.DefaultTTL
+		if benchCfg.BaseConfig.DefaultTTL > 0 {
+			cfg.DefaultTTL = benchCfg.BaseConfig.DefaultTTL
 		}
-		if benchCfg.Prefix != "" {
-			cfg.Prefix = benchCfg.Prefix
+		if benchCfg.BaseConfig.Prefix != "" {
+			cfg.Prefix = benchCfg.BaseConfig.Prefix
 		}
 		if benchCfg.NATSBucketTTL {
 			cfg.BucketTTL = true

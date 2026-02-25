@@ -22,6 +22,7 @@ import (
 	testcontainers "github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 
+	_ "github.com/go-sql-driver/mysql"
 	"github.com/goforj/cache"
 	"github.com/goforj/cache/cachecore"
 	"github.com/goforj/cache/driver/dynamocache"
@@ -30,6 +31,7 @@ import (
 	"github.com/goforj/cache/driver/rediscache"
 	"github.com/goforj/cache/driver/sqlcore"
 	"github.com/goforj/cache/driver/sqlitecache"
+	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -786,11 +788,11 @@ func buildCache(ctx context.Context, name string, opts ...benchStoreOption) (*ca
 			for _, opt := range opts {
 				var benchCfg benchConfig
 				benchCfg = opt(benchCfg)
-				if benchCfg.DefaultTTL > 0 {
-					cfg.DefaultTTL = benchCfg.DefaultTTL
+				if benchCfg.BaseConfig.DefaultTTL > 0 {
+					cfg.DefaultTTL = benchCfg.BaseConfig.DefaultTTL
 				}
-				if benchCfg.Prefix != "" {
-					cfg.Prefix = benchCfg.Prefix
+				if benchCfg.BaseConfig.Prefix != "" {
+					cfg.Prefix = benchCfg.BaseConfig.Prefix
 				}
 			}
 			store := rediscache.New(cfg)
@@ -818,11 +820,11 @@ func buildCache(ctx context.Context, name string, opts ...benchStoreOption) (*ca
 			for _, opt := range opts {
 				var benchCfg benchConfig
 				benchCfg = opt(benchCfg)
-				if benchCfg.DefaultTTL > 0 {
-					cfg.DefaultTTL = benchCfg.DefaultTTL
+				if benchCfg.BaseConfig.DefaultTTL > 0 {
+					cfg.DefaultTTL = benchCfg.BaseConfig.DefaultTTL
 				}
-				if benchCfg.Prefix != "" {
-					cfg.Prefix = benchCfg.Prefix
+				if benchCfg.BaseConfig.Prefix != "" {
+					cfg.Prefix = benchCfg.BaseConfig.Prefix
 				}
 			}
 			store := memcachedcache.New(cfg)
@@ -900,11 +902,11 @@ func startRedis(ctx context.Context, opts ...benchStoreOption) (*cache.Cache, fu
 	for _, opt := range opts {
 		var benchCfg benchConfig
 		benchCfg = opt(benchCfg)
-		if benchCfg.DefaultTTL > 0 {
-			cfg.DefaultTTL = benchCfg.DefaultTTL
+		if benchCfg.BaseConfig.DefaultTTL > 0 {
+			cfg.DefaultTTL = benchCfg.BaseConfig.DefaultTTL
 		}
-		if benchCfg.Prefix != "" {
-			cfg.Prefix = benchCfg.Prefix
+		if benchCfg.BaseConfig.Prefix != "" {
+			cfg.Prefix = benchCfg.BaseConfig.Prefix
 		}
 	}
 	store := rediscache.New(cfg)
@@ -922,11 +924,11 @@ func startMemcached(ctx context.Context, opts ...benchStoreOption) (*cache.Cache
 	for _, opt := range opts {
 		var benchCfg benchConfig
 		benchCfg = opt(benchCfg)
-		if benchCfg.DefaultTTL > 0 {
-			cfg.DefaultTTL = benchCfg.DefaultTTL
+		if benchCfg.BaseConfig.DefaultTTL > 0 {
+			cfg.DefaultTTL = benchCfg.BaseConfig.DefaultTTL
 		}
-		if benchCfg.Prefix != "" {
-			cfg.Prefix = benchCfg.Prefix
+		if benchCfg.BaseConfig.Prefix != "" {
+			cfg.Prefix = benchCfg.BaseConfig.Prefix
 		}
 	}
 	store := memcachedcache.New(cfg)
@@ -1039,11 +1041,11 @@ func newNATSBenchCache(ctx context.Context, natsURL string, opts ...benchStoreOp
 	for _, opt := range opts {
 		var benchCfg benchConfig
 		benchCfg = opt(benchCfg)
-		if benchCfg.DefaultTTL > 0 {
-			cfg.DefaultTTL = benchCfg.DefaultTTL
+		if benchCfg.BaseConfig.DefaultTTL > 0 {
+			cfg.DefaultTTL = benchCfg.BaseConfig.DefaultTTL
 		}
-		if benchCfg.Prefix != "" {
-			cfg.Prefix = benchCfg.Prefix
+		if benchCfg.BaseConfig.Prefix != "" {
+			cfg.Prefix = benchCfg.BaseConfig.Prefix
 		}
 		if benchCfg.NATSBucketTTL {
 			cfg.BucketTTL = true
@@ -1067,11 +1069,11 @@ func newSQLRenderStore(driverName, dsn string, opts ...benchStoreOption) (cachec
 	for _, opt := range opts {
 		var benchCfg benchConfig
 		benchCfg = opt(benchCfg)
-		if benchCfg.DefaultTTL > 0 {
-			cfg.DefaultTTL = benchCfg.DefaultTTL
+		if benchCfg.BaseConfig.DefaultTTL > 0 {
+			cfg.DefaultTTL = benchCfg.BaseConfig.DefaultTTL
 		}
-		if benchCfg.Prefix != "" {
-			cfg.Prefix = benchCfg.Prefix
+		if benchCfg.BaseConfig.Prefix != "" {
+			cfg.Prefix = benchCfg.BaseConfig.Prefix
 		}
 	}
 	if driverName == "sqlite" {
@@ -1093,11 +1095,11 @@ func newDynamoRenderStore(ctx context.Context, endpoint string, opts ...benchSto
 	for _, opt := range opts {
 		var benchCfg benchConfig
 		benchCfg = opt(benchCfg)
-		if benchCfg.DefaultTTL > 0 {
-			cfg.DefaultTTL = benchCfg.DefaultTTL
+		if benchCfg.BaseConfig.DefaultTTL > 0 {
+			cfg.DefaultTTL = benchCfg.BaseConfig.DefaultTTL
 		}
-		if benchCfg.Prefix != "" {
-			cfg.Prefix = benchCfg.Prefix
+		if benchCfg.BaseConfig.Prefix != "" {
+			cfg.Prefix = benchCfg.BaseConfig.Prefix
 		}
 		if benchCfg.DynamoClient != nil {
 			if client, ok := benchCfg.DynamoClient.(dynamocache.DynamoAPI); ok {

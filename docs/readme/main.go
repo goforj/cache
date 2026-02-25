@@ -543,14 +543,14 @@ type driverConfigSource struct {
 
 func driverConfigSources() []driverConfigSource {
 	return []driverConfigSource{
-		{RelDir: "driver/rediscache", IndexLabel: "Redis Config", Anchor: "driver-config-rediscache", Heading: "Redis (`driver/rediscache`)"},
-		{RelDir: "driver/memcachedcache", IndexLabel: "Memcached Config", Anchor: "driver-config-memcachedcache", Heading: "Memcached (`driver/memcachedcache`)"},
-		{RelDir: "driver/natscache", IndexLabel: "NATS Config", Anchor: "driver-config-natscache", Heading: "NATS (`driver/natscache`)"},
-		{RelDir: "driver/dynamocache", IndexLabel: "DynamoDB Config", Anchor: "driver-config-dynamocache", Heading: "DynamoDB (`driver/dynamocache`)"},
-		{RelDir: "driver/sqlitecache", IndexLabel: "SQLite Config", Anchor: "driver-config-sqlitecache", Heading: "SQLite (`driver/sqlitecache`)"},
-		{RelDir: "driver/postgrescache", IndexLabel: "Postgres Config", Anchor: "driver-config-postgrescache", Heading: "Postgres (`driver/postgrescache`)"},
-		{RelDir: "driver/mysqlcache", IndexLabel: "MySQL Config", Anchor: "driver-config-mysqlcache", Heading: "MySQL (`driver/mysqlcache`)"},
-		{RelDir: "driver/sqlcore", IndexLabel: "SQL Core Config", Anchor: "driver-config-sqlcore", Heading: "SQL Core (`driver/sqlcore`, advanced/shared implementation)"},
+		{RelDir: "driver/dynamocache", IndexLabel: "DynamoDB Config", Anchor: "driver-config-dynamocache", Heading: "DynamoDB"},
+		{RelDir: "driver/memcachedcache", IndexLabel: "Memcached Config", Anchor: "driver-config-memcachedcache", Heading: "Memcached"},
+		{RelDir: "driver/mysqlcache", IndexLabel: "MySQL Config", Anchor: "driver-config-mysqlcache", Heading: "MySQL"},
+		{RelDir: "driver/natscache", IndexLabel: "NATS Config", Anchor: "driver-config-natscache", Heading: "NATS"},
+		{RelDir: "driver/postgrescache", IndexLabel: "Postgres Config", Anchor: "driver-config-postgrescache", Heading: "Postgres"},
+		{RelDir: "driver/rediscache", IndexLabel: "Redis Config", Anchor: "driver-config-rediscache", Heading: "Redis"},
+		{RelDir: "driver/sqlcore", IndexLabel: "SQL Core Config", Anchor: "driver-config-sqlcore", Heading: "SQL Core (advanced/shared implementation)"},
+		{RelDir: "driver/sqlitecache", IndexLabel: "SQLite Config", Anchor: "driver-config-sqlitecache", Heading: "SQLite"},
 	}
 }
 
