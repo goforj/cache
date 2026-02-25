@@ -484,20 +484,7 @@ func renderAPI(root string, funcs []*FuncDoc) string {
 				}
 
 				buf.WriteString("```go\n")
-				for _, line := range strings.Split(ex.Code, "\n") {
-					trimmed := strings.TrimSpace(line)
-					if trimmed == "" {
-						continue
-					}
-					if trimmed == "ctx := context.Background()" {
-						continue
-					}
-					if trimmed == "c := cache.NewCache(cache.NewMemoryStore(ctx))" {
-						continue
-					}
-					if strings.HasPrefix(trimmed, "_ =") {
-						continue
-					}
+				for _, line := range trimReadmeExampleLeadingScaffold(ex.Code) {
 					buf.WriteString(line + "\n")
 				}
 				buf.WriteString("```\n\n")
@@ -506,6 +493,39 @@ func renderAPI(root string, funcs []*FuncDoc) string {
 	}
 
 	return strings.TrimRight(buf.String(), "\n")
+}
+
+func trimReadmeExampleLeadingScaffold(code string) []string {
+	lines := strings.Split(code, "\n")
+
+	i := 0
+	for i < len(lines) && strings.TrimSpace(lines[i]) == "" {
+		i++
+	}
+
+	for {
+		for i < len(lines) && strings.TrimSpace(lines[i]) == "" {
+			i++
+		}
+		if i >= len(lines) {
+			break
+		}
+		trimmed := strings.TrimSpace(lines[i])
+		if trimmed == "ctx := context.Background()" || trimmed == "c := cache.NewCache(cache.NewMemoryStore(ctx))" {
+			i++
+			continue
+		}
+		break
+	}
+
+	j := len(lines)
+	for j > i && strings.TrimSpace(lines[j-1]) == "" {
+		j--
+	}
+	if j <= i {
+		return nil
+	}
+	return lines[i:j]
 }
 
 type driverConfigDoc struct {

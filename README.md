@@ -677,6 +677,7 @@ fmt.Println(store.Driver()) // sql
 Delete removes a single key.
 
 ```go
+_ = c.SetBytes("a", []byte("1"), time.Minute)
 fmt.Println(c.Delete("a") == nil) // true
 ```
 
@@ -693,6 +694,7 @@ fmt.Println(c.DeleteMany("a", "b") == nil) // true
 Flush clears all keys for this store scope.
 
 ```go
+_ = c.SetBytes("a", []byte("1"), time.Minute)
 fmt.Println(c.Flush() == nil) // true
 ```
 
@@ -702,6 +704,9 @@ Pull returns a typed value for key and removes it, using the default codec (JSON
 
 ```go
 type Token struct { Value string `json:"value"` }
+ctx := context.Background()
+c := cache.NewCache(cache.NewMemoryStore(ctx))
+_ = cache.Set(c, "reset:token:42", Token{Value: "abc"}, time.Minute)
 tok, ok, err := cache.Pull[Token](c, "reset:token:42")
 fmt.Println(err == nil, ok, tok.Value) // true true abc
 ```
@@ -711,6 +716,7 @@ fmt.Println(err == nil, ok, tok.Value) // true true abc
 PullBytes returns value and removes it from cache.
 
 ```go
+_ = c.SetString("reset:token:42", "abc", time.Minute)
 body, ok, _ := c.PullBytes("reset:token:42")
 fmt.Println(ok, string(body)) // true abc
 ```
@@ -777,6 +783,7 @@ lock := c.NewLockHandle("job:sync", 10*time.Second)
 locked, err := lock.Acquire()
 fmt.Println(err == nil, locked) // true true
 if locked {
+	_ = lock.Release()
 }
 ```
 
@@ -791,6 +798,7 @@ successful release.
 lock := c.NewLockHandle("job:sync", 10*time.Second)
 locked, _ := lock.Acquire()
 if locked {
+	_ = lock.Release()
 }
 ```
 
@@ -810,6 +818,7 @@ Unlock releases a previously acquired lock key.
 ```go
 locked, _ := c.TryLock("job:sync", 10*time.Second)
 if locked {
+	_ = c.Unlock("job:sync")
 }
 ```
 
@@ -843,6 +852,8 @@ OnCacheOp implements Observer.
 ```go
 obs := cache.ObserverFunc(func(ctx context.Context, op, key string, hit bool, err error, dur time.Duration, driver cachecore.Driver) {
 	fmt.Println(op, key, hit, err == nil, driver)
+	_ = ctx
+	_ = dur
 })
 obs.OnCacheOp(context.Background(), "get", "user:42", true, nil, time.Millisecond, cachecore.DriverMemory)
 ```
@@ -855,6 +866,9 @@ WithObserver attaches an observer to receive operation events.
 c = c.WithObserver(cache.ObserverFunc(func(ctx context.Context, op, key string, hit bool, err error, dur time.Duration, driver cachecore.Driver) {
 	// See docs/production-guide.md for a real metrics recipe.
 	fmt.Println(op, driver, hit, err == nil)
+	_ = ctx
+	_ = key
+	_ = dur
 }))
 _, _, _ = c.GetBytes("profile:42")
 ```
@@ -879,6 +893,8 @@ Remember is the ergonomic, typed remember helper using JSON encoding by default.
 
 ```go
 type Profile struct { Name string `json:"name"` }
+ctx := context.Background()
+c := cache.NewCache(cache.NewMemoryStore(ctx))
 profile, err := cache.Remember[Profile](c, "profile:42", time.Minute, func() (Profile, error) {
 	return Profile{Name: "Ada"}, nil
 })
@@ -902,6 +918,8 @@ RememberStale returns a typed value with stale fallback semantics using JSON enc
 
 ```go
 type Profile struct { Name string `json:"name"` }
+ctx := context.Background()
+c := cache.NewCache(cache.NewMemoryStore(ctx))
 profile, usedStale, err := cache.RememberStale[Profile](c, "profile:42", time.Minute, 10*time.Minute, func() (Profile, error) {
 	return Profile{Name: "Ada"}, nil
 })
@@ -927,6 +945,8 @@ RememberStaleCtx returns a typed value with stale fallback semantics using JSON 
 
 ```go
 type Profile struct { Name string `json:"name"` }
+ctx := context.Background()
+c := cache.NewCache(cache.NewMemoryStore(ctx))
 profile, usedStale, err := cache.RememberStaleCtx[Profile](ctx, c, "profile:42", time.Minute, 10*time.Minute, func(ctx context.Context) (Profile, error) {
 	return Profile{Name: "Ada"}, nil
 })
@@ -941,6 +961,8 @@ BatchGetBytes returns all found values for the provided keys.
 Missing keys are omitted from the returned map.
 
 ```go
+_ = c.SetBytes("a", []byte("1"), time.Minute)
+_ = c.SetBytes("b", []byte("2"), time.Minute)
 values, err := c.BatchGetBytes("a", "b", "missing")
 fmt.Println(err == nil, string(values["a"]), string(values["b"])) // true 1 2
 ```
@@ -951,6 +973,10 @@ Get returns a typed value for key using the default codec (JSON) when present.
 
 ```go
 type Profile struct { Name string `json:"name"` }
+ctx := context.Background()
+c := cache.NewCache(cache.NewMemoryStore(ctx))
+_ = cache.Set(c, "profile:42", Profile{Name: "Ada"}, time.Minute)
+_ = cache.Set(c, "settings:mode", "dark", time.Minute)
 profile, ok, err := cache.Get[Profile](c, "profile:42")
 mode, ok2, err2 := cache.Get[string](c, "settings:mode")
 fmt.Println(err == nil, ok, profile.Name, err2 == nil, ok2, mode) // true true Ada true true dark
@@ -963,6 +989,7 @@ GetBytes returns raw bytes for key when present.
 ```go
 s := cache.NewMemoryStore(ctx)
 c := cache.NewCache(s)
+_ = c.SetBytes("user:42", []byte("Ada"), 0)
 value, ok, _ := c.GetBytes("user:42")
 fmt.Println(ok, string(value)) // true Ada
 ```
@@ -973,6 +1000,9 @@ GetJSON decodes a JSON value into T when key exists, using background context.
 
 ```go
 type Profile struct { Name string `json:"name"` }
+ctx := context.Background()
+c := cache.NewCache(cache.NewMemoryStore(ctx))
+_ = cache.SetJSON(c, "profile:42", Profile{Name: "Ada"}, time.Minute)
 profile, ok, err := cache.GetJSON[Profile](c, "profile:42")
 fmt.Println(err == nil, ok, profile.Name) // true true Ada
 ```
@@ -982,6 +1012,7 @@ fmt.Println(err == nil, ok, profile.Name) // true true Ada
 GetString returns a UTF-8 string value for key when present.
 
 ```go
+_ = c.SetString("user:42:name", "Ada", 0)
 name, ok, _ := c.GetString("user:42:name")
 fmt.Println(ok, name) // true Ada
 ```
@@ -994,6 +1025,8 @@ RefreshAhead returns a typed value and refreshes asynchronously when near expiry
 
 ```go
 type Summary struct { Text string `json:"text"` }
+ctx := context.Background()
+c := cache.NewCache(cache.NewMemoryStore(ctx))
 s, err := cache.RefreshAhead[Summary](c, "dashboard:summary", time.Minute, 10*time.Second, func() (Summary, error) {
 	return Summary{Text: "ok"}, nil
 })
@@ -1025,6 +1058,7 @@ AssertCalled verifies key was touched by op the expected number of times.
 ```go
 f := cachefake.New()
 c := f.Cache()
+_ = c.SetString("settings:mode", "dark", 0)
 t := &testing.T{}
 f.AssertCalled(t, cachefake.OpSet, "settings:mode", 1)
 ```
@@ -1046,6 +1080,8 @@ AssertTotal ensures the total call count for an op matches times.
 ```go
 f := cachefake.New()
 c := f.Cache()
+_ = c.Delete("a")
+_ = c.Delete("b")
 t := &testing.T{}
 f.AssertTotal(t, cachefake.OpDelete, 2)
 ```
@@ -1067,7 +1103,9 @@ Count returns calls for op+key.
 ```go
 f := cachefake.New()
 c := f.Cache()
+_ = c.SetString("settings:mode", "dark", 0)
 n := f.Count(cachefake.OpSet, "settings:mode")
+_ = n
 ```
 
 ### <a id="new"></a>New
@@ -1077,6 +1115,7 @@ New creates a Fake using an in-memory store.
 ```go
 f := cachefake.New()
 c := f.Cache()
+_ = c.SetString("settings:mode", "dark", 0)
 ```
 
 ### <a id="fake-reset"></a>Reset
@@ -1085,6 +1124,7 @@ Reset clears recorded counts.
 
 ```go
 f := cachefake.New()
+_ = f.Cache().SetString("settings:mode", "dark", 0)
 f.Reset()
 ```
 
@@ -1095,7 +1135,10 @@ Total returns total calls for an op across keys.
 ```go
 f := cachefake.New()
 c := f.Cache()
+_ = c.Delete("a")
+_ = c.Delete("b")
 n := f.Total(cachefake.OpDelete)
+_ = n
 ```
 
 ## Writes
@@ -1145,6 +1188,8 @@ Set encodes value with the default codec (JSON) and writes it to key.
 
 ```go
 type Settings struct { Enabled bool `json:"enabled"` }
+ctx := context.Background()
+c := cache.NewCache(cache.NewMemoryStore(ctx))
 err := cache.Set(c, "settings:alerts", Settings{Enabled: true}, time.Minute)
 err2 := cache.Set(c, "settings:mode", "dark", time.Minute)
 fmt.Println(err == nil, err2 == nil) // true true
@@ -1164,6 +1209,8 @@ SetJSON encodes value as JSON and writes it to key using background context.
 
 ```go
 type Settings struct { Enabled bool `json:"enabled"` }
+ctx := context.Background()
+c := cache.NewCache(cache.NewMemoryStore(ctx))
 err := cache.SetJSON(c, "settings:alerts", Settings{Enabled: true}, time.Minute)
 fmt.Println(err == nil) // true
 ```
