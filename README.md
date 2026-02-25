@@ -125,22 +125,65 @@ func main() {
 
 ## Config Options
 
-Cache uses explicit config structs throughout.
+Cache uses explicit config structs throughout, with shared fields embedded via `cachecore.BaseConfig`.
 
-Shared options live in `cachecore.BaseConfig` (embedded by root store config and driver configs):
+Shared config (embedded by root stores and optional drivers):
 
-- `DefaultTTL`
-- `Prefix`
-- `Compression`
-- `MaxValueBytes`
-- `EncryptionKey`
+```go
+type BaseConfig struct {
+	DefaultTTL    time.Duration
+	Prefix        string
+	Compression   CompressionCodec
+	MaxValueBytes int
+	EncryptionKey []byte
+}
+```
 
-Use the config type closest to where the store is constructed:
+Root-backed stores use `cache.StoreConfig`:
 
-- Root-backed stores (`memory`, `file`, `null`): `cache.StoreConfig` with `NewMemoryStoreWithConfig`, `NewFileStoreWithConfig`, `NewNullStoreWithConfig`
-- Optional backends: driver-local config types (`rediscache.Config`, `memcachedcache.Config`, `natscache.Config`, `dynamocache.Config`, `sqlitecache.Config`, `postgrescache.Config`, `mysqlcache.Config`)
+```go
+type StoreConfig struct {
+	cachecore.BaseConfig
+	MemoryCleanupInterval time.Duration
+	FileDir               string
+}
+```
 
-The API Index includes a `Driver Configs` section with per-driver defaults and compile-checked examples.
+Typical root constructor usage:
+
+```go
+store := cache.NewMemoryStoreWithConfig(ctx, cache.StoreConfig{
+	BaseConfig: cachecore.BaseConfig{
+		DefaultTTL: 5 * time.Minute,
+		Prefix:     "app",
+	},
+	MemoryCleanupInterval: time.Minute,
+})
+```
+
+Optional backends use driver-local config types that embed the same `cachecore.BaseConfig` plus backend-specific fields.
+
+Example shapes:
+
+```go
+// rediscache.Config (abridged)
+type Config struct {
+	cachecore.BaseConfig
+	Client rediscache.Client
+}
+```
+
+```go
+// sqlitecache.Config (abridged)
+type Config struct {
+	cachecore.BaseConfig
+	DSN   string
+	Table string
+}
+```
+
+See the API Index `Driver Configs` section for per-driver defaults and compile-checked examples for:
+`rediscache`, `memcachedcache`, `natscache`, `dynamocache`, `sqlitecache`, `postgrescache`, `mysqlcache`, and `sqlcore`.
 
 ## Behavior Semantics
 
