@@ -42,7 +42,9 @@ func run() error {
 		return err
 	}
 
-	integrationNames, err := integrationTopLevelTests(root)
+	integrationDir := filepath.Join(root, "integration")
+
+	integrationNames, err := integrationTopLevelTests(integrationDir)
 	if err != nil {
 		return fmt.Errorf("integration top-level tests: %w", err)
 	}
@@ -52,7 +54,7 @@ func run() error {
 		return fmt.Errorf("count unit test runs: %w", err)
 	}
 
-	integrationCount, err := countRunEvents(root, integrationNames)
+	integrationCount, err := countIntegrationRunEvents(integrationDir, integrationNames)
 	if err != nil {
 		return fmt.Errorf("count integration test runs: %w", err)
 	}
@@ -124,6 +126,50 @@ func countRunEvents(root string, integrationPrefixes map[string]struct{}) (int, 
 		}
 	}
 
+	return total, nil
+}
+
+func countIntegrationRunEvents(integrationDir string, integrationPrefixes map[string]struct{}) (int, error) {
+	runPattern := buildTopLevelRunPattern(integrationPrefixes)
+	if runPattern == "" {
+		return 0, nil
+	}
+
+	args := []string{"test", "-tags=integration", "./root", "./all", "-run", runPattern, "-count=1", "-json"}
+	cmd := exec.Command("go", args...)
+	cmd.Dir = integrationDir
+	// Keep this badge updater Docker-free by default.
+	cmd.Env = append(os.Environ(), "INTEGRATION_DRIVER=memory,file,null,sqlitecache")
+
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = &out
+
+	if err := cmd.Run(); err != nil {
+		return 0, fmt.Errorf("go %s: %w\n%s", strings.Join(args, " "), err, out.String())
+	}
+
+	var total int
+	dec := json.NewDecoder(bytes.NewReader(out.Bytes()))
+	for dec.More() {
+		var event struct {
+			Action string `json:"Action"`
+			Test   string `json:"Test"`
+		}
+		if err := dec.Decode(&event); err != nil {
+			return 0, err
+		}
+		if event.Action != "run" || event.Test == "" {
+			continue
+		}
+		top := event.Test
+		if i := strings.IndexByte(top, '/'); i >= 0 {
+			top = top[:i]
+		}
+		if _, ok := integrationPrefixes[top]; ok {
+			total++
+		}
+	}
 	return total, nil
 }
 

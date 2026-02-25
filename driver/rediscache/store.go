@@ -40,7 +40,22 @@ type store struct {
 
 // New builds a Redis-backed cachecore.Store.
 //
-// A nil client is allowed for parity with the root implementation; operations return errors.
+// Defaults:
+// - DefaultTTL: 5*time.Minute when zero
+// - Prefix: "app" when empty
+// - Client: nil allowed (operations return errors until a client is provided)
+//
+// Example: explicit Redis driver config
+//
+//	rdb := redis.NewClient(&redis.Options{Addr: "127.0.0.1:6379"})
+//	store := rediscache.New(rediscache.Config{
+//		BaseConfig: cachecore.BaseConfig{
+//			DefaultTTL: 5 * time.Minute,
+//			Prefix:     "app",
+//		},
+//		Client: rdb,
+//	})
+//	fmt.Println(store.Driver()) // redis
 func New(cfg Config) cachecore.Store {
 	ttl := cfg.DefaultTTL
 	if ttl <= 0 {

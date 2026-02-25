@@ -40,35 +40,27 @@ func run() error {
 		return err
 	}
 
-	fset := token.NewFileSet()
-	pkgs, err := parser.ParseDir(fset, root, nil, parser.ParseComments)
-	if err != nil {
-		return err
-	}
-
-	pkgName, err := selectPackage(pkgs)
-	if err != nil {
-		return err
-	}
-
-	pkg, ok := pkgs[pkgName]
-	if !ok {
-		return fmt.Errorf(`package %q not found in %s`, pkgName, root)
-	}
-
 	funcs := map[string]*FuncDoc{}
-
-	for filename, file := range pkg.Files {
-		if strings.Contains(filename, "_test.go") {
-			continue
+	if err := collectExamplesFromDir(funcs, root, modPath, ""); err != nil {
+		return err
+	}
+	for _, rel := range []string{
+		"driver/rediscache",
+		"driver/memcachedcache",
+		"driver/natscache",
+		"driver/dynamocache",
+		"driver/sqlcore",
+		"driver/sqlitecache",
+		"driver/postgrescache",
+		"driver/mysqlcache",
+	} {
+		dir := filepath.Join(root, rel)
+		driverModPath, err := modulePath(dir)
+		if err != nil {
+			return err
 		}
-
-		for name, fd := range extractFuncDocs(fset, filename, file) {
-			if existing, ok := funcs[name]; ok {
-				existing.Examples = append(existing.Examples, fd.Examples...)
-			} else {
-				funcs[name] = fd
-			}
+		if err := collectExamplesFromDir(funcs, dir, driverModPath, ""); err != nil {
+			return err
 		}
 	}
 
@@ -79,7 +71,7 @@ func run() error {
 	}
 
 	for _, fd := range funcs {
-		if err := writeMain(examplesDir, fd, modPath); err != nil {
+		if err := writeMain(examplesDir, fd, fd.ImportPath); err != nil {
 			return err
 		}
 
@@ -119,6 +111,48 @@ func modulePath(root string) (string, error) {
 	return "", fmt.Errorf("module path not found in go.mod")
 }
 
+func collectExamplesFromDir(funcs map[string]*FuncDoc, dir, importPath, slugPrefix string) error {
+	fset := token.NewFileSet()
+	pkgs, err := parser.ParseDir(fset, dir, nil, parser.ParseComments)
+	if err != nil {
+		return err
+	}
+
+	pkgName, err := selectPackage(pkgs)
+	if err != nil {
+		return err
+	}
+	pkg, ok := pkgs[pkgName]
+	if !ok {
+		return fmt.Errorf(`package %q not found in %s`, pkgName, dir)
+	}
+
+	prefix := slugPrefix
+	if prefix == "" && pkgName != "cache" {
+		prefix = pkgName + "_"
+	}
+
+	for filename, file := range pkg.Files {
+		if strings.Contains(filename, "_test.go") {
+			continue
+		}
+		for name, fd := range extractFuncDocs(fset, filename, file) {
+			fd.ImportPath = importPath
+			if prefix != "" {
+				fd.Slug = prefix + strings.ToLower(fd.Slug)
+				name = fd.Slug
+			}
+			if existing, ok := funcs[name]; ok {
+				existing.Examples = append(existing.Examples, fd.Examples...)
+			} else {
+				funcs[name] = fd
+			}
+		}
+	}
+
+	return nil
+}
+
 //
 // ------------------------------------------------------------
 // Data models
@@ -128,6 +162,7 @@ func modulePath(root string) (string, error) {
 type FuncDoc struct {
 	Name        string
 	Slug        string
+	ImportPath  string
 	Group       string
 	Description string
 	Examples    []Example

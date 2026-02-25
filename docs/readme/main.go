@@ -42,7 +42,7 @@ func run() error {
 		return err
 	}
 
-	api := renderAPI(funcs)
+	api := renderAPI(root, funcs)
 
 	readmePath := filepath.Join(root, "README.md")
 	data, err := os.ReadFile(readmePath)
@@ -96,11 +96,15 @@ var (
 )
 
 func parseFuncs(root string) ([]*FuncDoc, error) {
+	return parseFuncsInDir(root)
+}
+
+func parseFuncsInDir(dir string) ([]*FuncDoc, error) {
 	fset := token.NewFileSet()
 
 	pkgs, err := parser.ParseDir(
 		fset,
-		root,
+		dir,
 		func(info os.FileInfo) bool {
 			return !strings.HasSuffix(info.Name(), "_test.go")
 		},
@@ -348,7 +352,7 @@ func selectPackage(pkgs map[string]*ast.Package) (string, error) {
 // ------------------------------------------------------------
 //
 
-func renderAPI(funcs []*FuncDoc) string {
+func renderAPI(root string, funcs []*FuncDoc) string {
 	byGroup := map[string][]*FuncDoc{}
 	nameCounts := map[string]int{}
 	byKey := map[string]*FuncDoc{}
@@ -416,8 +420,12 @@ func renderAPI(funcs []*FuncDoc) string {
 		))
 	}
 
+	buf.WriteString(renderDriverConfigIndexRow(root))
+
 	buf.WriteString("\n\n")
 	buf.WriteString("_Examples assume `ctx := context.Background()` and `c := cache.NewCache(cache.NewMemoryStore(ctx))` unless shown otherwise._\n\n")
+	buf.WriteString(renderDriverConfigIndex(root))
+	buf.WriteString("\n")
 
 	// ---------------- Details ----------------
 	for _, group := range groupNames {
@@ -468,6 +476,151 @@ func renderAPI(funcs []*FuncDoc) string {
 	}
 
 	return strings.TrimRight(buf.String(), "\n")
+}
+
+type driverConfigDoc struct {
+	IndexLabel  string
+	Anchor      string
+	Heading     string
+	Description string
+	Examples    []Example
+	Shared      bool
+}
+
+func driverConfigDocs(root string) []driverConfigDoc {
+	docs := []driverConfigDoc{sharedBaseConfigDoc()}
+	for _, src := range driverConfigSources() {
+		dir := filepath.Join(root, src.RelDir)
+		funcs, err := parseFuncsInDir(dir)
+		if err != nil {
+			docs = append(docs, driverConfigDoc{
+				IndexLabel: src.IndexLabel,
+				Anchor:     src.Anchor,
+				Heading:    src.Heading,
+				Description: fmt.Sprintf(
+					"Defaults and examples unavailable: failed to parse `%s` (`%v`).",
+					src.RelDir, err,
+				),
+			})
+			continue
+		}
+		var newFn *FuncDoc
+		for _, fd := range funcs {
+			if fd.Name == "New" && !strings.Contains(fd.Key, ".") {
+				newFn = fd
+				break
+			}
+		}
+		if newFn == nil {
+			docs = append(docs, driverConfigDoc{
+				IndexLabel: src.IndexLabel,
+				Anchor:     src.Anchor,
+				Heading:    src.Heading,
+				Description: fmt.Sprintf(
+					"Defaults and examples unavailable: exported `New` doc not found in `%s`.",
+					src.RelDir,
+				),
+			})
+			continue
+		}
+		docs = append(docs, driverConfigDoc{
+			IndexLabel:  src.IndexLabel,
+			Anchor:      src.Anchor,
+			Heading:     src.Heading,
+			Description: trimDriverNewLeadLine(newFn.Description),
+			Examples:    newFn.Examples,
+		})
+	}
+	return docs
+}
+
+type driverConfigSource struct {
+	RelDir     string
+	IndexLabel string
+	Anchor     string
+	Heading    string
+}
+
+func driverConfigSources() []driverConfigSource {
+	return []driverConfigSource{
+		{RelDir: "driver/rediscache", IndexLabel: "Redis Config", Anchor: "driver-config-rediscache", Heading: "Redis (`driver/rediscache`)"},
+		{RelDir: "driver/memcachedcache", IndexLabel: "Memcached Config", Anchor: "driver-config-memcachedcache", Heading: "Memcached (`driver/memcachedcache`)"},
+		{RelDir: "driver/natscache", IndexLabel: "NATS Config", Anchor: "driver-config-natscache", Heading: "NATS (`driver/natscache`)"},
+		{RelDir: "driver/dynamocache", IndexLabel: "DynamoDB Config", Anchor: "driver-config-dynamocache", Heading: "DynamoDB (`driver/dynamocache`)"},
+		{RelDir: "driver/sqlitecache", IndexLabel: "SQLite Config", Anchor: "driver-config-sqlitecache", Heading: "SQLite (`driver/sqlitecache`)"},
+		{RelDir: "driver/postgrescache", IndexLabel: "Postgres Config", Anchor: "driver-config-postgrescache", Heading: "Postgres (`driver/postgrescache`)"},
+		{RelDir: "driver/mysqlcache", IndexLabel: "MySQL Config", Anchor: "driver-config-mysqlcache", Heading: "MySQL (`driver/mysqlcache`)"},
+		{RelDir: "driver/sqlcore", IndexLabel: "SQL Core Config", Anchor: "driver-config-sqlcore", Heading: "SQL Core (`driver/sqlcore`, advanced/shared implementation)"},
+	}
+}
+
+func sharedBaseConfigDoc() driverConfigDoc {
+	return driverConfigDoc{
+		IndexLabel: "Shared BaseConfig",
+		Anchor:     "driver-configs-shared-baseconfig",
+		Heading:    "Shared `cachecore.BaseConfig`",
+		Shared:     true,
+		Description: strings.Join([]string{
+			"Shared fields are embedded via `cachecore.BaseConfig` on every driver config:",
+			"",
+			"- `DefaultTTL`: defaults to `5*time.Minute` when zero in all optional drivers",
+			"- `Prefix`: defaults to `\"app\"` when empty in all optional drivers",
+			"- `Compression`: default zero value (`cachecore.CompressionNone`) unless set",
+			"- `MaxValueBytes`: default `0` (no limit) unless set",
+			"- `EncryptionKey`: default `nil` (disabled) unless set",
+		}, "\n"),
+	}
+}
+
+func trimDriverNewLeadLine(desc string) string {
+	lines := strings.Split(strings.TrimSpace(desc), "\n")
+	if len(lines) == 0 {
+		return ""
+	}
+	if strings.HasPrefix(lines[0], "New builds ") || strings.HasPrefix(lines[0], "New ") {
+		lines = lines[1:]
+	}
+	for len(lines) > 0 && strings.TrimSpace(lines[0]) == "" {
+		lines = lines[1:]
+	}
+	return strings.TrimSpace(strings.Join(lines, "\n"))
+}
+
+func renderDriverConfigIndexRow(root string) string {
+	docs := driverConfigDocs(root)
+	links := make([]string, 0, len(docs))
+	for _, d := range docs {
+		links = append(links, fmt.Sprintf("[%s](#%s)", d.IndexLabel, d.Anchor))
+	}
+	return fmt.Sprintf("| **Driver Configs** | %s |\n", strings.Join(links, " "))
+}
+
+func renderDriverConfigIndex(root string) string {
+	var buf bytes.Buffer
+
+	buf.WriteString("### <a id=\"driver-configs\"></a>Driver Config Examples (Optional Backends)\n\n")
+	docs := driverConfigDocs(root)
+	for _, d := range docs {
+		buf.WriteString(fmt.Sprintf("#### <a id=\"%s\"></a>%s\n\n", d.Anchor, d.Heading))
+		if d.Description != "" {
+			buf.WriteString(d.Description + "\n\n")
+		}
+		for _, ex := range d.Examples {
+			if ex.Label != "" && len(d.Examples) > 1 {
+				buf.WriteString(fmt.Sprintf("_Example: %s_\n\n", ex.Label))
+			}
+			buf.WriteString("```go\n")
+			for _, line := range strings.Split(ex.Code, "\n") {
+				if strings.TrimSpace(line) == "" {
+					continue
+				}
+				buf.WriteString(line + "\n")
+			}
+			buf.WriteString("```\n\n")
+		}
+	}
+
+	return buf.String()
 }
 
 func renderName(fn *FuncDoc, nameCounts map[string]int) string {

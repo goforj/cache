@@ -47,6 +47,22 @@ type memcachedConn struct {
 }
 
 // New builds a Memcached-backed cachecore.Store.
+//
+// Defaults:
+// - Addresses: []string{"127.0.0.1:11211"} when empty
+// - DefaultTTL: 5*time.Minute when zero
+// - Prefix: "app" when empty
+//
+// Example: memcached cluster via explicit driver config
+//
+//	store := memcachedcache.New(memcachedcache.Config{
+//		BaseConfig: cachecore.BaseConfig{
+//			DefaultTTL: 5 * time.Minute,
+//			Prefix:     "app",
+//		},
+//		Addresses: []string{"127.0.0.1:11211"},
+//	})
+//	fmt.Println(store.Driver()) // memcached
 func New(cfg Config) cachecore.Store {
 	addrs := cfg.Addresses
 	if len(addrs) == 0 {

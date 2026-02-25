@@ -44,6 +44,29 @@ type sqlStore struct {
 var sqlIdentPartRE = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
 // New builds a SQL-backed cachecore.Store (postgres, mysql, sqlite).
+//
+// Defaults:
+// - Table: "cache_entries" when empty
+// - DefaultTTL: 5*time.Minute when zero
+// - Prefix: "app" when empty
+// - DriverName: required
+// - DSN: required
+//
+// Example: advanced shared SQL core config
+//
+//	store, err := sqlcore.New(sqlcore.Config{
+//		BaseConfig: cachecore.BaseConfig{
+//			DefaultTTL: 5 * time.Minute,
+//			Prefix:     "app",
+//		},
+//		DriverName: "sqlite",
+//		DSN:        "file::memory:?cache=shared",
+//		Table:      "cache_entries",
+//	})
+//	if err != nil {
+//		panic(err)
+//	}
+//	fmt.Println(store.Driver()) // sql
 func New(cfg Config) (cachecore.Store, error) {
 	if cfg.DriverName == "" || cfg.DSN == "" {
 		return nil, errors.New("sql driver requires driver name and dsn")
