@@ -125,10 +125,22 @@ func main() {
 
 ## Config Options
 
-Use explicit config structs for root stores and driver modules.
+Cache uses explicit config structs throughout.
 
-- Root stores (`memory`, `file`, `null`): see the API Index entries for `NewMemoryStoreWithConfig`, `NewFileStoreWithConfig`, and `NewNullStoreWithConfig`
-- Optional backends: use driver-local config types (`rediscache.Config`, `memcachedcache.Config`, `natscache.Config`, `dynamocache.Config`, `sqlitecache.Config`, `postgrescache.Config`, `mysqlcache.Config`) and see each driver package docs for supported options/defaults
+Shared options live in `cachecore.BaseConfig` (embedded by root store config and driver configs):
+
+- `DefaultTTL`
+- `Prefix`
+- `Compression`
+- `MaxValueBytes`
+- `EncryptionKey`
+
+Use the config type closest to where the store is constructed:
+
+- Root-backed stores (`memory`, `file`, `null`): `cache.StoreConfig` with `NewMemoryStoreWithConfig`, `NewFileStoreWithConfig`, `NewNullStoreWithConfig`
+- Optional backends: driver-local config types (`rediscache.Config`, `memcachedcache.Config`, `natscache.Config`, `dynamocache.Config`, `sqlitecache.Config`, `postgrescache.Config`, `mysqlcache.Config`)
+
+The API Index includes a `Driver Configs` section with per-driver defaults and compile-checked examples.
 
 ## Behavior Semantics
 
