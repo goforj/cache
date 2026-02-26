@@ -443,10 +443,6 @@ func writeMain(base string, fd *FuncDoc, importPath string) error {
 
 	var buf bytes.Buffer
 
-	// Build tag
-	buf.WriteString("//go:build ignore\n")
-	buf.WriteString("// +build ignore\n\n")
-
 	buf.WriteString("package main\n\n")
 
 	imports := map[string]bool{
