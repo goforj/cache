@@ -21,9 +21,3 @@ replace github.com/goforj/cache/driver/rediscache => ../driver/rediscache
 replace github.com/goforj/cache/driver/sqlcore => ../driver/sqlcore
 
 replace github.com/goforj/cache/driver/sqlitecache => ../driver/sqlitecache
-
-require (
-	github.com/goforj/cache v0.0.0 // indirect
-	github.com/goforj/cache/cachecore v0.0.0 // indirect
-	github.com/patrickmn/go-cache v2.1.0+incompatible // indirect
-)
