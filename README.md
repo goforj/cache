@@ -379,6 +379,7 @@ _Examples assume `ctx := context.Background()` and `c := cache.NewCache(cache.Ne
 NewFileStore is a convenience for a filesystem-backed store.
 
 ```go
+ctx := context.Background()
 store := cache.NewFileStore(ctx, "/tmp/my-cache")
 fmt.Println(store.Driver()) // file
 ```
@@ -388,6 +389,7 @@ fmt.Println(store.Driver()) // file
 NewFileStoreWithConfig builds a filesystem-backed store using explicit root config.
 
 ```go
+ctx := context.Background()
 store := cache.NewFileStoreWithConfig(ctx, cache.StoreConfig{
 	BaseConfig: cachecore.BaseConfig{
 		EncryptionKey: []byte("01234567890123456789012345678901"),
@@ -404,6 +406,7 @@ fmt.Println(store.Driver()) // file
 NewMemoryStore is a convenience for an in-process store using defaults.
 
 ```go
+ctx := context.Background()
 store := cache.NewMemoryStore(ctx)
 fmt.Println(store.Driver()) // memory
 ```
@@ -413,6 +416,7 @@ fmt.Println(store.Driver()) // memory
 NewMemoryStoreWithConfig builds an in-process store using explicit root config.
 
 ```go
+ctx := context.Background()
 store := cache.NewMemoryStoreWithConfig(ctx, cache.StoreConfig{
 	BaseConfig: cachecore.BaseConfig{
 		DefaultTTL:  30 * time.Second,
@@ -428,6 +432,7 @@ fmt.Println(store.Driver()) // memory
 NewNullStore is a no-op store useful for tests where caching should be disabled.
 
 ```go
+ctx := context.Background()
 store := cache.NewNullStore(ctx)
 fmt.Println(store.Driver()) // null
 ```
@@ -437,6 +442,7 @@ fmt.Println(store.Driver()) // null
 NewNullStoreWithConfig builds a null store with shared wrappers (compression/encryption/limits).
 
 ```go
+ctx := context.Background()
 store := cache.NewNullStoreWithConfig(ctx, cache.StoreConfig{
 	BaseConfig: cachecore.BaseConfig{
 		Compression:   cache.CompressionGzip,
@@ -457,6 +463,7 @@ Driver reports the underlying store driver.
 NewCache creates a cache facade bound to a concrete store.
 
 ```go
+ctx := context.Background()
 s := cache.NewMemoryStore(ctx)
 c := cache.NewCache(s)
 fmt.Println(c.Driver()) // memory
@@ -467,6 +474,7 @@ fmt.Println(c.Driver()) // memory
 NewCacheWithTTL lets callers override the default TTL applied when ttl <= 0.
 
 ```go
+ctx := context.Background()
 s := cache.NewMemoryStore(ctx)
 c := cache.NewCacheWithTTL(s, 2*time.Minute)
 fmt.Println(c.Driver(), c != nil) // memory true
@@ -477,6 +485,8 @@ fmt.Println(c.Driver(), c != nil) // memory true
 Store returns the underlying store implementation.
 
 ```go
+ctx := context.Background()
+c := cache.NewCache(cache.NewMemoryStore(ctx))
 fmt.Println(c.Store().Driver()) // memory
 ```
 
@@ -681,6 +691,8 @@ fmt.Println(store.Driver()) // sql
 Delete removes a single key.
 
 ```go
+ctx := context.Background()
+c := cache.NewCache(cache.NewMemoryStore(ctx))
 _ = c.SetBytes("a", []byte("1"), time.Minute)
 fmt.Println(c.Delete("a") == nil) // true
 ```
@@ -690,6 +702,8 @@ fmt.Println(c.Delete("a") == nil) // true
 DeleteMany removes multiple keys.
 
 ```go
+ctx := context.Background()
+c := cache.NewCache(cache.NewMemoryStore(ctx))
 fmt.Println(c.DeleteMany("a", "b") == nil) // true
 ```
 
@@ -698,6 +712,8 @@ fmt.Println(c.DeleteMany("a", "b") == nil) // true
 Flush clears all keys for this store scope.
 
 ```go
+ctx := context.Background()
+c := cache.NewCache(cache.NewMemoryStore(ctx))
 _ = c.SetBytes("a", []byte("1"), time.Minute)
 fmt.Println(c.Flush() == nil) // true
 ```
@@ -720,6 +736,8 @@ fmt.Println(err == nil, ok, tok.Value) // true true abc
 PullBytes returns value and removes it from cache.
 
 ```go
+ctx := context.Background()
+c := cache.NewCache(cache.NewMemoryStore(ctx))
 _ = c.SetString("reset:token:42", "abc", time.Minute)
 body, ok, _ := c.PullBytes("reset:token:42")
 fmt.Println(ok, string(body)) // true abc
@@ -732,6 +750,8 @@ fmt.Println(ok, string(body)) // true abc
 Acquire attempts to acquire the lock once (non-blocking).
 
 ```go
+ctx := context.Background()
+c := cache.NewCache(cache.NewMemoryStore(ctx))
 lock := c.NewLockHandle("job:sync", 10*time.Second)
 locked, err := lock.Acquire()
 fmt.Println(err == nil, locked) // true true
@@ -744,6 +764,8 @@ Block waits up to timeout to acquire the lock, runs fn if acquired, then release
 retryInterval <= 0 falls back to the cache default lock retry interval.
 
 ```go
+ctx := context.Background()
+c := cache.NewCache(cache.NewMemoryStore(ctx))
 lock := c.NewLockHandle("job:sync", 10*time.Second)
 locked, err := lock.Block(500*time.Millisecond, 25*time.Millisecond, func() error {
 	// do protected work
@@ -757,6 +779,8 @@ fmt.Println(err == nil, locked) // true true
 Lock waits until the lock is acquired or timeout elapses.
 
 ```go
+ctx := context.Background()
+c := cache.NewCache(cache.NewMemoryStore(ctx))
 locked, err := c.Lock("job:sync", 10*time.Second, time.Second)
 fmt.Println(err == nil, locked) // true true
 ```
@@ -770,6 +794,8 @@ LockCtx retries lock acquisition until success or context cancellation.
 Get acquires the lock once, runs fn if acquired, then releases automatically.
 
 ```go
+ctx := context.Background()
+c := cache.NewCache(cache.NewMemoryStore(ctx))
 lock := c.NewLockHandle("job:sync", 10*time.Second)
 locked, err := lock.Get(func() error {
 	// do protected work
@@ -783,6 +809,8 @@ fmt.Println(err == nil, locked) // true true
 NewLockHandle creates a reusable lock handle for a key/ttl pair.
 
 ```go
+ctx := context.Background()
+c := cache.NewCache(cache.NewMemoryStore(ctx))
 lock := c.NewLockHandle("job:sync", 10*time.Second)
 locked, err := lock.Acquire()
 fmt.Println(err == nil, locked) // true true
@@ -799,6 +827,8 @@ It is safe to call multiple times; repeated calls become no-ops after the first
 successful release.
 
 ```go
+ctx := context.Background()
+c := cache.NewCache(cache.NewMemoryStore(ctx))
 lock := c.NewLockHandle("job:sync", 10*time.Second)
 locked, _ := lock.Acquire()
 if locked {
@@ -811,6 +841,8 @@ if locked {
 TryLock acquires a short-lived lock key when not already held.
 
 ```go
+ctx := context.Background()
+c := cache.NewCache(cache.NewMemoryStore(ctx))
 locked, _ := c.TryLock("job:sync", 10*time.Second)
 fmt.Println(locked) // true
 ```
@@ -820,6 +852,8 @@ fmt.Println(locked) // true
 Unlock releases a previously acquired lock key.
 
 ```go
+ctx := context.Background()
+c := cache.NewCache(cache.NewMemoryStore(ctx))
 locked, _ := c.TryLock("job:sync", 10*time.Second)
 if locked {
 	_ = c.Unlock("job:sync")
@@ -841,6 +875,7 @@ with changes made through this process.
 invalidate it. Use only when that staleness window is acceptable.
 
 ```go
+ctx := context.Background()
 base := cache.NewMemoryStore(ctx)
 memo := cache.NewMemoStore(base)
 c := cache.NewCache(memo)
@@ -867,6 +902,8 @@ obs.OnCacheOp(context.Background(), "get", "user:42", true, nil, time.Millisecon
 WithObserver attaches an observer to receive operation events.
 
 ```go
+ctx := context.Background()
+c := cache.NewCache(cache.NewMemoryStore(ctx))
 c = c.WithObserver(cache.ObserverFunc(func(ctx context.Context, op, key string, hit bool, err error, dur time.Duration, driver cachecore.Driver) {
 	// See docs/production-guide.md for a real metrics recipe.
 	fmt.Println(op, driver, hit, err == nil)
@@ -884,6 +921,8 @@ _, _, _ = c.GetBytes("profile:42")
 RateLimit increments a fixed-window counter and returns allowance metadata.
 
 ```go
+ctx := context.Background()
+c := cache.NewCache(cache.NewMemoryStore(ctx))
 res, err := c.RateLimit("rl:api:ip:1.2.3.4", 100, time.Minute)
 fmt.Println(err == nil, res.Allowed, res.Count, res.Remaining, !res.ResetAt.IsZero())
 // Output: true true 1 99 true
@@ -910,6 +949,8 @@ fmt.Println(err == nil, profile.Name) // true Ada
 RememberBytes returns key value or computes/stores it when missing.
 
 ```go
+ctx := context.Background()
+c := cache.NewCache(cache.NewMemoryStore(ctx))
 data, err := c.RememberBytes("dashboard:summary", time.Minute, func() ([]byte, error) {
 	return []byte("payload"), nil
 })
@@ -937,6 +978,8 @@ If computing fails and a stale value exists, it returns the stale value.
 The returned bool is true when a stale fallback was used.
 
 ```go
+ctx := context.Background()
+c := cache.NewCache(cache.NewMemoryStore(ctx))
 body, usedStale, err := c.RememberStaleBytes("profile:42", time.Minute, 10*time.Minute, func() ([]byte, error) {
 	return []byte(`{"name":"Ada"}`), nil
 })
@@ -965,6 +1008,8 @@ BatchGetBytes returns all found values for the provided keys.
 Missing keys are omitted from the returned map.
 
 ```go
+ctx := context.Background()
+c := cache.NewCache(cache.NewMemoryStore(ctx))
 _ = c.SetBytes("a", []byte("1"), time.Minute)
 _ = c.SetBytes("b", []byte("2"), time.Minute)
 values, err := c.BatchGetBytes("a", "b", "missing")
@@ -991,6 +1036,7 @@ fmt.Println(err == nil, ok, profile.Name, err2 == nil, ok2, mode) // true true A
 GetBytes returns raw bytes for key when present.
 
 ```go
+ctx := context.Background()
 s := cache.NewMemoryStore(ctx)
 c := cache.NewCache(s)
 _ = c.SetBytes("user:42", []byte("Ada"), 0)
@@ -1016,6 +1062,8 @@ fmt.Println(err == nil, ok, profile.Name) // true true Ada
 GetString returns a UTF-8 string value for key when present.
 
 ```go
+ctx := context.Background()
+c := cache.NewCache(cache.NewMemoryStore(ctx))
 _ = c.SetString("user:42:name", "Ada", 0)
 name, ok, _ := c.GetString("user:42:name")
 fmt.Println(ok, name) // true Ada
@@ -1043,6 +1091,8 @@ RefreshAheadBytes returns cached value immediately and refreshes asynchronously 
 On miss, it computes and stores synchronously.
 
 ```go
+ctx := context.Background()
+c := cache.NewCache(cache.NewMemoryStore(ctx))
 body, err := c.RefreshAheadBytes("dashboard:summary", time.Minute, 10*time.Second, func() ([]byte, error) {
 	return []byte("payload"), nil
 })
@@ -1152,6 +1202,8 @@ _ = n
 Add writes value only when key is not already present.
 
 ```go
+ctx := context.Background()
+c := cache.NewCache(cache.NewMemoryStore(ctx))
 created, _ := c.Add("boot:seeded", []byte("1"), time.Hour)
 fmt.Println(created) // true
 ```
@@ -1161,6 +1213,8 @@ fmt.Println(created) // true
 BatchSetBytes writes many key/value pairs using a shared ttl.
 
 ```go
+ctx := context.Background()
+c := cache.NewCache(cache.NewMemoryStore(ctx))
 err := c.BatchSetBytes(map[string][]byte{
 	"a": []byte("1"),
 	"b": []byte("2"),
@@ -1173,6 +1227,8 @@ fmt.Println(err == nil) // true
 Decrement decrements a numeric value and returns the result.
 
 ```go
+ctx := context.Background()
+c := cache.NewCache(cache.NewMemoryStore(ctx))
 val, _ := c.Decrement("rate:login:42", 1, time.Minute)
 fmt.Println(val) // -1
 ```
@@ -1182,6 +1238,8 @@ fmt.Println(val) // -1
 Increment increments a numeric value and returns the result.
 
 ```go
+ctx := context.Background()
+c := cache.NewCache(cache.NewMemoryStore(ctx))
 val, _ := c.Increment("rate:login:42", 1, time.Minute)
 fmt.Println(val) // 1
 ```
@@ -1204,6 +1262,8 @@ fmt.Println(err == nil, err2 == nil) // true true
 SetBytes writes raw bytes to key.
 
 ```go
+ctx := context.Background()
+c := cache.NewCache(cache.NewMemoryStore(ctx))
 fmt.Println(c.SetBytes("token", []byte("abc"), time.Minute) == nil) // true
 ```
 
@@ -1224,6 +1284,8 @@ fmt.Println(err == nil) // true
 SetString writes a string value to key.
 
 ```go
+ctx := context.Background()
+c := cache.NewCache(cache.NewMemoryStore(ctx))
 fmt.Println(c.SetString("user:42:name", "Ada", time.Minute) == nil) // true
 ```
 <!-- api:embed:end -->

@@ -484,7 +484,11 @@ func renderAPI(root string, funcs []*FuncDoc) string {
 				}
 
 				buf.WriteString("```go\n")
-				for _, line := range trimReadmeExampleLeadingScaffold(ex.Code) {
+				lines := strings.Split(strings.TrimRight(ex.Code, "\n"), "\n")
+				for len(lines) > 0 && strings.TrimSpace(lines[0]) == "" {
+					lines = lines[1:]
+				}
+				for _, line := range lines {
 					buf.WriteString(line + "\n")
 				}
 				buf.WriteString("```\n\n")
@@ -493,39 +497,6 @@ func renderAPI(root string, funcs []*FuncDoc) string {
 	}
 
 	return strings.TrimRight(buf.String(), "\n")
-}
-
-func trimReadmeExampleLeadingScaffold(code string) []string {
-	lines := strings.Split(code, "\n")
-
-	i := 0
-	for i < len(lines) && strings.TrimSpace(lines[i]) == "" {
-		i++
-	}
-
-	for {
-		for i < len(lines) && strings.TrimSpace(lines[i]) == "" {
-			i++
-		}
-		if i >= len(lines) {
-			break
-		}
-		trimmed := strings.TrimSpace(lines[i])
-		if trimmed == "ctx := context.Background()" || trimmed == "c := cache.NewCache(cache.NewMemoryStore(ctx))" {
-			i++
-			continue
-		}
-		break
-	}
-
-	j := len(lines)
-	for j > i && strings.TrimSpace(lines[j-1]) == "" {
-		j--
-	}
-	if j <= i {
-		return nil
-	}
-	return lines[i:j]
 }
 
 type driverConfigDoc struct {
