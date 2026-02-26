@@ -88,19 +88,23 @@ func main() {
 	cache.NewFileStore(ctx, "./cache-data") // local file-backed
 	cache.NewNullStore(ctx)                 // disabled / drop-only
 
+	// Redis (driver-owned connection config; no direct redis client required)
 	redisStore := rediscache.New(rediscache.Config{BaseConfig: base, Addr: "127.0.0.1:6379"})
 	_ = redisStore
 
+	// Memcached (one or more server addresses)
 	memcachedStore := memcachedcache.New(memcachedcache.Config{
 		BaseConfig: base,
 		Addresses:  []string{"127.0.0.1:11211"},
 	})
 	_ = memcachedStore
 
+	// NATS JetStream KV (inject a bucket from your NATS setup)
 	var kv natscache.KeyValue // create via your NATS JetStream setup
 	natsStore := natscache.New(natscache.Config{BaseConfig: base, KeyValue: kv})
 	_ = natsStore
 
+	// DynamoDB (auto-creates client when Client is nil)
 	dynamoStore, err := dynamocache.New(ctx, dynamocache.Config{
 		BaseConfig: base,
 		Region:     "us-east-1",
@@ -108,6 +112,7 @@ func main() {
 	})
 	fmt.Println(dynamoStore, err)
 
+	// SQLite (via sqlcore)
 	sqliteStore, err := sqlitecache.New(sqlitecache.Config{
 		BaseConfig: base,
 		DSN:        "file::memory:?cache=shared",
@@ -115,6 +120,7 @@ func main() {
 	})
 	fmt.Println(sqliteStore, err)
 
+	// Postgres (via sqlcore)
 	postgresStore, err := postgrescache.New(postgrescache.Config{
 		BaseConfig: base,
 		DSN:        "postgres://user:pass@127.0.0.1:5432/app?sslmode=disable",
@@ -122,6 +128,7 @@ func main() {
 	})
 	fmt.Println(postgresStore, err)
 
+	// MySQL (via sqlcore)
 	mysqlStore, err := mysqlcache.New(mysqlcache.Config{
 		BaseConfig: base,
 		DSN:        "user:pass@tcp(127.0.0.1:3306)/app?parseTime=true",
