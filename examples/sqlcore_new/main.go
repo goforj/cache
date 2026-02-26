@@ -5,6 +5,7 @@ import (
 	"github.com/goforj/cache/cachecore"
 	"github.com/goforj/cache/driver/sqlcore"
 	"time"
+	_ "modernc.org/sqlite"
 )
 
 func main() {

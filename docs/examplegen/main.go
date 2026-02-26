@@ -448,6 +448,7 @@ func writeMain(base string, fd *FuncDoc, importPath string) error {
 	imports := map[string]bool{
 		importPath: true,
 	}
+	blankImports := map[string]bool{}
 
 	for _, ex := range fd.Examples {
 		if strings.Contains(ex.Code, "fmt.") {
@@ -504,6 +505,16 @@ func writeMain(base string, fd *FuncDoc, importPath string) error {
 		if strings.Contains(ex.Code, "base64.") {
 			imports["encoding/base64"] = true
 		}
+		if strings.Contains(ex.Code, "sqlcore.") {
+			switch {
+			case strings.Contains(ex.Code, `DriverName: "sqlite"`):
+				blankImports["modernc.org/sqlite"] = true
+			case strings.Contains(ex.Code, `DriverName: "postgres"`), strings.Contains(ex.Code, `DriverName: "pgx"`):
+				blankImports["github.com/jackc/pgx/v5/stdlib"] = true
+			case strings.Contains(ex.Code, `DriverName: "mysql"`):
+				blankImports["github.com/go-sql-driver/mysql"] = true
+			}
+		}
 	}
 
 	if len(imports) == 1 {
@@ -521,6 +532,16 @@ func writeMain(base string, fd *FuncDoc, importPath string) error {
 		sort.Strings(keys)
 		for _, imp := range keys {
 			buf.WriteString("\t\"" + imp + "\"\n")
+		}
+		if len(blankImports) > 0 {
+			blankKeys := make([]string, 0, len(blankImports))
+			for k := range blankImports {
+				blankKeys = append(blankKeys, k)
+			}
+			sort.Strings(blankKeys)
+			for _, imp := range blankKeys {
+				buf.WriteString("\t_ \"" + imp + "\"\n")
+			}
 		}
 		buf.WriteString(")\n\n")
 	}
