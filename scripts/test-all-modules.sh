@@ -16,6 +16,7 @@ ROOT_INTEGRATION_DRIVERS="${ROOT_INTEGRATION_DRIVERS:-memory,file,null}"
 ALL_INTEGRATION_DRIVERS="${ALL_INTEGRATION_DRIVERS:-memory,file,null,sqlitecache}"
 
 RUN_ROOT_UNIT="${RUN_ROOT_UNIT:-1}"
+RUN_EXAMPLES_COMPILE="${RUN_EXAMPLES_COMPILE:-1}"
 RUN_ROOT_INTEGRATION="${RUN_ROOT_INTEGRATION:-1}"
 RUN_AGGREGATOR_INTEGRATION="${RUN_AGGREGATOR_INTEGRATION:-1}"
 RUN_REDISCACHE_UNIT="${RUN_REDISCACHE_UNIT:-1}"
@@ -36,6 +37,15 @@ run() {
 
 if [[ "$RUN_ROOT_UNIT" == "1" ]]; then
   run go test ./...
+fi
+
+if [[ "$RUN_EXAMPLES_COMPILE" == "1" ]]; then
+  echo
+  echo "==> examples compile test"
+  (
+    cd examples
+    GOWORK=off GOCACHE="$GOCACHE_DIR" go test ./... -run '^TestExamplesBuild$'
+  )
 fi
 
 if [[ "$RUN_REDISCACHE_UNIT" == "1" ]]; then

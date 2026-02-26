@@ -21,8 +21,18 @@ jobs:
       - name: Download dependencies
         run: go mod download
 
+      - name: Download examples module dependencies
+        run: |
+          cd examples
+          GOWORK=off go mod download
+
       - name: Run unit tests
         run: go test ./... -v
+
+      - name: Verify generated examples compile
+        run: |
+          cd examples
+          GOWORK=off go test ./... -run TestExamplesBuild -count=1 -v
 
       - name: Run unit tests with coverage
         env:

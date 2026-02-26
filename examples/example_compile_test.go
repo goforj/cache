@@ -1,4 +1,4 @@
-package cache
+package examples
 
 import (
 	"bytes"
@@ -15,7 +15,7 @@ import (
 
 func TestExamplesBuild(t *testing.T) {
 	t.Parallel()
-	examplesDir := "examples"
+	examplesDir := "."
 
 	entries, err := os.ReadDir(examplesDir)
 	if err != nil {
@@ -111,7 +111,7 @@ func buildExampleWithoutTags(exampleDir string) error {
 }
 
 func exampleBuildGoMod() string {
-	root := abs(".")
+	root := abs("..")
 	sep := string(filepath.Separator)
 	rootSlash := filepath.ToSlash(root)
 	if runtime.GOOS == "windows" {
