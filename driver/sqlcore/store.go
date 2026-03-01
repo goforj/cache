@@ -111,6 +111,10 @@ func New(cfg Config) (cachecore.Store, error) {
 
 func (s *sqlStore) Driver() cachecore.Driver { return cachecore.DriverSQL }
 
+func (s *sqlStore) Ready(ctx context.Context) error {
+	return s.db.PingContext(ctx)
+}
+
 func (s *sqlStore) ensureSchema() error {
 	var stmt string
 	switch s.driverName {

@@ -18,6 +18,7 @@ const (
 
 // Client captures the subset of redis.Client used by the store.
 type Client interface {
+	Ping(ctx context.Context) *redis.StatusCmd
 	Get(ctx context.Context, key string) *redis.StringCmd
 	Set(ctx context.Context, key string, value interface{}, expiration time.Duration) *redis.StatusCmd
 	SetNX(ctx context.Context, key string, value interface{}, expiration time.Duration) *redis.BoolCmd
@@ -91,6 +92,13 @@ func New(cfg Config) cachecore.Store {
 
 func (s *store) Driver() cachecore.Driver {
 	return cachecore.DriverRedis
+}
+
+func (s *store) Ready(ctx context.Context) error {
+	if s.client == nil {
+		return errors.New("redis cache client unavailable")
+	}
+	return s.client.Ping(ctx).Err()
 }
 
 func (s *store) Get(ctx context.Context, key string) ([]byte, bool, error) {

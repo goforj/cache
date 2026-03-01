@@ -15,6 +15,7 @@ type errorStore struct {
 }
 
 func (e *errorStore) Driver() cachecore.Driver                          { return e.driver }
+func (e *errorStore) Ready(context.Context) error                        { return e.err }
 func (e *errorStore) Get(context.Context, string) ([]byte, bool, error) { return nil, false, e.err }
 func (e *errorStore) Set(context.Context, string, []byte, time.Duration) error {
 	return e.err

@@ -1566,6 +1566,9 @@ type getErrorInjectStore struct {
 }
 
 func (s *getErrorInjectStore) Driver() cachecore.Driver { return s.inner.Driver() }
+func (s *getErrorInjectStore) Ready(ctx context.Context) error {
+	return s.inner.Ready(ctx)
+}
 
 func (s *getErrorInjectStore) Get(ctx context.Context, key string) ([]byte, bool, error) {
 	if key == s.errKey {
@@ -1613,6 +1616,9 @@ type latencyInjectStore struct {
 }
 
 func (s *latencyInjectStore) Driver() cachecore.Driver { return s.inner.Driver() }
+func (s *latencyInjectStore) Ready(ctx context.Context) error {
+	return s.inner.Ready(ctx)
+}
 
 func (s *latencyInjectStore) Get(ctx context.Context, key string) ([]byte, bool, error) {
 	s.getCalls.Add(1)
@@ -1670,6 +1676,9 @@ type transientOpErrorStore struct {
 }
 
 func (s *transientOpErrorStore) Driver() cachecore.Driver { return s.inner.Driver() }
+func (s *transientOpErrorStore) Ready(ctx context.Context) error {
+	return s.inner.Ready(ctx)
+}
 
 func (s *transientOpErrorStore) Get(ctx context.Context, key string) ([]byte, bool, error) {
 	s.getCalls.Add(1)

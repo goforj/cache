@@ -172,6 +172,9 @@ type countingStore struct {
 }
 
 func (s *countingStore) Driver() cachecore.Driver { return s.inner.Driver() }
+func (s *countingStore) Ready(ctx context.Context) error {
+	return s.inner.Ready(ctx)
+}
 
 func (s *countingStore) Get(ctx context.Context, key string) ([]byte, bool, error) {
 	s.bump(OpGet, key)

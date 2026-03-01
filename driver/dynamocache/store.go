@@ -134,6 +134,14 @@ func newDynamoClient(ctx context.Context, cfg Config) (*dynamodb.Client, error) 
 
 func (s *dynamoStore) Driver() cachecore.Driver { return cachecore.DriverDynamo }
 
+func (s *dynamoStore) Ready(ctx context.Context) error {
+	if s.client == nil {
+		return errors.New("dynamodb cache client unavailable")
+	}
+	_, err := s.client.DescribeTable(ctx, &dynamodb.DescribeTableInput{TableName: aws.String(s.table)})
+	return err
+}
+
 func (s *dynamoStore) Get(ctx context.Context, key string) ([]byte, bool, error) {
 	out, err := s.client.GetItem(ctx, &dynamodb.GetItemInput{
 		TableName:      aws.String(s.table),

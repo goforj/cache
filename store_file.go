@@ -52,6 +52,20 @@ func (s *fileStore) Driver() cachecore.Driver {
 	return cachecore.DriverFile
 }
 
+func (s *fileStore) Ready(_ context.Context) error {
+	if err := os.MkdirAll(s.dir, 0o755); err != nil {
+		return err
+	}
+	info, err := os.Stat(s.dir)
+	if err != nil {
+		return err
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("cache file store path %q is not a directory", s.dir)
+	}
+	return nil
+}
+
 func (s *fileStore) Get(_ context.Context, key string) ([]byte, bool, error) {
 	path := s.path(key)
 	data, err := os.ReadFile(path)

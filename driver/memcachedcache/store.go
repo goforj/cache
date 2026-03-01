@@ -85,6 +85,29 @@ func New(cfg Config) cachecore.Store {
 
 func (s *store) Driver() cachecore.Driver { return cachecore.DriverMemcached }
 
+func (s *store) Ready(ctx context.Context) error {
+	mc, err := s.acquire(ctx)
+	if err != nil {
+		return err
+	}
+	bad := false
+	defer func() { s.release(mc, bad) }()
+	if _, err := fmt.Fprintf(mc.conn, "version\r\n"); err != nil {
+		bad = true
+		return err
+	}
+	line, err := mc.reader.ReadString('\n')
+	if err != nil {
+		bad = true
+		return err
+	}
+	if !strings.HasPrefix(line, "VERSION ") {
+		bad = true
+		return fmt.Errorf("memcached readiness failed: %s", strings.TrimSpace(line))
+	}
+	return nil
+}
+
 func (s *store) Get(ctx context.Context, key string) ([]byte, bool, error) {
 	mc, err := s.acquire(ctx)
 	if err != nil {

@@ -8,6 +8,7 @@ import (
 // Store is the shared app cache contract.
 type Store interface {
 	Driver() Driver
+	Ready(ctx context.Context) error
 	Get(ctx context.Context, key string) ([]byte, bool, error)
 	Set(ctx context.Context, key string, value []byte, ttl time.Duration) error
 	Add(ctx context.Context, key string, value []byte, ttl time.Duration) (bool, error)

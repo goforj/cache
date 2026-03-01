@@ -49,6 +49,10 @@ func (s *memoStore) Driver() cachecore.Driver {
 	return s.store.Driver()
 }
 
+func (s *memoStore) Ready(ctx context.Context) error {
+	return s.store.Ready(ctx)
+}
+
 func (s *memoStore) Get(ctx context.Context, key string) ([]byte, bool, error) {
 	s.mu.RLock()
 	entry, ok := s.items[key]

@@ -220,6 +220,7 @@ func TestCacheDeleteManyFlushAndErrors(t *testing.T) {
 
 type spyStore struct {
 	driver   cachecore.Driver
+	readyErr error
 	getBody  []byte
 	getOK    bool
 	getErr   error
@@ -238,6 +239,9 @@ type spyStore struct {
 var expectedErr = errors.New("expected")
 
 func (s *spyStore) Driver() cachecore.Driver { return s.driver }
+func (s *spyStore) Ready(context.Context) error {
+	return s.readyErr
+}
 
 func (s *spyStore) Get(context.Context, string) ([]byte, bool, error) {
 	s.getCalls++
@@ -280,6 +284,20 @@ func TestCacheStoreAndDriver(t *testing.T) {
 	}
 	if c.Driver() != cachecore.DriverMemory {
 		t.Fatalf("expected driver to propagate")
+	}
+}
+
+func TestCacheReady(t *testing.T) {
+	store := &spyStore{driver: cachecore.DriverMemory}
+	c := NewCache(store)
+	if err := c.Ready(); err != nil {
+		t.Fatalf("expected ready nil, got %v", err)
+	}
+
+	expected := errors.New("not ready")
+	store.readyErr = expected
+	if err := c.ReadyCtx(context.Background()); !errors.Is(err, expected) {
+		t.Fatalf("expected ready error %v, got %v", expected, err)
 	}
 }
 

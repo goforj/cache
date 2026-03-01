@@ -23,6 +23,9 @@ func newShapingStore(inner cachecore.Store, codec CompressionCodec, max int) cac
 }
 
 func (s *shapingStore) Driver() cachecore.Driver { return s.inner.Driver() }
+func (s *shapingStore) Ready(ctx context.Context) error {
+	return s.inner.Ready(ctx)
+}
 
 func (s *shapingStore) Get(ctx context.Context, key string) ([]byte, bool, error) {
 	body, ok, err := s.inner.Get(ctx, key)

@@ -10,6 +10,8 @@ import (
 // CoreAPI exposes basic cache metadata.
 type CoreAPI interface {
 	Driver() cachecore.Driver
+	Ready() error
+	ReadyCtx(ctx context.Context) error
 }
 
 // ReadAPI exposes read-oriented cache operations.

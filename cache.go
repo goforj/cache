@@ -97,6 +97,24 @@ func (c *Cache) Driver() cachecore.Driver {
 	return c.store.Driver()
 }
 
+// Ready checks whether the underlying store is ready to serve requests.
+// @group Core
+//
+// Example: readiness probe
+//
+//	ctx := context.Background()
+//	c := cache.NewCache(cache.NewMemoryStore(ctx))
+//	fmt.Println(c.Ready() == nil) // true
+func (c *Cache) Ready() error {
+	return c.ReadyCtx(context.Background())
+}
+
+// ReadyCtx is the context-aware variant of Ready.
+// @group Core
+func (c *Cache) ReadyCtx(ctx context.Context) error {
+	return c.store.Ready(ctx)
+}
+
 // GetBytes returns raw bytes for key when present.
 // @group Reads
 //

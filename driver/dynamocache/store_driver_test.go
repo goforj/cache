@@ -25,6 +25,9 @@ func TestDynamoDriverMethods(t *testing.T) {
 	if store.Driver() != cachecore.DriverDynamo {
 		t.Fatalf("expected driver dynamodb")
 	}
+	if err := store.Ready(ctx); err != nil {
+		t.Fatalf("expected ready nil, got %v", err)
+	}
 	// Get miss path
 	if _, ok, err := store.Get(ctx, "missing"); err != nil || ok {
 		t.Fatalf("expected miss; ok=%v err=%v", ok, err)

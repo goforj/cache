@@ -35,6 +35,10 @@ func (s *memoryStore) Driver() cachecore.Driver {
 	return cachecore.DriverMemory
 }
 
+func (s *memoryStore) Ready(context.Context) error {
+	return nil
+}
+
 func (s *memoryStore) Get(_ context.Context, key string) ([]byte, bool, error) {
 	item, ok := s.cache.Get(key)
 	if !ok {

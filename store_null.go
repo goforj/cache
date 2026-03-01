@@ -12,6 +12,7 @@ type nullStore struct{}
 func newNullStore() cachecore.Store { return &nullStore{} }
 
 func (s *nullStore) Driver() cachecore.Driver { return cachecore.DriverNull }
+func (s *nullStore) Ready(context.Context) error { return nil }
 
 func (s *nullStore) Get(context.Context, string) ([]byte, bool, error) {
 	return nil, false, nil

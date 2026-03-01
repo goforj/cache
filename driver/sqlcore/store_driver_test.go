@@ -1,6 +1,7 @@
 package sqlcore
 
 import (
+	"context"
 	"testing"
 
 	"github.com/goforj/cache/cachecore"
@@ -21,6 +22,9 @@ func TestSQLDriverName(t *testing.T) {
 	}
 	if store.Driver() != cachecore.DriverSQL {
 		t.Fatalf("expected driver sql")
+	}
+	if err := store.Ready(context.Background()); err != nil {
+		t.Fatalf("expected ready nil, got %v", err)
 	}
 }
 

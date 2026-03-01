@@ -110,6 +110,7 @@ func (d *dynStub) CreateTable(context.Context, *dynamodb.CreateTableInput, ...fu
 			return nil, err
 		}
 	}
+	d.exists = true
 	return &dynamodb.CreateTableOutput{}, nil
 }
 

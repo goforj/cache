@@ -26,6 +26,7 @@ var natsEnvelopeMagic = []byte("NCV1")
 
 // KeyValue captures the subset of nats.KeyValue used by the store.
 type KeyValue interface {
+	Status() (nats.KeyValueStatus, error)
 	Get(key string) (nats.KeyValueEntry, error)
 	Put(key string, value []byte) (uint64, error)
 	Create(key string, value []byte) (uint64, error)
@@ -95,6 +96,14 @@ func New(cfg Config) cachecore.Store {
 }
 
 func (s *store) Driver() cachecore.Driver { return cachecore.DriverNATS }
+
+func (s *store) Ready(_ context.Context) error {
+	if s.kv == nil {
+		return errors.New("nats cache key-value unavailable")
+	}
+	_, err := s.kv.Status()
+	return err
+}
 
 func (s *store) Get(_ context.Context, key string) ([]byte, bool, error) {
 	if s.kv == nil {

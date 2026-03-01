@@ -15,6 +15,7 @@ type stubClient struct {
 	ttl   map[string]time.Time
 
 	expireErr error
+	pingErr   error
 	getErr    error
 	setErr    error
 	setNXErr  error
@@ -35,6 +36,16 @@ func (c *stubClient) expireIfNeeded(key string) {
 		delete(c.ttl, key)
 		delete(c.store, key)
 	}
+}
+
+func (c *stubClient) Ping(ctx context.Context) *redis.StatusCmd {
+	cmd := redis.NewStatusCmd(ctx)
+	if c.pingErr != nil {
+		cmd.SetErr(c.pingErr)
+		return cmd
+	}
+	cmd.SetVal("PONG")
+	return cmd
 }
 
 func (c *stubClient) Get(ctx context.Context, key string) *redis.StringCmd {

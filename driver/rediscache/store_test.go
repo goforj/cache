@@ -12,6 +12,9 @@ import (
 
 func TestNewNilClientErrors(t *testing.T) {
 	store := New(Config{})
+	if err := store.Ready(context.Background()); err == nil {
+		t.Fatalf("expected ready error when redis client is nil")
+	}
 	if _, _, err := store.Get(context.Background(), "k"); err == nil {
 		t.Fatalf("expected get error when redis client is nil")
 	}
@@ -53,6 +56,9 @@ func TestOperationsWithStubClient(t *testing.T) {
 	ctx := context.Background()
 	client := newStubClient()
 	store := New(Config{Client: client, BaseConfig: cachecore.BaseConfig{Prefix: "pfx"}})
+	if err := store.Ready(ctx); err != nil {
+		t.Fatalf("ready failed: %v", err)
+	}
 
 	if err := store.Set(ctx, "alpha", []byte("one"), 0); err != nil {
 		t.Fatalf("set failed: %v", err)
@@ -113,6 +119,16 @@ func TestOperationsWithStubClient(t *testing.T) {
 	}
 	if _, ok, err := store.Get(ctx, "flushme"); err != nil || ok {
 		t.Fatalf("expected flushed key to be gone")
+	}
+}
+
+func TestReadyErrorPropagation(t *testing.T) {
+	ctx := context.Background()
+	client := newStubClient()
+	client.pingErr = errors.New("ping")
+	store := New(Config{Client: client, BaseConfig: cachecore.BaseConfig{Prefix: "pfx"}})
+	if err := store.Ready(ctx); err == nil {
+		t.Fatalf("expected ping error")
 	}
 }
 

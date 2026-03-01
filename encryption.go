@@ -42,6 +42,7 @@ func newEncryptingStore(inner cachecore.Store, key []byte) (cachecore.Store, err
 }
 
 func (s *encryptingStore) Driver() cachecore.Driver { return s.inner.Driver() }
+func (s *encryptingStore) Ready(ctx context.Context) error { return s.inner.Ready(ctx) }
 
 func (s *encryptingStore) Get(ctx context.Context, key string) ([]byte, bool, error) {
 	body, ok, err := s.inner.Get(ctx, key)

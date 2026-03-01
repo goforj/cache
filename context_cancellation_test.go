@@ -21,6 +21,9 @@ type blockingCtxStore struct {
 }
 
 func (s *blockingCtxStore) Driver() cachecore.Driver { return cachecore.DriverMemory }
+func (s *blockingCtxStore) Ready(context.Context) error {
+	return nil
+}
 
 func (s *blockingCtxStore) Get(ctx context.Context, key string) ([]byte, bool, error) {
 	s.mu.Lock()
