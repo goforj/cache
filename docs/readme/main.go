@@ -653,15 +653,11 @@ func renderName(fn *FuncDoc, nameCounts map[string]int) string {
 }
 
 func renderLabel(fn *FuncDoc, nameCounts map[string]int, hasCtxVariant map[string]bool) string {
-	name := renderName(fn, nameCounts)
-	if hasCtxVariant[fn.Key] {
-		return name + " (+Ctx)"
-	}
-	return name
+	return renderName(fn, nameCounts)
 }
 
 func isHideableCtxVariant(fn *FuncDoc) bool {
-	if !strings.HasSuffix(fn.Name, "Ctx") {
+	if !strings.HasSuffix(fn.Name, "Context") {
 		return false
 	}
 	desc := strings.TrimSpace(strings.ToLower(fn.Description))
@@ -672,10 +668,10 @@ func isHideableCtxVariant(fn *FuncDoc) bool {
 }
 
 func ctxBaseKey(fn *FuncDoc) (string, bool) {
-	if !strings.HasSuffix(fn.Name, "Ctx") || !strings.HasSuffix(fn.Key, "Ctx") {
+	if !strings.HasSuffix(fn.Name, "Context") || !strings.HasSuffix(fn.Key, "Context") {
 		return "", false
 	}
-	return strings.TrimSuffix(fn.Key, "Ctx"), true
+	return strings.TrimSuffix(fn.Key, "Context"), true
 }
 
 //

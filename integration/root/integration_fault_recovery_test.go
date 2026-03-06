@@ -192,37 +192,37 @@ func assertBackendOutageErrors(t *testing.T, driverName string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	start := time.Now()
-	_, ok, err := cache.GetBytesCtx(ctx, "fault:outage:get")
+	_, ok, err := cache.GetBytesContext(ctx, "fault:outage:get")
 	elapsed := time.Since(start)
 	if elapsed > 2*time.Second {
-		return fmt.Errorf("GetCtx during outage returned too slowly: %v", elapsed)
+		return fmt.Errorf("GetContext during outage returned too slowly: %v", elapsed)
 	}
 	if err == nil {
-		return fmt.Errorf("expected GetCtx outage error, got ok=%v err=nil", ok)
+		return fmt.Errorf("expected GetContext outage error, got ok=%v err=nil", ok)
 	}
 
 	ctx2, cancel2 := context.WithTimeout(context.Background(), timeout)
 	defer cancel2()
 	start = time.Now()
-	err = cache.SetBytesCtx(ctx2, "fault:outage:set", []byte("x"), time.Second)
+	err = cache.SetBytesContext(ctx2, "fault:outage:set", []byte("x"), time.Second)
 	elapsed = time.Since(start)
 	if elapsed > 2*time.Second {
-		return fmt.Errorf("SetCtx during outage returned too slowly: %v", elapsed)
+		return fmt.Errorf("SetContext during outage returned too slowly: %v", elapsed)
 	}
 	if err == nil {
-		return fmt.Errorf("expected SetCtx outage error, got nil")
+		return fmt.Errorf("expected SetContext outage error, got nil")
 	}
 
 	ctx3, cancel3 := context.WithTimeout(context.Background(), timeout)
 	defer cancel3()
 	start = time.Now()
-	locked, err := cache.LockCtx(ctx3, "fault:outage:lock", time.Second, 25*time.Millisecond)
+	locked, err := cache.LockContext(ctx3, "fault:outage:lock", time.Second, 25*time.Millisecond)
 	elapsed = time.Since(start)
 	if elapsed > 2*time.Second {
-		return fmt.Errorf("LockCtx during outage returned too slowly: %v", elapsed)
+		return fmt.Errorf("LockContext during outage returned too slowly: %v", elapsed)
 	}
 	if err == nil || locked {
-		return fmt.Errorf("expected LockCtx outage error, got locked=%v err=%v", locked, err)
+		return fmt.Errorf("expected LockContext outage error, got locked=%v err=%v", locked, err)
 	}
 
 	return nil

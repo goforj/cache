@@ -26,11 +26,11 @@ func TestCacheRememberCachesValue(t *testing.T) {
 		return []byte("alpha"), nil
 	}
 
-	first, err := repo.RememberBytesCtx(ctx, "k", time.Minute, fn)
+	first, err := repo.RememberBytesContext(ctx, "k", time.Minute, fn)
 	if err != nil {
 		t.Fatalf("remember failed: %v", err)
 	}
-	second, err := repo.RememberBytesCtx(ctx, "k", time.Minute, fn)
+	second, err := repo.RememberBytesContext(ctx, "k", time.Minute, fn)
 	if err != nil {
 		t.Fatalf("remember failed: %v", err)
 	}
@@ -68,7 +68,7 @@ func TestCacheRememberJSON(t *testing.T) {
 	ctx := context.Background()
 
 	calls := 0
-	value, err := RememberCtx[testPayload](ctx, repo, "json", time.Minute, func(context.Context) (testPayload, error) {
+	value, err := RememberContext[testPayload](ctx, repo, "json", time.Minute, func(context.Context) (testPayload, error) {
 		calls++
 		return testPayload{Name: "cache"}, nil
 	})
@@ -79,7 +79,7 @@ func TestCacheRememberJSON(t *testing.T) {
 		t.Fatalf("unexpected payload: %+v", value)
 	}
 
-	value, err = RememberCtx[testPayload](ctx, repo, "json", time.Minute, func(context.Context) (testPayload, error) {
+	value, err = RememberContext[testPayload](ctx, repo, "json", time.Minute, func(context.Context) (testPayload, error) {
 		calls++
 		return testPayload{Name: "again"}, nil
 	})
@@ -98,10 +98,10 @@ func TestCacheGetSetJSON(t *testing.T) {
 	repo := NewCache(newMemoryStore(0, 0))
 	ctx := context.Background()
 
-	if err := SetJSONCtx(ctx, repo, "u", testPayload{Name: "alex"}, time.Minute); err != nil {
+	if err := SetJSONContext(ctx, repo, "u", testPayload{Name: "alex"}, time.Minute); err != nil {
 		t.Fatalf("set json failed: %v", err)
 	}
-	got, ok, err := GetJSONCtx[testPayload](ctx, repo, "u")
+	got, ok, err := GetJSONContext[testPayload](ctx, repo, "u")
 	if err != nil {
 		t.Fatalf("get json failed: %v", err)
 	}
@@ -114,14 +114,14 @@ func TestCacheAddIncrementDecrementAndPull(t *testing.T) {
 	repo := NewCache(newMemoryStore(0, 0))
 	ctx := context.Background()
 
-	created, err := repo.AddCtx(ctx, "add", []byte("x"), time.Minute)
+	created, err := repo.AddContext(ctx, "add", []byte("x"), time.Minute)
 	if err != nil {
 		t.Fatalf("add failed: %v", err)
 	}
 	if !created {
 		t.Fatalf("expected first add to create key")
 	}
-	created, err = repo.AddCtx(ctx, "add", []byte("y"), time.Minute)
+	created, err = repo.AddContext(ctx, "add", []byte("y"), time.Minute)
 	if err != nil {
 		t.Fatalf("second add failed: %v", err)
 	}
@@ -129,14 +129,14 @@ func TestCacheAddIncrementDecrementAndPull(t *testing.T) {
 		t.Fatalf("expected second add to be ignored")
 	}
 
-	value, err := repo.IncrementCtx(ctx, "counter", 3, time.Minute)
+	value, err := repo.IncrementContext(ctx, "counter", 3, time.Minute)
 	if err != nil {
 		t.Fatalf("increment failed: %v", err)
 	}
 	if value != 3 {
 		t.Fatalf("expected 3, got %d", value)
 	}
-	value, err = repo.DecrementCtx(ctx, "counter", 1, time.Minute)
+	value, err = repo.DecrementContext(ctx, "counter", 1, time.Minute)
 	if err != nil {
 		t.Fatalf("decrement failed: %v", err)
 	}
@@ -144,7 +144,7 @@ func TestCacheAddIncrementDecrementAndPull(t *testing.T) {
 		t.Fatalf("expected 2, got %d", value)
 	}
 
-	if err := repo.SetStringCtx(ctx, "pull", "value", time.Minute); err != nil {
+	if err := repo.SetStringContext(ctx, "pull", "value", time.Minute); err != nil {
 		t.Fatalf("set string failed: %v", err)
 	}
 	body, ok, err := repo.PullBytes("pull")
@@ -154,7 +154,7 @@ func TestCacheAddIncrementDecrementAndPull(t *testing.T) {
 	if !ok || string(body) != "value" {
 		t.Fatalf("unexpected pull result")
 	}
-	_, ok, err = repo.GetBytesCtx(ctx, "pull")
+	_, ok, err = repo.GetBytesContext(ctx, "pull")
 	if err != nil {
 		t.Fatalf("get failed: %v", err)
 	}
@@ -167,16 +167,16 @@ func TestCacheDeleteManyFlushAndErrors(t *testing.T) {
 	repo := NewCache(newMemoryStore(0, 0))
 	ctx := context.Background()
 
-	if err := repo.SetStringCtx(ctx, "a", "1", time.Minute); err != nil {
+	if err := repo.SetStringContext(ctx, "a", "1", time.Minute); err != nil {
 		t.Fatalf("set failed: %v", err)
 	}
-	if err := repo.SetStringCtx(ctx, "b", "2", time.Minute); err != nil {
+	if err := repo.SetStringContext(ctx, "b", "2", time.Minute); err != nil {
 		t.Fatalf("set failed: %v", err)
 	}
-	if err := repo.DeleteManyCtx(ctx, "a", "b"); err != nil {
+	if err := repo.DeleteManyContext(ctx, "a", "b"); err != nil {
 		t.Fatalf("delete many failed: %v", err)
 	}
-	_, ok, err := repo.GetBytesCtx(ctx, "a")
+	_, ok, err := repo.GetBytesContext(ctx, "a")
 	if err != nil {
 		t.Fatalf("get failed: %v", err)
 	}
@@ -184,13 +184,13 @@ func TestCacheDeleteManyFlushAndErrors(t *testing.T) {
 		t.Fatalf("expected deleted key")
 	}
 
-	if err := repo.SetStringCtx(ctx, "c", "3", time.Minute); err != nil {
+	if err := repo.SetStringContext(ctx, "c", "3", time.Minute); err != nil {
 		t.Fatalf("set failed: %v", err)
 	}
-	if err := repo.FlushCtx(ctx); err != nil {
+	if err := repo.FlushContext(ctx); err != nil {
 		t.Fatalf("flush failed: %v", err)
 	}
-	_, ok, err = repo.GetBytesCtx(ctx, "c")
+	_, ok, err = repo.GetBytesContext(ctx, "c")
 	if err != nil {
 		t.Fatalf("get failed: %v", err)
 	}
@@ -198,19 +198,19 @@ func TestCacheDeleteManyFlushAndErrors(t *testing.T) {
 		t.Fatalf("expected flush to clear key")
 	}
 
-	if _, err := repo.RememberBytesCtx(ctx, "missing", time.Minute, nil); err == nil {
+	if _, err := repo.RememberBytesContext(ctx, "missing", time.Minute, nil); err == nil {
 		t.Fatalf("expected remember nil callback error")
 	}
-	if _, err := RememberCtx[string](ctx, repo, "missing-string", time.Minute, nil); err == nil {
+	if _, err := RememberContext[string](ctx, repo, "missing-string", time.Minute, nil); err == nil {
 		t.Fatalf("expected remember string nil callback error")
 	}
-	_, err = RememberCtx[testPayload](ctx, repo, "missing-json", time.Minute, nil)
+	_, err = RememberContext[testPayload](ctx, repo, "missing-json", time.Minute, nil)
 	if err == nil {
 		t.Fatalf("expected remember json nil callback error")
 	}
 
 	expected := errors.New("boom")
-	_, err = repo.RememberBytesCtx(ctx, "broken", time.Minute, func(context.Context) ([]byte, error) {
+	_, err = repo.RememberBytesContext(ctx, "broken", time.Minute, func(context.Context) ([]byte, error) {
 		return nil, expected
 	})
 	if !errors.Is(err, expected) {
@@ -296,7 +296,7 @@ func TestCacheReady(t *testing.T) {
 
 	expected := errors.New("not ready")
 	store.readyErr = expected
-	if err := c.ReadyCtx(context.Background()); !errors.Is(err, expected) {
+	if err := c.ReadyContext(context.Background()); !errors.Is(err, expected) {
 		t.Fatalf("expected ready error %v, got %v", expected, err)
 	}
 }
@@ -307,14 +307,14 @@ func TestCacheRememberStringUsesResolvedTTL(t *testing.T) {
 	ctx := context.Background()
 
 	calls := 0
-	val, err := RememberCtx[string](ctx, c, "k", 0, func(context.Context) (string, error) {
+	val, err := RememberContext[string](ctx, c, "k", 0, func(context.Context) (string, error) {
 		calls++
 		return "hello", nil
 	})
 	if err != nil || val != "hello" {
 		t.Fatalf("remember string failed: %v %q", err, val)
 	}
-	val, err = RememberCtx[string](ctx, c, "k", time.Second, func(context.Context) (string, error) {
+	val, err = RememberContext[string](ctx, c, "k", time.Second, func(context.Context) (string, error) {
 		calls++
 		return "new", nil
 	})
@@ -334,7 +334,7 @@ func TestCacheSetUsesProvidedTTL(t *testing.T) {
 	c := NewCacheWithTTL(store, time.Minute)
 	ctx := context.Background()
 
-	if err := c.SetBytesCtx(ctx, "k", []byte("v"), 3*time.Second); err != nil {
+	if err := c.SetBytesContext(ctx, "k", []byte("v"), 3*time.Second); err != nil {
 		t.Fatalf("set failed: %v", err)
 	}
 	if len(store.ttls) != 1 || store.ttls[0] != 3*time.Second {
@@ -347,7 +347,7 @@ func TestNewCacheWithTTLDefaultsWhenNonPositive(t *testing.T) {
 	c := NewCacheWithTTL(store, -1)
 	ctx := context.Background()
 
-	_, _ = RememberCtx[string](ctx, c, "k", 0, func(context.Context) (string, error) {
+	_, _ = RememberContext[string](ctx, c, "k", 0, func(context.Context) (string, error) {
 		return "v", nil
 	})
 	if len(store.ttls) != 1 || store.ttls[0] != defaultCacheTTL {
@@ -411,7 +411,7 @@ func TestCacheGetStringError(t *testing.T) {
 	store := &spyStore{driver: cachecore.DriverMemory, getErr: expected}
 	c := NewCache(store)
 	ctx := context.Background()
-	_, _, err := c.GetStringCtx(ctx, "k")
+	_, _, err := c.GetStringContext(ctx, "k")
 	if !errors.Is(err, expected) {
 		t.Fatalf("expected propagated error")
 	}
@@ -421,7 +421,7 @@ func TestCacheGetStringSuccess(t *testing.T) {
 	store := &spyStore{driver: cachecore.DriverMemory, getOK: true, getBody: []byte("ok")}
 	c := NewCache(store)
 	ctx := context.Background()
-	val, ok, err := c.GetStringCtx(ctx, "k")
+	val, ok, err := c.GetStringContext(ctx, "k")
 	if err != nil || !ok || val != "ok" {
 		t.Fatalf("unexpected result: val=%q ok=%v err=%v", val, ok, err)
 	}
@@ -432,7 +432,7 @@ func TestCacheSetJSONMarshalError(t *testing.T) {
 	c := NewCache(store)
 	ctx := context.Background()
 	ch := make(chan int)
-	if err := SetJSONCtx(ctx, c, "bad", ch, time.Second); err == nil {
+	if err := SetJSONContext(ctx, c, "bad", ch, time.Second); err == nil {
 		t.Fatalf("expected marshal error")
 	}
 }
@@ -450,7 +450,7 @@ func TestCacheRememberSetError(t *testing.T) {
 	store := &spyStore{driver: cachecore.DriverMemory, setErr: expectedErr}
 	c := NewCache(store)
 	ctx := context.Background()
-	_, err := c.RememberBytesCtx(ctx, "k", time.Second, func(context.Context) ([]byte, error) {
+	_, err := c.RememberBytesContext(ctx, "k", time.Second, func(context.Context) ([]byte, error) {
 		return []byte("x"), nil
 	})
 	if !errors.Is(err, expectedErr) {
@@ -462,7 +462,7 @@ func TestCacheRememberGetError(t *testing.T) {
 	store := &spyStore{driver: cachecore.DriverMemory, getErr: expectedErr}
 	c := NewCache(store)
 	ctx := context.Background()
-	if _, err := c.RememberBytesCtx(ctx, "k", time.Second, func(context.Context) ([]byte, error) { return []byte("x"), nil }); !errors.Is(err, expectedErr) {
+	if _, err := c.RememberBytesContext(ctx, "k", time.Second, func(context.Context) ([]byte, error) { return []byte("x"), nil }); !errors.Is(err, expectedErr) {
 		t.Fatalf("expected get error")
 	}
 }
@@ -472,7 +472,7 @@ func TestCacheRememberJSONCallbackError(t *testing.T) {
 	c := NewCache(store)
 	ctx := context.Background()
 	expected := errors.New("cb")
-	_, err := RememberCtx[int](ctx, c, "k", time.Second, func(context.Context) (int, error) {
+	_, err := RememberContext[int](ctx, c, "k", time.Second, func(context.Context) (int, error) {
 		return 0, expected
 	})
 	if !errors.Is(err, expected) {
@@ -484,7 +484,7 @@ func TestCacheRememberJSONSetError(t *testing.T) {
 	store := &spyStore{driver: cachecore.DriverMemory, setErr: expectedErr}
 	c := NewCache(store)
 	ctx := context.Background()
-	_, err := RememberCtx[int](ctx, c, "k", time.Second, func(context.Context) (int, error) { return 5, nil })
+	_, err := RememberContext[int](ctx, c, "k", time.Second, func(context.Context) (int, error) { return 5, nil })
 	if !errors.Is(err, expectedErr) {
 		t.Fatalf("expected set error")
 	}
@@ -495,7 +495,7 @@ func TestCacheRememberStringCallbackError(t *testing.T) {
 	c := NewCache(store)
 	ctx := context.Background()
 	expected := errors.New("cb")
-	if _, err := RememberCtx[string](ctx, c, "k", time.Second, func(context.Context) (string, error) {
+	if _, err := RememberContext[string](ctx, c, "k", time.Second, func(context.Context) (string, error) {
 		return "", expected
 	}); !errors.Is(err, expected) {
 		t.Fatalf("expected callback error")
@@ -507,7 +507,7 @@ func TestCacheRememberStringUsesCachedValueWithoutCallback(t *testing.T) {
 	c := NewCache(store)
 	ctx := context.Background()
 	calls := 0
-	val, err := RememberCtx[string](ctx, c, "k", time.Second, func(context.Context) (string, error) {
+	val, err := RememberContext[string](ctx, c, "k", time.Second, func(context.Context) (string, error) {
 		calls++
 		return "fresh", nil
 	})
@@ -525,7 +525,7 @@ func TestCacheRememberJSONReturnsCachedValue(t *testing.T) {
 	c := NewCache(store)
 	ctx := context.Background()
 	calls := 0
-	result, err := RememberCtx[struct {
+	result, err := RememberContext[struct {
 		V string `json:"v"`
 	}](ctx, c, "k", time.Second, func(context.Context) (struct {
 		V string `json:"v"`
@@ -542,7 +542,7 @@ func TestCacheRememberJSONNilCallback(t *testing.T) {
 	store := &spyStore{driver: cachecore.DriverMemory}
 	c := NewCache(store)
 	ctx := context.Background()
-	if _, err := RememberCtx[int](ctx, c, "k", time.Second, nil); err == nil {
+	if _, err := RememberContext[int](ctx, c, "k", time.Second, nil); err == nil {
 		t.Fatalf("expected nil callback error")
 	}
 }
@@ -551,7 +551,7 @@ func TestCacheRememberJSONGetError(t *testing.T) {
 	store := &spyStore{driver: cachecore.DriverMemory, getOK: true, getBody: []byte("not-json")}
 	c := NewCache(store)
 	ctx := context.Background()
-	if _, err := RememberCtx[int](ctx, c, "k", time.Second, func(context.Context) (int, error) { return 1, nil }); err == nil {
+	if _, err := RememberContext[int](ctx, c, "k", time.Second, func(context.Context) (int, error) { return 1, nil }); err == nil {
 		t.Fatalf("expected get decode error")
 	}
 }
@@ -560,7 +560,7 @@ func TestCacheGetStringMissing(t *testing.T) {
 	store := &spyStore{driver: cachecore.DriverMemory, getOK: false}
 	c := NewCache(store)
 	ctx := context.Background()
-	_, ok, err := c.GetStringCtx(ctx, "missing")
+	_, ok, err := c.GetStringContext(ctx, "missing")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -573,7 +573,7 @@ func TestCacheGetJSONDecodeError(t *testing.T) {
 	store := &spyStore{driver: cachecore.DriverMemory, getOK: true, getBody: []byte("not-json")}
 	c := NewCache(store)
 	ctx := context.Background()
-	_, ok, err := GetJSONCtx[struct{}](ctx, c, "bad")
+	_, ok, err := GetJSONContext[struct{}](ctx, c, "bad")
 	if err == nil || ok {
 		t.Fatalf("expected decode error")
 	}
@@ -596,7 +596,7 @@ func TestCacheRememberPropagatesCallbackError(t *testing.T) {
 	c := NewCache(store)
 	ctx := context.Background()
 	expected := errors.New("boom")
-	_, err := c.RememberBytesCtx(ctx, "k", time.Second, func(context.Context) ([]byte, error) {
+	_, err := c.RememberBytesContext(ctx, "k", time.Second, func(context.Context) ([]byte, error) {
 		return nil, expected
 	})
 	if !errors.Is(err, expected) {
@@ -763,23 +763,23 @@ func TestRememberValueWithCodecBranches(t *testing.T) {
 	}
 	store := &spyStore{driver: cachecore.DriverMemory, getOK: true, getBody: []byte("cached")}
 	cache := NewCache(store)
-	if _, err := rememberValueWithCodecCtx[int](ctx, cache, "k", time.Second, func() (int, error) { return 1, nil }, decodeErrCodec); err == nil {
+	if _, err := rememberValueWithCodecContext[int](ctx, cache, "k", time.Second, func() (int, error) { return 1, nil }, decodeErrCodec); err == nil {
 		t.Fatalf("expected decode error")
 	}
 
 	getErrStore := &spyStore{driver: cachecore.DriverMemory, getErr: expectedErr}
-	if _, err := rememberValueWithCodecCtx[int](ctx, NewCache(getErrStore), "k", time.Second, func() (int, error) { return 1, nil }, defaultValueCodec[int]()); !errors.Is(err, expectedErr) {
+	if _, err := rememberValueWithCodecContext[int](ctx, NewCache(getErrStore), "k", time.Second, func() (int, error) { return 1, nil }, defaultValueCodec[int]()); !errors.Is(err, expectedErr) {
 		t.Fatalf("expected get error, got %v", err)
 	}
 
 	missStore := &spyStore{driver: cachecore.DriverMemory, getOK: false}
-	if _, err := rememberValueWithCodecCtx[int](ctx, NewCache(missStore), "k", time.Second, nil, defaultValueCodec[int]()); err == nil {
+	if _, err := rememberValueWithCodecContext[int](ctx, NewCache(missStore), "k", time.Second, nil, defaultValueCodec[int]()); err == nil {
 		t.Fatalf("expected nil callback error")
 	}
 
 	fnErrStore := &spyStore{driver: cachecore.DriverMemory, getOK: false}
 	fnErr := errors.New("fn boom")
-	if _, err := rememberValueWithCodecCtx[int](ctx, NewCache(fnErrStore), "k", time.Second, func() (int, error) { return 0, fnErr }, defaultValueCodec[int]()); !errors.Is(err, fnErr) {
+	if _, err := rememberValueWithCodecContext[int](ctx, NewCache(fnErrStore), "k", time.Second, func() (int, error) { return 0, fnErr }, defaultValueCodec[int]()); !errors.Is(err, fnErr) {
 		t.Fatalf("expected fn error, got %v", err)
 	}
 
@@ -789,7 +789,7 @@ func TestRememberValueWithCodecBranches(t *testing.T) {
 		Decode: func(b []byte) (int, error) { return 0, nil },
 	}
 	encodeErrStore := &spyStore{driver: cachecore.DriverMemory, getOK: false}
-	if _, err := rememberValueWithCodecCtx[int](ctx, NewCache(encodeErrStore), "k", time.Second, func() (int, error) { return 5, nil }, encodeErrCodec); !errors.Is(err, encodeErr) {
+	if _, err := rememberValueWithCodecContext[int](ctx, NewCache(encodeErrStore), "k", time.Second, func() (int, error) { return 5, nil }, encodeErrCodec); !errors.Is(err, encodeErr) {
 		t.Fatalf("expected encode error, got %v", err)
 	}
 }
@@ -1333,7 +1333,7 @@ func TestCacheLockConcurrentTimeoutContention(t *testing.T) {
 	}
 }
 
-func TestCacheRememberCtxConcurrentMissContention(t *testing.T) {
+func TestCacheRememberContextConcurrentMissContention(t *testing.T) {
 	c := NewCache(NewMemoryStore(context.Background()))
 	ctx := context.Background()
 
@@ -1349,7 +1349,7 @@ func TestCacheRememberCtxConcurrentMissContention(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			<-start
-			body, err := c.RememberBytesCtx(ctx, "remember:contend", time.Minute, func(context.Context) ([]byte, error) {
+			body, err := c.RememberBytesContext(ctx, "remember:contend", time.Minute, func(context.Context) ([]byte, error) {
 				calls.Add(1)
 				time.Sleep(20 * time.Millisecond)
 				return []byte("value"), nil
@@ -1528,7 +1528,7 @@ func TestRememberStaleValueWithCodecErrors(t *testing.T) {
 	c := NewCache(NewMemoryStore(context.Background()))
 	ctx := context.Background()
 
-	if _, _, err := rememberStaleValueWithCodecCtx[int](ctx, c, "stale:codec:nil", time.Minute, time.Minute, nil, defaultValueCodec[int]()); err == nil {
+	if _, _, err := rememberStaleValueWithCodecContext[int](ctx, c, "stale:codec:nil", time.Minute, time.Minute, nil, defaultValueCodec[int]()); err == nil {
 		t.Fatalf("expected nil callback error")
 	}
 
@@ -1537,7 +1537,7 @@ func TestRememberStaleValueWithCodecErrors(t *testing.T) {
 		Encode: func(v int) ([]byte, error) { return nil, encodeErr },
 		Decode: func(b []byte) (int, error) { return 0, nil },
 	}
-	if _, _, err := rememberStaleValueWithCodecCtx[int](ctx, c, "stale:codec:encode", time.Minute, time.Minute, func() (int, error) { return 1, nil }, codec); !errors.Is(err, encodeErr) {
+	if _, _, err := rememberStaleValueWithCodecContext[int](ctx, c, "stale:codec:encode", time.Minute, time.Minute, func() (int, error) { return 1, nil }, codec); !errors.Is(err, encodeErr) {
 		t.Fatalf("expected encode error, got %v", err)
 	}
 
@@ -1546,7 +1546,7 @@ func TestRememberStaleValueWithCodecErrors(t *testing.T) {
 		Encode: func(v int) ([]byte, error) { return []byte("1"), nil },
 		Decode: func(b []byte) (int, error) { return 0, decodeErr },
 	}
-	if _, _, err := rememberStaleValueWithCodecCtx[int](ctx, c, "stale:codec:decode", time.Minute, time.Minute, func() (int, error) { return 1, nil }, decodeCodec); !errors.Is(err, decodeErr) {
+	if _, _, err := rememberStaleValueWithCodecContext[int](ctx, c, "stale:codec:decode", time.Minute, time.Minute, func() (int, error) { return 1, nil }, decodeCodec); !errors.Is(err, decodeErr) {
 		t.Fatalf("expected decode error, got %v", err)
 	}
 }

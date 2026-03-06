@@ -482,7 +482,7 @@ func runLockHelperInvariantSuite(t *testing.T, cache *Cache, driver cachecore.Dr
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
 		start := time.Now()
-		locked, err = cache.LockCtx(ctx, cancelKey, holdTTL, 10*time.Millisecond)
+		locked, err = cache.LockContext(ctx, cancelKey, holdTTL, 10*time.Millisecond)
 		elapsed := time.Since(start)
 		if err == nil || locked {
 			t.Fatalf("expected lock ctx cancellation, got locked=%v err=%v", locked, err)
@@ -521,36 +521,36 @@ func runContextCancellationHelperInvariantSuite(t *testing.T, cache *Cache, driv
 		cancelGet()
 
 		start := time.Now()
-		_, ok, err := cache.GetBytesCtx(getCtx, caseKey("ctx:get"))
+		_, ok, err := cache.GetBytesContext(getCtx, caseKey("ctx:get"))
 		elapsed := time.Since(start)
 		if elapsed > maxElapsed {
-			t.Fatalf("GetCtx should return promptly on pre-canceled ctx, took %v", elapsed)
+			t.Fatalf("GetContext should return promptly on pre-canceled ctx, took %v", elapsed)
 		}
 		if ctxAwareStoreOps {
 			if ok || !errors.Is(err, context.Canceled) {
-				t.Fatalf("expected ctx-aware GetCtx cancellation, ok=%v err=%v", ok, err)
+				t.Fatalf("expected ctx-aware GetContext cancellation, ok=%v err=%v", ok, err)
 			}
 		} else if ok {
-			t.Fatalf("expected miss for pre-canceled GetCtx on non-persisted key, got ok=true err=%v", err)
+			t.Fatalf("expected miss for pre-canceled GetContext on non-persisted key, got ok=true err=%v", err)
 		}
 
 		setCtx, cancelSet := context.WithCancel(context.Background())
 		cancelSet()
 
 		start = time.Now()
-		err = cache.SetBytesCtx(setCtx, caseKey("ctx:set"), []byte("v"), time.Minute)
+		err = cache.SetBytesContext(setCtx, caseKey("ctx:set"), []byte("v"), time.Minute)
 		elapsed = time.Since(start)
 		if elapsed > maxElapsed {
-			t.Fatalf("SetCtx should return promptly on pre-canceled ctx, took %v", elapsed)
+			t.Fatalf("SetContext should return promptly on pre-canceled ctx, took %v", elapsed)
 		}
 		if ctxAwareStoreOps {
 			if !errors.Is(err, context.Canceled) {
-				t.Fatalf("expected ctx-aware SetCtx cancellation, got %v", err)
+				t.Fatalf("expected ctx-aware SetContext cancellation, got %v", err)
 			}
 			return
 		}
 		if err != nil {
-			t.Fatalf("expected non-ctx-aware SetCtx to either succeed or cancel, got %v", err)
+			t.Fatalf("expected non-ctx-aware SetContext to either succeed or cancel, got %v", err)
 		}
 	})
 
@@ -589,43 +589,43 @@ func runContextCancellationHelperInvariantSuite(t *testing.T, cache *Cache, driv
 			}
 		}
 
-		checkNoHiddenCallbackRetry("RefreshAheadCtx", func(ctx context.Context, calls *atomic.Int64) error {
-			_, err := cache.RefreshAheadBytesCtx(ctx, caseKey("ctx:refresh"), time.Minute, 10*time.Second, func(context.Context) ([]byte, error) {
+		checkNoHiddenCallbackRetry("RefreshAheadContext", func(ctx context.Context, calls *atomic.Int64) error {
+			_, err := cache.RefreshAheadBytesContext(ctx, caseKey("ctx:refresh"), time.Minute, 10*time.Second, func(context.Context) ([]byte, error) {
 				calls.Add(1)
 				return []byte("v"), nil
 			})
 			return err
 		})
 
-		checkNoHiddenCallbackRetry("RememberCtx", func(ctx context.Context, calls *atomic.Int64) error {
-			_, err := cache.RememberBytesCtx(ctx, caseKey("ctx:remember"), time.Minute, func(context.Context) ([]byte, error) {
+		checkNoHiddenCallbackRetry("RememberContext", func(ctx context.Context, calls *atomic.Int64) error {
+			_, err := cache.RememberBytesContext(ctx, caseKey("ctx:remember"), time.Minute, func(context.Context) ([]byte, error) {
 				calls.Add(1)
 				return []byte("v"), nil
 			})
 			return err
 		})
 
-		checkNoHiddenCallbackRetry("RememberCtx[string]", func(ctx context.Context, calls *atomic.Int64) error {
-			_, err := RememberCtx[string](ctx, cache, caseKey("ctx:remember_string"), time.Minute, func(context.Context) (string, error) {
+		checkNoHiddenCallbackRetry("RememberContext[string]", func(ctx context.Context, calls *atomic.Int64) error {
+			_, err := RememberContext[string](ctx, cache, caseKey("ctx:remember_string"), time.Minute, func(context.Context) (string, error) {
 				calls.Add(1)
 				return "v", nil
 			})
 			return err
 		})
 
-		checkNoHiddenCallbackRetry("RememberJSONCtx", func(ctx context.Context, calls *atomic.Int64) error {
+		checkNoHiddenCallbackRetry("RememberJSONContext", func(ctx context.Context, calls *atomic.Int64) error {
 			type payload struct {
 				Name string `json:"name"`
 			}
-			_, err := RememberCtx[payload](ctx, cache, caseKey("ctx:remember_json"), time.Minute, func(context.Context) (payload, error) {
+			_, err := RememberContext[payload](ctx, cache, caseKey("ctx:remember_json"), time.Minute, func(context.Context) (payload, error) {
 				calls.Add(1)
 				return payload{Name: "Ada"}, nil
 			})
 			return err
 		})
 
-		checkNoHiddenCallbackRetry("RememberStaleCtx", func(ctx context.Context, calls *atomic.Int64) error {
-			_, _, err := RememberStaleCtx[string](ctx, cache, caseKey("ctx:remember_stale"), time.Minute, 2*time.Minute, func(context.Context) (string, error) {
+		checkNoHiddenCallbackRetry("RememberStaleContext", func(ctx context.Context, calls *atomic.Int64) error {
+			_, _, err := RememberStaleContext[string](ctx, cache, caseKey("ctx:remember_stale"), time.Minute, 2*time.Minute, func(context.Context) (string, error) {
 				calls.Add(1)
 				return "v", nil
 			})
@@ -666,36 +666,36 @@ func runLatencyAndTransientFaultHelperInvariantSuite(t *testing.T, base cachecor
 				t.Fatalf("%s returned too slowly after ctx timeout: %v", name, elapsed)
 			}
 			if calls.Load() != 0 {
-				t.Fatalf("%s callback should not run on timed-out GetCtx path, got %d", name, calls.Load())
+				t.Fatalf("%s callback should not run on timed-out GetContext path, got %d", name, calls.Load())
 			}
 		}
 
-		check("RefreshAheadCtx", func(ctx context.Context, calls *atomic.Int64) error {
-			_, err := cache.RefreshAheadBytesCtx(ctx, caseKey("net:slow:refresh"), time.Minute, 10*time.Second, func(context.Context) ([]byte, error) {
+		check("RefreshAheadContext", func(ctx context.Context, calls *atomic.Int64) error {
+			_, err := cache.RefreshAheadBytesContext(ctx, caseKey("net:slow:refresh"), time.Minute, 10*time.Second, func(context.Context) ([]byte, error) {
 				calls.Add(1)
 				return []byte("v"), nil
 			})
 			return err
 		})
-		check("RememberCtx", func(ctx context.Context, calls *atomic.Int64) error {
-			_, err := cache.RememberBytesCtx(ctx, caseKey("net:slow:remember"), time.Minute, func(context.Context) ([]byte, error) {
+		check("RememberContext", func(ctx context.Context, calls *atomic.Int64) error {
+			_, err := cache.RememberBytesContext(ctx, caseKey("net:slow:remember"), time.Minute, func(context.Context) ([]byte, error) {
 				calls.Add(1)
 				return []byte("v"), nil
 			})
 			return err
 		})
-		check("RememberCtx[string]", func(ctx context.Context, calls *atomic.Int64) error {
-			_, err := RememberCtx[string](ctx, cache, caseKey("net:slow:remember_string"), time.Minute, func(context.Context) (string, error) {
+		check("RememberContext[string]", func(ctx context.Context, calls *atomic.Int64) error {
+			_, err := RememberContext[string](ctx, cache, caseKey("net:slow:remember_string"), time.Minute, func(context.Context) (string, error) {
 				calls.Add(1)
 				return "v", nil
 			})
 			return err
 		})
-		check("RememberJSONCtx", func(ctx context.Context, calls *atomic.Int64) error {
+		check("RememberJSONContext", func(ctx context.Context, calls *atomic.Int64) error {
 			type payload struct {
 				Name string `json:"name"`
 			}
-			_, err := RememberCtx[payload](ctx, cache, caseKey("net:slow:remember_json"), time.Minute, func(context.Context) (payload, error) {
+			_, err := RememberContext[payload](ctx, cache, caseKey("net:slow:remember_json"), time.Minute, func(context.Context) (payload, error) {
 				calls.Add(1)
 				return payload{Name: "Ada"}, nil
 			})
@@ -717,13 +717,13 @@ func runLatencyAndTransientFaultHelperInvariantSuite(t *testing.T, base cachecor
 		defer cancel()
 
 		start := time.Now()
-		locked, err := cache.LockCtx(ctx, caseKey("net:slow:lock"), time.Second, 10*time.Millisecond)
+		locked, err := cache.LockContext(ctx, caseKey("net:slow:lock"), time.Second, 10*time.Millisecond)
 		elapsed := time.Since(start)
 		if locked || !errors.Is(err, context.DeadlineExceeded) {
 			t.Fatalf("expected lock timeout via ctx deadline, locked=%v err=%v", locked, err)
 		}
 		if elapsed > 350*time.Millisecond {
-			t.Fatalf("LockCtx returned too slowly after timeout: %v", elapsed)
+			t.Fatalf("LockContext returned too slowly after timeout: %v", elapsed)
 		}
 		if got := slow.addCalls.Load(); got != 1 {
 			t.Fatalf("expected single Add call (no hidden retries after backend error), got %d", got)
@@ -744,7 +744,7 @@ func runLatencyAndTransientFaultHelperInvariantSuite(t *testing.T, base cachecor
 		defer cancel()
 
 		start := time.Now()
-		res, err := cache.RateLimitCtx(ctx, caseKey("net:slow:rl"), 5, time.Minute)
+		res, err := cache.RateLimitContext(ctx, caseKey("net:slow:rl"), 5, time.Minute)
 		elapsed := time.Since(start)
 		if err == nil || res.Allowed || res.Count != 0 {
 			t.Fatalf("expected rate limit timeout error, allowed=%v count=%d err=%v", res.Allowed, res.Count, err)
@@ -753,7 +753,7 @@ func runLatencyAndTransientFaultHelperInvariantSuite(t *testing.T, base cachecor
 			t.Fatalf("expected context deadline exceeded, got %v", err)
 		}
 		if elapsed > 350*time.Millisecond {
-			t.Fatalf("RateLimitCtx returned too slowly after timeout: %v", elapsed)
+			t.Fatalf("RateLimitContext returned too slowly after timeout: %v", elapsed)
 		}
 		if got := slow.incrementCalls.Load(); got != 1 {
 			t.Fatalf("expected one increment call, got %d", got)
@@ -772,7 +772,7 @@ func runLatencyAndTransientFaultHelperInvariantSuite(t *testing.T, base cachecor
 		cache := NewCache(flaky)
 
 		var refreshCalls atomic.Int64
-		_, err := cache.RefreshAheadBytesCtx(context.Background(), caseKey("net:flaky:refresh"), time.Minute, 10*time.Second, func(context.Context) ([]byte, error) {
+		_, err := cache.RefreshAheadBytesContext(context.Background(), caseKey("net:flaky:refresh"), time.Minute, 10*time.Second, func(context.Context) ([]byte, error) {
 			refreshCalls.Add(1)
 			return []byte("v"), nil
 		})
@@ -784,7 +784,7 @@ func runLatencyAndTransientFaultHelperInvariantSuite(t *testing.T, base cachecor
 		}
 
 		var rememberCalls atomic.Int64
-		_, err = cache.RememberBytesCtx(context.Background(), caseKey("net:flaky:remember"), time.Minute, func(context.Context) ([]byte, error) {
+		_, err = cache.RememberBytesContext(context.Background(), caseKey("net:flaky:remember"), time.Minute, func(context.Context) ([]byte, error) {
 			rememberCalls.Add(1)
 			return []byte("v"), nil
 		})
@@ -795,12 +795,12 @@ func runLatencyAndTransientFaultHelperInvariantSuite(t *testing.T, base cachecor
 			t.Fatalf("remember callback should not run on get error, got %d", rememberCalls.Load())
 		}
 
-		locked, err := cache.LockCtx(context.Background(), caseKey("net:flaky:lock"), time.Second, 10*time.Millisecond)
+		locked, err := cache.LockContext(context.Background(), caseKey("net:flaky:lock"), time.Second, 10*time.Millisecond)
 		if !errors.Is(err, injected) || locked {
 			t.Fatalf("expected injected lock error without retries, locked=%v err=%v", locked, err)
 		}
 
-		res, err := cache.RateLimitCtx(context.Background(), caseKey("net:flaky:rl"), 5, time.Minute)
+		res, err := cache.RateLimitContext(context.Background(), caseKey("net:flaky:rl"), 5, time.Minute)
 		if !errors.Is(err, injected) || res.Allowed || res.Count != 0 {
 			t.Fatalf("expected injected rate-limit error, allowed=%v count=%d err=%v", res.Allowed, res.Count, err)
 		}
@@ -816,12 +816,12 @@ func runLatencyAndTransientFaultHelperInvariantSuite(t *testing.T, base cachecor
 		}
 
 		// Subsequent explicit calls should succeed once transient errors are exhausted.
-		if _, err := cache.RememberBytesCtx(context.Background(), caseKey("net:flaky:remember"), time.Minute, func(context.Context) ([]byte, error) {
+		if _, err := cache.RememberBytesContext(context.Background(), caseKey("net:flaky:remember"), time.Minute, func(context.Context) ([]byte, error) {
 			return []byte("ok"), nil
 		}); err != nil {
 			t.Fatalf("expected remember success after transient error exhausted, got %v", err)
 		}
-		if _, err := cache.RefreshAheadBytesCtx(context.Background(), caseKey("net:flaky:refresh"), time.Minute, 10*time.Second, func(context.Context) ([]byte, error) {
+		if _, err := cache.RefreshAheadBytesContext(context.Background(), caseKey("net:flaky:refresh"), time.Minute, 10*time.Second, func(context.Context) ([]byte, error) {
 			return []byte("ok"), nil
 		}); err != nil {
 			t.Fatalf("expected refresh ahead success after transient error exhausted, got %v", err)
@@ -1345,10 +1345,10 @@ func runDriverFactoryInvariantSuite(t *testing.T, fx storeFactory) {
 				t.Fatalf("refresh ahead seed failed: %v", err)
 			}
 
-			if _, ok, err := ca.GetBytesCtx(ctx, key+refreshMetaSuffix); err != nil || !ok {
+			if _, ok, err := ca.GetBytesContext(ctx, key+refreshMetaSuffix); err != nil || !ok {
 				t.Fatalf("expected refresh metadata in prefix A, ok=%v err=%v", ok, err)
 			}
-			if _, ok, err := cb.GetBytesCtx(ctx, key+refreshMetaSuffix); err != nil || ok {
+			if _, ok, err := cb.GetBytesContext(ctx, key+refreshMetaSuffix); err != nil || ok {
 				t.Fatalf("expected no refresh metadata leak into prefix B, ok=%v err=%v", ok, err)
 			}
 		})
@@ -1361,10 +1361,10 @@ func runDriverFactoryInvariantSuite(t *testing.T, fx storeFactory) {
 				t.Fatalf("remember stale seed failed: usedStale=%v err=%v", usedStale, err)
 			}
 
-			if _, ok, err := ca.GetBytesCtx(ctx, key+staleSuffix); err != nil || !ok {
+			if _, ok, err := ca.GetBytesContext(ctx, key+staleSuffix); err != nil || !ok {
 				t.Fatalf("expected stale key in prefix A, ok=%v err=%v", ok, err)
 			}
-			if _, ok, err := cb.GetBytesCtx(ctx, key+staleSuffix); err != nil || ok {
+			if _, ok, err := cb.GetBytesContext(ctx, key+staleSuffix); err != nil || ok {
 				t.Fatalf("expected no stale key leak into prefix B, ok=%v err=%v", ok, err)
 			}
 		})

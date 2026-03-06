@@ -27,13 +27,13 @@ func TestObserverRecordsAllOps(t *testing.T) {
 	obs := &spyObserver{}
 	c := NewCache(newMemoryStore(0, 0)).WithObserver(obs)
 
-	_, _ = c.RememberBytesCtx(ctx, "r1", time.Second, func(context.Context) ([]byte, error) { return []byte("v"), nil })
-	_, _ = RememberCtx[string](ctx, c, "r2", time.Second, func(context.Context) (string, error) { return "v", nil })
-	_, _ = RememberCtx[string](ctx, c, "r3", time.Second, func(context.Context) (string, error) { return "v", nil })
-	_, _, _ = c.GetBytesCtx(ctx, "missing")
-	_ = c.DeleteCtx(ctx, "missing")
-	_ = c.DeleteManyCtx(ctx, "missing")
-	_ = c.FlushCtx(ctx)
+	_, _ = c.RememberBytesContext(ctx, "r1", time.Second, func(context.Context) ([]byte, error) { return []byte("v"), nil })
+	_, _ = RememberContext[string](ctx, c, "r2", time.Second, func(context.Context) (string, error) { return "v", nil })
+	_, _ = RememberContext[string](ctx, c, "r3", time.Second, func(context.Context) (string, error) { return "v", nil })
+	_, _, _ = c.GetBytesContext(ctx, "missing")
+	_ = c.DeleteContext(ctx, "missing")
+	_ = c.DeleteManyContext(ctx, "missing")
+	_ = c.FlushContext(ctx)
 
 	if len(obs.ops) < 6 {
 		t.Fatalf("expected observer to record multiple ops, got %v", obs.ops)
@@ -43,6 +43,6 @@ func TestObserverRecordsAllOps(t *testing.T) {
 func TestObserverNilIsSafe(t *testing.T) {
 	ctx := context.Background()
 	c := NewCache(newMemoryStore(0, 0)) // no observer
-	_, _ = c.RememberBytesCtx(ctx, "k", time.Second, func(context.Context) ([]byte, error) { return []byte("v"), nil })
+	_, _ = c.RememberBytesContext(ctx, "k", time.Second, func(context.Context) ([]byte, error) { return []byte("v"), nil })
 	// ensure no panic when observer nil
 }

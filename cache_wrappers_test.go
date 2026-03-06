@@ -21,17 +21,17 @@ func TestGenericTypedWrappers(t *testing.T) {
 	if err := Set(c, "typed:set", payload{Name: "Ada"}, time.Second); err != nil {
 		t.Fatalf("Set failed: %v", err)
 	}
-	if err := SetCtx(ctx, c, "typed:setctx", payload{Name: "Grace"}, time.Second); err != nil {
-		t.Fatalf("SetCtx failed: %v", err)
+	if err := SetContext(ctx, c, "typed:setctx", payload{Name: "Grace"}, time.Second); err != nil {
+		t.Fatalf("SetContext failed: %v", err)
 	}
 
 	got, ok, err := Get[payload](c, "typed:set")
 	if err != nil || !ok || got.Name != "Ada" {
 		t.Fatalf("Get failed: ok=%v got=%+v err=%v", ok, got, err)
 	}
-	got, ok, err = GetCtx[payload](ctx, c, "typed:setctx")
+	got, ok, err = GetContext[payload](ctx, c, "typed:setctx")
 	if err != nil || !ok || got.Name != "Grace" {
-		t.Fatalf("GetCtx failed: ok=%v got=%+v err=%v", ok, got, err)
+		t.Fatalf("GetContext failed: ok=%v got=%+v err=%v", ok, got, err)
 	}
 
 	if err := Set(c, "typed:pull", payload{Name: "Linus"}, time.Second); err != nil {
@@ -41,9 +41,9 @@ func TestGenericTypedWrappers(t *testing.T) {
 	if err != nil || !ok || pulled.Name != "Linus" {
 		t.Fatalf("Pull failed: ok=%v got=%+v err=%v", ok, pulled, err)
 	}
-	pulled, ok, err = PullCtx[payload](ctx, c, "typed:pull")
+	pulled, ok, err = PullContext[payload](ctx, c, "typed:pull")
 	if err != nil || ok {
-		t.Fatalf("PullCtx miss expected after pull: ok=%v got=%+v err=%v", ok, pulled, err)
+		t.Fatalf("PullContext miss expected after pull: ok=%v got=%+v err=%v", ok, pulled, err)
 	}
 }
 
@@ -62,11 +62,11 @@ func TestGenericRefreshAheadAndRememberStaleWrappers(t *testing.T) {
 	if err != nil || v.Name != "Ada" {
 		t.Fatalf("RefreshAhead failed: v=%+v err=%v", v, err)
 	}
-	v, err = RefreshAheadCtx[payload](ctx, c, "ra:typed", time.Second, 200*time.Millisecond, func(context.Context) (payload, error) {
+	v, err = RefreshAheadContext[payload](ctx, c, "ra:typed", time.Second, 200*time.Millisecond, func(context.Context) (payload, error) {
 		return payload{Name: "Grace"}, nil
 	})
 	if err != nil || v.Name != "Ada" {
-		t.Fatalf("RefreshAheadCtx cached path failed: v=%+v err=%v", v, err)
+		t.Fatalf("RefreshAheadContext cached path failed: v=%+v err=%v", v, err)
 	}
 
 	rs, usedStale, err := RememberStale[payload](c, "rs:typed", time.Second, 2*time.Second, func() (payload, error) {
@@ -75,11 +75,11 @@ func TestGenericRefreshAheadAndRememberStaleWrappers(t *testing.T) {
 	if err != nil || usedStale || rs.Name != "Linus" {
 		t.Fatalf("RememberStale failed: usedStale=%v v=%+v err=%v", usedStale, rs, err)
 	}
-	rs, usedStale, err = RememberStaleCtx[payload](ctx, c, "rs:typed", time.Second, 2*time.Second, func(context.Context) (payload, error) {
+	rs, usedStale, err = RememberStaleContext[payload](ctx, c, "rs:typed", time.Second, 2*time.Second, func(context.Context) (payload, error) {
 		return payload{Name: "Other"}, nil
 	})
 	if err != nil || usedStale || rs.Name != "Linus" {
-		t.Fatalf("RememberStaleCtx cached path failed: usedStale=%v v=%+v err=%v", usedStale, rs, err)
+		t.Fatalf("RememberStaleContext cached path failed: usedStale=%v v=%+v err=%v", usedStale, rs, err)
 	}
 }
 
@@ -92,34 +92,34 @@ func TestGenericWrapperErrorBranches(t *testing.T) {
 		Name string `json:"name"`
 	}
 
-	// Decode error path for GetCtx/PullCtx.
+	// Decode error path for GetContext/PullContext.
 	if err := c.SetBytes("bad:json", []byte("not-json"), time.Second); err != nil {
 		t.Fatalf("seed bad json failed: %v", err)
 	}
-	if _, ok, err := GetCtx[payload](ctx, c, "bad:json"); err == nil || ok {
-		t.Fatalf("expected GetCtx decode error, ok=%v err=%v", ok, err)
+	if _, ok, err := GetContext[payload](ctx, c, "bad:json"); err == nil || ok {
+		t.Fatalf("expected GetContext decode error, ok=%v err=%v", ok, err)
 	}
-	if _, ok, err := PullCtx[payload](ctx, c, "bad:json"); err == nil || ok {
-		t.Fatalf("expected PullCtx decode error, ok=%v err=%v", ok, err)
+	if _, ok, err := PullContext[payload](ctx, c, "bad:json"); err == nil || ok {
+		t.Fatalf("expected PullContext decode error, ok=%v err=%v", ok, err)
 	}
 
-	// Encode error path for SetCtx using unsupported JSON type.
-	if err := SetCtx[func()](ctx, c, "bad:set", func() {}, time.Second); err == nil {
-		t.Fatalf("expected SetCtx encode error for func value")
+	// Encode error path for SetContext using unsupported JSON type.
+	if err := SetContext[func()](ctx, c, "bad:set", func() {}, time.Second); err == nil {
+		t.Fatalf("expected SetContext encode error for func value")
 	}
 
 	// Nil callback guards for typed wrappers.
 	if _, err := RefreshAhead[payload](c, "ra:nil", time.Second, 200*time.Millisecond, nil); err == nil {
 		t.Fatalf("expected RefreshAhead nil callback error")
 	}
-	if _, err := RefreshAheadCtx[payload](ctx, c, "ra:nilctx", time.Second, 200*time.Millisecond, nil); err == nil {
-		t.Fatalf("expected RefreshAheadCtx nil callback error")
+	if _, err := RefreshAheadContext[payload](ctx, c, "ra:nilctx", time.Second, 200*time.Millisecond, nil); err == nil {
+		t.Fatalf("expected RefreshAheadContext nil callback error")
 	}
 	if _, _, err := RememberStale[payload](c, "rs:nil", time.Second, 2*time.Second, nil); err == nil {
 		t.Fatalf("expected RememberStale nil callback error")
 	}
-	if _, _, err := RememberStaleCtx[payload](ctx, c, "rs:nilctx", time.Second, 2*time.Second, nil); err == nil {
-		t.Fatalf("expected RememberStaleCtx nil callback error")
+	if _, _, err := RememberStaleContext[payload](ctx, c, "rs:nilctx", time.Second, 2*time.Second, nil); err == nil {
+		t.Fatalf("expected RememberStaleContext nil callback error")
 	}
 }
 
