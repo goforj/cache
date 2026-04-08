@@ -357,7 +357,7 @@ Many functions also provide `...Context` variants that accept an explicit `conte
 | Group | Functions |
 |------:|:-----------|
 | **Constructors** | [NewFileStore](#newfilestore) [NewFileStoreWithConfig](#newfilestorewithconfig) [NewMemoryStore](#newmemorystore) [NewMemoryStoreWithConfig](#newmemorystorewithconfig) [NewNullStore](#newnullstore) [NewNullStoreWithConfig](#newnullstorewithconfig) |
-| **Core** | [Driver](#cache-driver) [NewCache](#newcache) [NewCacheWithTTL](#newcachewithttl) [Ready](#cache-ready) [Store](#cache-store) |
+| **Core** | [Driver](#cache-driver) [Inspector](#cache-inspector) [NewCache](#newcache) [NewCacheWithTTL](#newcachewithttl) [Ready](#cache-ready) [Store](#cache-store) |
 | **Driver Configs** | [Shared BaseConfig](#driver-configs-shared-baseconfig) [DynamoDB Config](#driver-config-dynamocache) [Memcached Config](#driver-config-memcachedcache) [MySQL Config](#driver-config-mysqlcache) [NATS Config](#driver-config-natscache) [Postgres Config](#driver-config-postgrescache) [Redis Config](#driver-config-rediscache) [SQL Core Config](#driver-config-sqlcore) [SQLite Config](#driver-config-sqlitecache) |
 | **Invalidation** | [Delete](#cache-delete) [DeleteMany](#cache-deletemany) [Flush](#cache-flush) [Pull](#pull) [PullBytes](#cache-pullbytes) |
 | **Locking** | [Acquire](#lockhandle-acquire) [Block](#lockhandle-block) [Lock](#cache-lock) [LockContext](#cache-lockcontext) [LockHandle.Get](#lockhandle-get) [NewLockHandle](#cache-newlockhandle) [Release](#lockhandle-release) [TryLock](#cache-trylock) [Unlock](#cache-unlock) |
@@ -365,7 +365,7 @@ Many functions also provide `...Context` variants that accept an explicit `conte
 | **Observability** | [OnCacheOp](#observerfunc-oncacheop) [WithObserver](#cache-withobserver) |
 | **Rate Limiting** | [RateLimit](#cache-ratelimit) |
 | **Read Through** | [Remember](#remember) [RememberBytes](#cache-rememberbytes) [RememberStale](#rememberstale) [RememberStaleBytes](#cache-rememberstalebytes) [RememberStaleContext](#rememberstalecontext) |
-| **Reads** | [BatchGetBytes](#cache-batchgetbytes) [Get](#get) [GetBytes](#cache-getbytes) [GetJSON](#getjson) [GetString](#cache-getstring) |
+| **Reads** | [BatchGetBytes](#cache-batchgetbytes) [Get](#get) [GetBytes](#cache-getbytes) [GetJSON](#getjson) [GetString](#cache-getstring) [ListPage](#listpage) |
 | **Refresh Ahead** | [RefreshAhead](#refreshahead) [RefreshAheadBytes](#cache-refreshaheadbytes) [RefreshAheadValueWithCodec](#refreshaheadvaluewithcodec) |
 | **Testing Helpers** | [AssertCalled](#fake-assertcalled) [AssertNotCalled](#fake-assertnotcalled) [AssertTotal](#fake-asserttotal) [Cache](#fake-cache) [Count](#fake-count) [New](#new) [Reset](#fake-reset) [Total](#fake-total) |
 | **Writes** | [Add](#cache-add) [BatchSetBytes](#cache-batchsetbytes) [Decrement](#cache-decrement) [Increment](#cache-increment) [Set](#set) [SetBytes](#cache-setbytes) [SetJSON](#setjson) [SetString](#cache-setstring) |
@@ -458,6 +458,17 @@ fmt.Println(store.Driver()) // null
 ### <a id="cache-driver"></a>Driver
 
 Driver reports the underlying store driver.
+
+### <a id="cache-inspector"></a>Inspector
+
+Inspector returns the optional browsing interface for the underlying store.
+
+```go
+ctx := context.Background()
+c := cache.NewCache(cache.NewMemoryStore(ctx))
+inspector, ok := c.Inspector()
+fmt.Println(ok, inspector.Capabilities().CanList) // true true
+```
 
 ### <a id="newcache"></a>NewCache
 
@@ -1078,6 +1089,22 @@ c := cache.NewCache(cache.NewMemoryStore(ctx))
 _ = c.SetString("user:42:name", "Ada", 0)
 name, ok, _ := c.GetString("user:42:name")
 fmt.Println(ok, name) // true Ada
+```
+
+### <a id="listpage"></a>ListPage
+
+ListPage lists cache entries from an inspector-capable store.
+
+```go
+ctx := context.Background()
+c := cache.NewCache(cache.NewMemoryStore(ctx))
+_ = c.SetString("profile:1", "Ada", time.Minute)
+_ = c.SetString("profile:2", "Grace", time.Minute)
+page, _ := cache.ListPage(ctx, c, cachecore.ListPageOptions{
+	Query: "profile:",
+	Limit: 10,
+})
+fmt.Println(len(page.Entries), page.Entries[0].Key) // 2 profile:1
 ```
 
 ## Refresh Ahead
