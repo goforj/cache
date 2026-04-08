@@ -115,6 +115,45 @@ func (s *memoryStore) Flush(_ context.Context) error {
 	return nil
 }
 
+func (s *memoryStore) Capabilities() cachecore.InspectorCapabilities {
+	return cachecore.InspectorCapabilities{
+		CanList:   true,
+		CanRead:   true,
+		CanDelete: true,
+		CanTTL:    true,
+	}
+}
+
+func (s *memoryStore) ListPage(_ context.Context, opts cachecore.ListPageOptions) (cachecore.ListPageResult, error) {
+	items := s.cache.Items()
+	entries := make([]cachecore.CacheEntry, 0, len(items))
+	for key, item := range items {
+		size := 0
+		switch value := item.Object.(type) {
+		case []byte:
+			size = len(value)
+		case string:
+			size = len(value)
+		}
+		var expiresAt *int64
+		if item.Expiration > 0 {
+			exp := item.Expiration
+			expiresAt = &exp
+		}
+		entries = append(entries, cachecore.CacheEntry{
+			Key:       key,
+			SizeBytes: size,
+			ExpiresAt: expiresAt,
+		})
+	}
+	filtered := cachecore.FilterAndSortEntries(entries, cachecore.ListFilterTerm(opts))
+	offset, err := cachecore.DecodeOffsetCursor(opts.Cursor)
+	if err != nil {
+		return cachecore.ListPageResult{}, err
+	}
+	return cachecore.SliceEntries(filtered, offset, opts.Limit), nil
+}
+
 func (s *memoryStore) readInt64(key string) (int64, bool, error) {
 	body, ok := s.cache.Get(key)
 	if !ok {

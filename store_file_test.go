@@ -179,15 +179,19 @@ func TestFileStoreSetUsesDefaultTTLWhenZero(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read file: %v", err)
 	}
-	if len(data) < 12 {
+	if len(data) < 16 {
 		t.Fatalf("expected binary record header")
 	}
-	if string(data[:4]) != string(fileRecordMagic) {
+	if string(data[:4]) != string(fileRecordMagicV2) {
 		t.Fatalf("expected binary record magic")
 	}
 	expiresAt := int64(binary.BigEndian.Uint64(data[4:12]))
 	if expiresAt <= time.Now().UnixNano() {
 		t.Fatalf("expected future expiration")
+	}
+	keyLen := binary.BigEndian.Uint32(data[12:16])
+	if keyLen != 1 || string(data[16:17]) != "k" {
+		t.Fatalf("expected embedded key metadata")
 	}
 }
 

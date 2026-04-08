@@ -326,6 +326,69 @@ func (s *store) cacheKey(key string) string {
 
 func (s *store) scopePrefix() string { return s.scopePrefixStr }
 
+func (s *store) Capabilities() cachecore.InspectorCapabilities {
+	return cachecore.InspectorCapabilities{
+		CanList:   true,
+		CanRead:   true,
+		CanDelete: true,
+		CanTTL:    !s.bucketTTL,
+	}
+}
+
+func (s *store) ListPage(_ context.Context, opts cachecore.ListPageOptions) (cachecore.ListPageResult, error) {
+	if s.kv == nil {
+		return cachecore.ListPageResult{}, errors.New("nats cache key-value unavailable")
+	}
+	lister, err := s.kv.ListKeys(nats.IgnoreDeletes())
+	if err != nil {
+		if errors.Is(err, nats.ErrNoKeysFound) {
+			return cachecore.ListPageResult{}, nil
+		}
+		return cachecore.ListPageResult{}, err
+	}
+	defer func() { _ = lister.Stop() }()
+
+	entries := make([]cachecore.CacheEntry, 0)
+	scopePrefix := s.scopePrefix()
+	for key := range lister.Keys() {
+		if !strings.HasPrefix(key, scopePrefix) {
+			continue
+		}
+		rawKey, err := decodeCacheKey(strings.TrimPrefix(key, scopePrefix))
+		if err != nil {
+			continue
+		}
+		body, ok, err := s.Get(context.Background(), rawKey)
+		if err != nil || !ok {
+			continue
+		}
+		entry := cachecore.CacheEntry{
+			Key:       rawKey,
+			SizeBytes: len(body),
+		}
+		if !s.bucketTTL {
+			if kvEntry, err := s.kv.Get(key); err == nil {
+				if env, wrapped, err := decodeEnvelope(kvEntry.Value()); err == nil && wrapped && env.ExpiresAt > 0 {
+					exp := env.ExpiresAt
+					entry.ExpiresAt = &exp
+				}
+			}
+		}
+		entries = append(entries, entry)
+	}
+	for err := range lister.Error() {
+		if err != nil {
+			return cachecore.ListPageResult{}, err
+		}
+	}
+	filtered := cachecore.FilterAndSortEntries(entries, cachecore.ListFilterTerm(opts))
+	offset, err := cachecore.DecodeOffsetCursor(opts.Cursor)
+	if err != nil {
+		return cachecore.ListPageResult{}, err
+	}
+	return cachecore.SliceEntries(filtered, offset, opts.Limit), nil
+}
+
 func (s *store) encodeEnvelope(value []byte, ttl time.Duration) ([]byte, error) {
 	if ttl <= 0 {
 		ttl = s.defaultTTL
@@ -369,6 +432,17 @@ func encodeKeyPart(part string) string {
 		return "_"
 	}
 	return base64.RawURLEncoding.EncodeToString([]byte(part))
+}
+
+func decodeCacheKey(part string) (string, error) {
+	if part == "_" {
+		return "", nil
+	}
+	decoded, err := base64.RawURLEncoding.DecodeString(part)
+	if err != nil {
+		return "", err
+	}
+	return string(decoded), nil
 }
 
 func cloneBytes(value []byte) []byte {

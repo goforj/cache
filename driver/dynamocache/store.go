@@ -323,6 +323,68 @@ func expired(item map[string]types.AttributeValue) bool {
 	return time.Now().UnixMilli() > exp
 }
 
+func (s *dynamoStore) Capabilities() cachecore.InspectorCapabilities {
+	return cachecore.InspectorCapabilities{
+		CanList:   true,
+		CanRead:   true,
+		CanDelete: true,
+		CanTTL:    true,
+	}
+}
+
+func (s *dynamoStore) ListPage(ctx context.Context, opts cachecore.ListPageOptions) (cachecore.ListPageResult, error) {
+	entries := make([]cachecore.CacheEntry, 0)
+	var lastEvaluatedKey map[string]types.AttributeValue
+	for {
+		out, err := s.client.Scan(ctx, &dynamodb.ScanInput{
+			TableName:            aws.String(s.table),
+			ProjectionExpression: aws.String("k, v, ea"),
+			ExclusiveStartKey:    lastEvaluatedKey,
+		})
+		if err != nil {
+			return cachecore.ListPageResult{}, err
+		}
+		for _, item := range out.Items {
+			if expired(item) {
+				continue
+			}
+			kv, ok := item["k"].(*types.AttributeValueMemberS)
+			if !ok {
+				continue
+			}
+			key := kv.Value
+			if s.prefix != "" && strings.HasPrefix(key, s.prefix+":") {
+				key = strings.TrimPrefix(key, s.prefix+":")
+			}
+			size := 0
+			if value, ok := item["v"].(*types.AttributeValueMemberB); ok {
+				size = len(value.Value)
+			}
+			var expiresAt *int64
+			if expValue, ok := item["ea"].(*types.AttributeValueMemberN); ok {
+				if exp, err := strconv.ParseInt(expValue.Value, 10, 64); err == nil {
+					expiresAt = &exp
+				}
+			}
+			entries = append(entries, cachecore.CacheEntry{
+				Key:       key,
+				SizeBytes: size,
+				ExpiresAt: expiresAt,
+			})
+		}
+		if out.LastEvaluatedKey == nil || len(out.LastEvaluatedKey) == 0 {
+			break
+		}
+		lastEvaluatedKey = out.LastEvaluatedKey
+	}
+	filtered := cachecore.FilterAndSortEntries(entries, cachecore.ListFilterTerm(opts))
+	offset, err := cachecore.DecodeOffsetCursor(opts.Cursor)
+	if err != nil {
+		return cachecore.ListPageResult{}, err
+	}
+	return cachecore.SliceEntries(filtered, offset, opts.Limit), nil
+}
+
 func ensureDynamoTable(ctx context.Context, client DynamoAPI, table string) error {
 	var lastErr error
 	for attempt := 1; attempt <= dynamoEnsureTableMaxAttempts; attempt++ {

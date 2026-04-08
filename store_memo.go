@@ -146,6 +146,22 @@ func (s *memoStore) forget(key string) {
 	s.mu.Unlock()
 }
 
+func (s *memoStore) Capabilities() cachecore.InspectorCapabilities {
+	inspector, ok := s.store.(cachecore.Inspector)
+	if !ok {
+		return cachecore.InspectorCapabilities{}
+	}
+	return inspector.Capabilities()
+}
+
+func (s *memoStore) ListPage(ctx context.Context, opts cachecore.ListPageOptions) (cachecore.ListPageResult, error) {
+	inspector, ok := s.store.(cachecore.Inspector)
+	if !ok {
+		return cachecore.ListPageResult{}, ErrInspectorUnsupported
+	}
+	return inspector.ListPage(ctx, opts)
+}
+
 func cloneBytes(value []byte) []byte {
 	if value == nil {
 		return nil

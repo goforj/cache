@@ -373,3 +373,71 @@ func cloneBytes(value []byte) []byte {
 	copy(out, value)
 	return out
 }
+
+func (s *sqlStore) Capabilities() cachecore.InspectorCapabilities {
+	return cachecore.InspectorCapabilities{
+		CanList:   true,
+		CanRead:   true,
+		CanDelete: true,
+		CanTTL:    true,
+	}
+}
+
+func (s *sqlStore) ListPage(ctx context.Context, opts cachecore.ListPageOptions) (cachecore.ListPageResult, error) {
+	limit := cachecore.NormalizeListLimit(opts.Limit)
+	offset, err := cachecore.DecodeOffsetCursor(opts.Cursor)
+	if err != nil {
+		return cachecore.ListPageResult{}, err
+	}
+	filter := cachecore.ListFilterTerm(opts)
+	where := ""
+	args := make([]any, 0, 3)
+	if filter != "" {
+		where = fmt.Sprintf(" WHERE k LIKE %s", s.ph(1))
+		if s.prefix == "" {
+			args = append(args, "%"+filter+"%")
+		} else {
+			args = append(args, s.prefix+":%"+filter+"%")
+		}
+	}
+	q := fmt.Sprintf("SELECT k, v, ea FROM %s%s ORDER BY k ASC LIMIT %s OFFSET %s", s.table, where, s.ph(len(args)+1), s.ph(len(args)+2))
+	args = append(args, limit+1, offset)
+	rows, err := s.db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return cachecore.ListPageResult{}, err
+	}
+	defer rows.Close()
+	entries := make([]cachecore.CacheEntry, 0, limit+1)
+	for rows.Next() {
+		var (
+			key string
+			val []byte
+			exp int64
+		)
+		if err := rows.Scan(&key, &val, &exp); err != nil {
+			return cachecore.ListPageResult{}, err
+		}
+		if exp > 0 && time.Now().UnixMilli() > exp {
+			continue
+		}
+		key = strings.TrimPrefix(key, s.prefix+":")
+		entry := cachecore.CacheEntry{
+			Key:       key,
+			SizeBytes: len(val),
+		}
+		if exp > 0 {
+			expCopy := exp
+			entry.ExpiresAt = &expCopy
+		}
+		entries = append(entries, entry)
+	}
+	if err := rows.Err(); err != nil {
+		return cachecore.ListPageResult{}, err
+	}
+	result := cachecore.ListPageResult{Entries: entries, HasMore: len(entries) > limit}
+	if result.HasMore {
+		result.Entries = result.Entries[:limit]
+		result.NextCursor = cachecore.EncodeOffsetCursor(offset + limit)
+	}
+	return result, nil
+}

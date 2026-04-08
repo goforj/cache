@@ -74,3 +74,19 @@ func (s *shapingStore) DeleteMany(ctx context.Context, keys ...string) error {
 func (s *shapingStore) Flush(ctx context.Context) error {
 	return s.inner.Flush(ctx)
 }
+
+func (s *shapingStore) Capabilities() cachecore.InspectorCapabilities {
+	inspector, ok := s.inner.(cachecore.Inspector)
+	if !ok {
+		return cachecore.InspectorCapabilities{}
+	}
+	return inspector.Capabilities()
+}
+
+func (s *shapingStore) ListPage(ctx context.Context, opts cachecore.ListPageOptions) (cachecore.ListPageResult, error) {
+	inspector, ok := s.inner.(cachecore.Inspector)
+	if !ok {
+		return cachecore.ListPageResult{}, ErrInspectorUnsupported
+	}
+	return inspector.ListPage(ctx, opts)
+}

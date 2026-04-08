@@ -12,3 +12,8 @@ func TestCachetestRunStoreContract_FileStore(t *testing.T) {
 	store := cache.NewFileStore(context.Background(), t.TempDir())
 	cachetest.RunStoreContract(t, store, cachetest.Options{})
 }
+
+func TestCachetestRunInspectorContract_FileStore(t *testing.T) {
+	store := cache.NewFileStore(context.Background(), t.TempDir())
+	cachetest.RunInspectorContract(t, store)
+}

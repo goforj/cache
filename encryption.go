@@ -41,7 +41,7 @@ func newEncryptingStore(inner cachecore.Store, key []byte) (cachecore.Store, err
 	return &encryptingStore{inner: inner, aead: aead}, nil
 }
 
-func (s *encryptingStore) Driver() cachecore.Driver { return s.inner.Driver() }
+func (s *encryptingStore) Driver() cachecore.Driver        { return s.inner.Driver() }
 func (s *encryptingStore) Ready(ctx context.Context) error { return s.inner.Ready(ctx) }
 
 func (s *encryptingStore) Get(ctx context.Context, key string) ([]byte, bool, error) {
@@ -90,6 +90,22 @@ func (s *encryptingStore) DeleteMany(ctx context.Context, keys ...string) error 
 
 func (s *encryptingStore) Flush(ctx context.Context) error {
 	return s.inner.Flush(ctx)
+}
+
+func (s *encryptingStore) Capabilities() cachecore.InspectorCapabilities {
+	inspector, ok := s.inner.(cachecore.Inspector)
+	if !ok {
+		return cachecore.InspectorCapabilities{}
+	}
+	return inspector.Capabilities()
+}
+
+func (s *encryptingStore) ListPage(ctx context.Context, opts cachecore.ListPageOptions) (cachecore.ListPageResult, error) {
+	inspector, ok := s.inner.(cachecore.Inspector)
+	if !ok {
+		return cachecore.ListPageResult{}, ErrInspectorUnsupported
+	}
+	return inspector.ListPage(ctx, opts)
 }
 
 func (s *encryptingStore) encrypt(plain []byte) ([]byte, error) {

@@ -27,9 +27,10 @@ import (
 )
 
 type storeFactory struct {
-	name string
-	new  func(t *testing.T) (cachetest.Store, func())
-	opts cachetest.Options
+	name      string
+	new       func(t *testing.T) (cachetest.Store, func())
+	opts      cachetest.Options
+	inspector bool
 }
 
 func TestStoreContract_AllDrivers(t *testing.T) {
@@ -51,6 +52,7 @@ func TestStoreContract_AllDrivers(t *testing.T) {
 			new: func(t *testing.T) (cachetest.Store, func()) {
 				return cache.NewFileStore(context.Background(), t.TempDir()), func() {}
 			},
+			inspector: true,
 		})
 	}
 
@@ -60,6 +62,7 @@ func TestStoreContract_AllDrivers(t *testing.T) {
 			new: func(t *testing.T) (cachetest.Store, func()) {
 				return cache.NewMemoryStore(context.Background()), func() {}
 			},
+			inspector: true,
 		})
 	}
 
@@ -88,6 +91,7 @@ func TestStoreContract_AllDrivers(t *testing.T) {
 				}
 				return store, cleanup
 			},
+			inspector: true,
 		})
 	}
 
@@ -110,6 +114,7 @@ func TestStoreContract_AllDrivers(t *testing.T) {
 				}
 				return store, cleanup
 			},
+			inspector: true,
 		})
 	}
 
@@ -184,6 +189,7 @@ func TestStoreContract_AllDrivers(t *testing.T) {
 				}
 				return store, cleanup
 			},
+			inspector: true,
 		})
 	}
 
@@ -201,6 +207,7 @@ func TestStoreContract_AllDrivers(t *testing.T) {
 				}
 				return store, func() {}
 			},
+			inspector: true,
 		})
 	}
 
@@ -231,6 +238,7 @@ func TestStoreContract_AllDrivers(t *testing.T) {
 				}
 				return store, cleanup
 			},
+			inspector: true,
 		})
 	}
 
@@ -261,6 +269,7 @@ func TestStoreContract_AllDrivers(t *testing.T) {
 				}
 				return store, cleanup
 			},
+			inspector: true,
 		})
 	}
 
@@ -277,6 +286,9 @@ func TestStoreContract_AllDrivers(t *testing.T) {
 			opts := fx.opts
 			opts.CaseName = t.Name()
 			cachetest.RunStoreContract(t, store, opts)
+			if fx.inspector {
+				cachetest.RunInspectorContract(t, store)
+			}
 		})
 	}
 }

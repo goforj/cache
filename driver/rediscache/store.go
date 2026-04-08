@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/goforj/cache/cachecore"
@@ -209,4 +210,55 @@ func (s *store) Flush(ctx context.Context) error {
 
 func (s *store) cacheKey(key string) string {
 	return s.prefix + ":" + key
+}
+
+func (s *store) Capabilities() cachecore.InspectorCapabilities {
+	return cachecore.InspectorCapabilities{
+		CanList:   true,
+		CanRead:   true,
+		CanDelete: true,
+	}
+}
+
+func (s *store) ListPage(ctx context.Context, opts cachecore.ListPageOptions) (cachecore.ListPageResult, error) {
+	if s.client == nil {
+		return cachecore.ListPageResult{}, errors.New("redis cache client unavailable")
+	}
+	filter := cachecore.ListFilterTerm(opts)
+	pattern := s.cacheKey("*")
+	var (
+		cursor  uint64
+		keys    []string
+		scanned []string
+		err     error
+	)
+	for {
+		scanned, cursor, err = s.client.Scan(ctx, cursor, pattern, 200).Result()
+		if err != nil {
+			return cachecore.ListPageResult{}, err
+		}
+		keys = append(keys, scanned...)
+		if cursor == 0 {
+			break
+		}
+	}
+	entries := make([]cachecore.CacheEntry, 0, len(keys))
+	cachePrefix := s.prefix + ":"
+	for _, fullKey := range keys {
+		key := strings.TrimPrefix(fullKey, cachePrefix)
+		body, ok, err := s.Get(ctx, key)
+		if err != nil || !ok {
+			continue
+		}
+		entries = append(entries, cachecore.CacheEntry{
+			Key:       key,
+			SizeBytes: len(body),
+		})
+	}
+	entries = cachecore.FilterAndSortEntries(entries, filter)
+	offset, err := cachecore.DecodeOffsetCursor(opts.Cursor)
+	if err != nil {
+		return cachecore.ListPageResult{}, err
+	}
+	return cachecore.SliceEntries(entries, offset, opts.Limit), nil
 }

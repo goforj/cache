@@ -13,6 +13,11 @@ func TestCachetestRunStoreContract_MemoryStore(t *testing.T) {
 	cachetest.RunStoreContract(t, store, cachetest.Options{})
 }
 
+func TestCachetestRunInspectorContract_MemoryStore(t *testing.T) {
+	store := cache.NewMemoryStore(context.Background())
+	cachetest.RunInspectorContract(t, store)
+}
+
 func TestCachetestRunStoreContract_NullStore(t *testing.T) {
 	store := cache.NewNullStore(context.Background())
 	cachetest.RunStoreContract(t, store, cachetest.Options{NullSemantics: true})

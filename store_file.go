@@ -23,8 +23,10 @@ var (
 )
 
 var fileRecordMagic = []byte("CFR1")
+var fileRecordMagicV2 = []byte("CFR2")
 
 type fileRecord struct {
+	Key       string `json:"key,omitempty"`
 	ExpiresAt int64  `json:"expires_at"`
 	Value     []byte `json:"value"`
 }
@@ -76,7 +78,7 @@ func (s *fileStore) Get(_ context.Context, key string) ([]byte, bool, error) {
 		return nil, false, err
 	}
 
-	expiresAt, value, err := decodeFileRecord(data)
+	_, expiresAt, value, err := decodeFileRecord(data)
 	if err != nil {
 		_ = os.Remove(path)
 		return nil, false, err
@@ -102,11 +104,15 @@ func (s *fileStore) Set(_ context.Context, key string, value []byte, ttl time.Du
 	}
 	tmpPath := tmp.Name()
 
-	var header [12]byte
-	copy(header[:4], fileRecordMagic)
-	binary.BigEndian.PutUint64(header[4:], uint64(expiresAt))
+	keyBytes := []byte(key)
+	recordLen := 16 + len(keyBytes)
+	header := make([]byte, recordLen)
+	copy(header[:4], fileRecordMagicV2)
+	binary.BigEndian.PutUint64(header[4:12], uint64(expiresAt))
+	binary.BigEndian.PutUint32(header[12:16], uint32(len(keyBytes)))
+	copy(header[16:], keyBytes)
 
-	if _, err := tmp.Write(header[:]); err != nil {
+	if _, err := tmp.Write(header); err != nil {
 		tmp.Close()
 		_ = os.Remove(tmpPath)
 		return err
@@ -186,21 +192,86 @@ func (s *fileStore) Flush(_ context.Context) error {
 	return nil
 }
 
+func (s *fileStore) Capabilities() cachecore.InspectorCapabilities {
+	return cachecore.InspectorCapabilities{
+		CanList:   true,
+		CanRead:   true,
+		CanDelete: true,
+		CanTTL:    true,
+	}
+}
+
+func (s *fileStore) ListPage(_ context.Context, opts cachecore.ListPageOptions) (cachecore.ListPageResult, error) {
+	dirEntries, err := os.ReadDir(s.dir)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return cachecore.ListPageResult{}, nil
+		}
+		return cachecore.ListPageResult{}, err
+	}
+	entries := make([]cachecore.CacheEntry, 0, len(dirEntries))
+	for _, dirEntry := range dirEntries {
+		if dirEntry.IsDir() {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(s.dir, dirEntry.Name()))
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				continue
+			}
+			return cachecore.ListPageResult{}, err
+		}
+		key, expiresAtValue, value, err := decodeFileRecord(data)
+		if err != nil {
+			continue
+		}
+		if key == "" {
+			continue
+		}
+		var expiresAt *int64
+		if expiresAtValue > 0 {
+			exp := expiresAtValue
+			expiresAt = &exp
+		}
+		entries = append(entries, cachecore.CacheEntry{
+			Key:       key,
+			SizeBytes: len(value),
+			ExpiresAt: expiresAt,
+		})
+	}
+	filtered := cachecore.FilterAndSortEntries(entries, cachecore.ListFilterTerm(opts))
+	offset, err := cachecore.DecodeOffsetCursor(opts.Cursor)
+	if err != nil {
+		return cachecore.ListPageResult{}, err
+	}
+	return cachecore.SliceEntries(filtered, offset, opts.Limit), nil
+}
+
 func (s *fileStore) path(key string) string {
 	sum := sha256.Sum256([]byte(key))
 	name := hex.EncodeToString(sum[:])
 	return filepath.Join(s.dir, name+".cache")
 }
 
-func decodeFileRecord(data []byte) (int64, []byte, error) {
+func decodeFileRecord(data []byte) (string, int64, []byte, error) {
+	if len(data) >= 16 && bytes.Equal(data[:4], fileRecordMagicV2) {
+		expiresAt := int64(binary.BigEndian.Uint64(data[4:12]))
+		keyLen := int(binary.BigEndian.Uint32(data[12:16]))
+		offset := 16
+		if keyLen < 0 || len(data) < offset+keyLen {
+			return "", 0, nil, errors.New("invalid cache file record")
+		}
+		key := string(data[offset : offset+keyLen])
+		return key, expiresAt, data[offset+keyLen:], nil
+	}
 	if len(data) >= 12 && bytes.Equal(data[:4], fileRecordMagic) {
 		expiresAt := int64(binary.BigEndian.Uint64(data[4:12]))
-		return expiresAt, data[12:], nil
+		return "", expiresAt, data[12:], nil
 	}
 
 	var rec fileRecord
 	if err := json.Unmarshal(data, &rec); err != nil {
-		return 0, nil, err
+		return "", 0, nil, err
 	}
-	return rec.ExpiresAt, rec.Value, nil
+	return rec.Key, rec.ExpiresAt, rec.Value, nil
 }
