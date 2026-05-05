@@ -4,6 +4,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -98,16 +99,7 @@ func countRunEvents(root string, integrationPrefixes map[string]struct{}) (int, 
 	}
 
 	var total int
-	dec := json.NewDecoder(bytes.NewReader(out.Bytes()))
-
-	for dec.More() {
-		var event struct {
-			Action string `json:"Action"`
-			Test   string `json:"Test"`
-		}
-		if err := dec.Decode(&event); err != nil {
-			return 0, err
-		}
+	for _, event := range parseJSONEvents(out.Bytes()) {
 		if event.Action != "run" || event.Test == "" {
 			continue
 		}
@@ -150,15 +142,7 @@ func countIntegrationRunEvents(integrationDir string, integrationPrefixes map[st
 	}
 
 	var total int
-	dec := json.NewDecoder(bytes.NewReader(out.Bytes()))
-	for dec.More() {
-		var event struct {
-			Action string `json:"Action"`
-			Test   string `json:"Test"`
-		}
-		if err := dec.Decode(&event); err != nil {
-			return 0, err
-		}
+	for _, event := range parseJSONEvents(out.Bytes()) {
 		if event.Action != "run" || event.Test == "" {
 			continue
 		}
@@ -171,6 +155,28 @@ func countIntegrationRunEvents(integrationDir string, integrationPrefixes map[st
 		}
 	}
 	return total, nil
+}
+
+type testEvent struct {
+	Action string `json:"Action"`
+	Test   string `json:"Test"`
+}
+
+func parseJSONEvents(data []byte) []testEvent {
+	scanner := bufio.NewScanner(bytes.NewReader(data))
+	events := make([]testEvent, 0)
+	for scanner.Scan() {
+		line := bytes.TrimSpace(scanner.Bytes())
+		if len(line) == 0 || line[0] != '{' {
+			continue
+		}
+		var event testEvent
+		if err := json.Unmarshal(line, &event); err != nil {
+			continue
+		}
+		events = append(events, event)
+	}
+	return events
 }
 
 func buildTopLevelRunPattern(names map[string]struct{}) string {
