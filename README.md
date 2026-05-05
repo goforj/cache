@@ -357,14 +357,14 @@ Many functions also provide `...Context` variants that accept an explicit `conte
 | Group | Functions |
 |------:|:-----------|
 | **Constructors** | [NewFileStore](#newfilestore) [NewFileStoreWithConfig](#newfilestorewithconfig) [NewMemoryStore](#newmemorystore) [NewMemoryStoreWithConfig](#newmemorystorewithconfig) [NewNullStore](#newnullstore) [NewNullStoreWithConfig](#newnullstorewithconfig) |
-| **Core** | [Driver](#cache-driver) [Inspector](#cache-inspector) [NewCache](#newcache) [NewCacheWithTTL](#newcachewithttl) [Ready](#cache-ready) [Store](#cache-store) |
+| **Core** | [Driver](#cache-driver) [Inspector](#cache-inspector) [NewCache](#newcache) [NewCacheWithTTL](#newcachewithttl) [Ready](#cache-ready) [Store](#cache-store) [WithContext](#cache-withcontext) |
 | **Driver Configs** | [Shared BaseConfig](#driver-configs-shared-baseconfig) [DynamoDB Config](#driver-config-dynamocache) [Memcached Config](#driver-config-memcachedcache) [MySQL Config](#driver-config-mysqlcache) [NATS Config](#driver-config-natscache) [Postgres Config](#driver-config-postgrescache) [Redis Config](#driver-config-rediscache) [SQL Core Config](#driver-config-sqlcore) [SQLite Config](#driver-config-sqlitecache) |
 | **Invalidation** | [Delete](#cache-delete) [DeleteMany](#cache-deletemany) [Flush](#cache-flush) [Pull](#pull) [PullBytes](#cache-pullbytes) |
-| **Locking** | [Acquire](#lockhandle-acquire) [Block](#lockhandle-block) [Lock](#cache-lock) [LockContext](#cache-lockcontext) [LockHandle.Get](#lockhandle-get) [NewLockHandle](#cache-newlockhandle) [Release](#lockhandle-release) [TryLock](#cache-trylock) [Unlock](#cache-unlock) |
+| **Locking** | [Acquire](#lockhandle-acquire) [Block](#lockhandle-block) [Lock](#cache-lock) [LockHandle.Get](#lockhandle-get) [NewLockHandle](#cache-newlockhandle) [Release](#lockhandle-release) [TryLock](#cache-trylock) [Unlock](#cache-unlock) |
 | **Memoization** | [NewMemoStore](#newmemostore) |
 | **Observability** | [OnCacheOp](#observerfunc-oncacheop) [WithObserver](#cache-withobserver) |
 | **Rate Limiting** | [RateLimit](#cache-ratelimit) |
-| **Read Through** | [Remember](#remember) [RememberBytes](#cache-rememberbytes) [RememberStale](#rememberstale) [RememberStaleBytes](#cache-rememberstalebytes) [RememberStaleContext](#rememberstalecontext) |
+| **Read Through** | [Remember](#remember) [RememberBytes](#cache-rememberbytes) [RememberStale](#rememberstale) [RememberStaleBytes](#cache-rememberstalebytes) |
 | **Reads** | [BatchGetBytes](#cache-batchgetbytes) [Get](#get) [GetBytes](#cache-getbytes) [GetJSON](#getjson) [GetString](#cache-getstring) [ListPage](#listpage) |
 | **Refresh Ahead** | [RefreshAhead](#refreshahead) [RefreshAheadBytes](#cache-refreshaheadbytes) [RefreshAheadValueWithCodec](#refreshaheadvaluewithcodec) |
 | **Testing Helpers** | [AssertCalled](#fake-assertcalled) [AssertNotCalled](#fake-assertnotcalled) [AssertTotal](#fake-asserttotal) [Cache](#fake-cache) [Count](#fake-count) [New](#new) [Reset](#fake-reset) [Total](#fake-total) |
@@ -511,6 +511,10 @@ ctx := context.Background()
 c := cache.NewCache(cache.NewMemoryStore(ctx))
 fmt.Println(c.Store().Driver()) // memory
 ```
+
+### <a id="cache-withcontext"></a>WithContext
+
+WithContext returns a derived cache handle that binds ctx to subsequent operations.
 
 ## <a id="driver-configs"></a>Driver Configs
 
@@ -807,10 +811,6 @@ locked, err := c.Lock("job:sync", 10*time.Second, time.Second)
 fmt.Println(err == nil, locked) // true true
 ```
 
-### <a id="cache-lockcontext"></a>LockContext
-
-LockContext retries lock acquisition until success or context cancellation.
-
 ### <a id="lockhandle-get"></a>LockHandle.Get
 
 Get acquires the lock once, runs fn if acquired, then releases automatically.
@@ -1006,20 +1006,6 @@ body, usedStale, err := c.RememberStaleBytes("profile:42", time.Minute, 10*time.
 	return []byte(`{"name":"Ada"}`), nil
 })
 fmt.Println(err == nil, usedStale, len(body) > 0)
-```
-
-### <a id="rememberstalecontext"></a>RememberStaleContext
-
-RememberStaleContext returns a typed value with stale fallback semantics using JSON encoding by default.
-
-```go
-type Profile struct { Name string `json:"name"` }
-ctx := context.Background()
-c := cache.NewCache(cache.NewMemoryStore(ctx))
-profile, usedStale, err := cache.RememberStaleContext[Profile](ctx, c, "profile:42", time.Minute, 10*time.Minute, func(ctx context.Context) (Profile, error) {
-	return Profile{Name: "Ada"}, nil
-})
-fmt.Println(err == nil, usedStale, profile.Name) // true false Ada
 ```
 
 ## Reads

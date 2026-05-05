@@ -192,7 +192,7 @@ func assertBackendOutageErrors(t *testing.T, driverName string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	start := time.Now()
-	_, ok, err := cache.GetBytesContext(ctx, "fault:outage:get")
+	_, ok, err := cache.WithContext(ctx).GetBytes("fault:outage:get")
 	elapsed := time.Since(start)
 	if elapsed > 2*time.Second {
 		return fmt.Errorf("GetContext during outage returned too slowly: %v", elapsed)
@@ -204,7 +204,7 @@ func assertBackendOutageErrors(t *testing.T, driverName string) error {
 	ctx2, cancel2 := context.WithTimeout(context.Background(), timeout)
 	defer cancel2()
 	start = time.Now()
-	err = cache.SetBytesContext(ctx2, "fault:outage:set", []byte("x"), time.Second)
+	err = cache.WithContext(ctx2).SetBytes("fault:outage:set", []byte("x"), time.Second)
 	elapsed = time.Since(start)
 	if elapsed > 2*time.Second {
 		return fmt.Errorf("SetContext during outage returned too slowly: %v", elapsed)
@@ -216,7 +216,7 @@ func assertBackendOutageErrors(t *testing.T, driverName string) error {
 	ctx3, cancel3 := context.WithTimeout(context.Background(), timeout)
 	defer cancel3()
 	start = time.Now()
-	locked, err := cache.LockContext(ctx3, "fault:outage:lock", time.Second, 25*time.Millisecond)
+	locked, err := cache.WithContext(ctx3).Lock("fault:outage:lock", time.Second, 25*time.Millisecond)
 	elapsed = time.Since(start)
 	if elapsed > 2*time.Second {
 		return fmt.Errorf("LockContext during outage returned too slowly: %v", elapsed)

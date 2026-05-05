@@ -16,6 +16,7 @@ type Cache struct {
 	store      cachecore.Store
 	defaultTTL time.Duration
 	observer   Observer
+	ctx        context.Context
 }
 
 // RateLimitStatus contains fixed-window rate limiting metadata.
@@ -59,6 +60,14 @@ func NewCacheWithTTL(store cachecore.Store, defaultTTL time.Duration) *Cache {
 	}
 }
 
+// WithContext returns a derived cache handle that binds ctx to subsequent operations.
+// @group Core
+func (c *Cache) WithContext(ctx context.Context) *Cache {
+	clone := *c
+	clone.ctx = ctx
+	return &clone
+}
+
 // WithObserver attaches an observer to receive operation events.
 // @group Observability
 //
@@ -97,6 +106,13 @@ func (c *Cache) Driver() cachecore.Driver {
 	return c.store.Driver()
 }
 
+func (c *Cache) context() context.Context {
+	if c == nil || c.ctx == nil {
+		return context.Background()
+	}
+	return c.ctx
+}
+
 // Ready checks whether the underlying store is ready to serve requests.
 // @group Core
 //
@@ -106,12 +122,10 @@ func (c *Cache) Driver() cachecore.Driver {
 //	c := cache.NewCache(cache.NewMemoryStore(ctx))
 //	fmt.Println(c.Ready() == nil) // true
 func (c *Cache) Ready() error {
-	return c.ReadyContext(context.Background())
+	return c.ready(c.context())
 }
 
-// ReadyContext is the context-aware variant of Ready.
-// @group Core
-func (c *Cache) ReadyContext(ctx context.Context) error {
+func (c *Cache) ready(ctx context.Context) error {
 	return c.store.Ready(ctx)
 }
 
@@ -127,12 +141,10 @@ func (c *Cache) ReadyContext(ctx context.Context) error {
 //	value, ok, _ := c.GetBytes("user:42")
 //	fmt.Println(ok, string(value)) // true Ada
 func (c *Cache) GetBytes(key string) ([]byte, bool, error) {
-	return c.GetBytesContext(context.Background(), key)
+	return c.getBytes(c.context(), key)
 }
 
-// GetBytesContext is the context-aware variant of GetBytes.
-// @group Reads
-func (c *Cache) GetBytesContext(ctx context.Context, key string) ([]byte, bool, error) {
+func (c *Cache) getBytes(ctx context.Context, key string) ([]byte, bool, error) {
 	start := time.Now()
 	body, ok, err := c.store.Get(ctx, key)
 	c.observe(ctx, "get", key, ok, err, start)
@@ -152,15 +164,13 @@ func (c *Cache) GetBytesContext(ctx context.Context, key string) ([]byte, bool, 
 //	values, err := c.BatchGetBytes("a", "b", "missing")
 //	fmt.Println(err == nil, string(values["a"]), string(values["b"])) // true 1 2
 func (c *Cache) BatchGetBytes(keys ...string) (map[string][]byte, error) {
-	return c.BatchGetBytesContext(context.Background(), keys...)
+	return c.batchGetBytes(c.context(), keys...)
 }
 
-// BatchGetBytesContext is the context-aware variant of BatchGetBytes.
-// @group Reads
-func (c *Cache) BatchGetBytesContext(ctx context.Context, keys ...string) (map[string][]byte, error) {
+func (c *Cache) batchGetBytes(ctx context.Context, keys ...string) (map[string][]byte, error) {
 	out := make(map[string][]byte, len(keys))
 	for _, key := range keys {
-		body, ok, err := c.GetBytesContext(ctx, key)
+		body, ok, err := c.getBytes(ctx, key)
 		if err != nil {
 			return nil, err
 		}
@@ -182,14 +192,12 @@ func (c *Cache) BatchGetBytesContext(ctx context.Context, keys ...string) (map[s
 //	name, ok, _ := c.GetString("user:42:name")
 //	fmt.Println(ok, name) // true Ada
 func (c *Cache) GetString(key string) (string, bool, error) {
-	return c.GetStringContext(context.Background(), key)
+	return c.getString(c.context(), key)
 }
 
-// GetStringContext is the context-aware variant of GetString.
-// @group Reads
-func (c *Cache) GetStringContext(ctx context.Context, key string) (string, bool, error) {
+func (c *Cache) getString(ctx context.Context, key string) (string, bool, error) {
 	start := time.Now()
-	body, ok, err := c.GetBytesContext(ctx, key)
+	body, ok, err := c.getBytes(ctx, key)
 	if err != nil || !ok {
 		c.observe(ctx, "get_string", key, ok, err, start)
 		return "", ok, err
@@ -211,15 +219,13 @@ func (c *Cache) GetStringContext(ctx context.Context, key string) (string, bool,
 //	profile, ok, err := cache.GetJSON[Profile](c, "profile:42")
 //	fmt.Println(err == nil, ok, profile.Name) // true true Ada
 func GetJSON[T any](cache *Cache, key string) (T, bool, error) {
-	return GetJSONContext[T](context.Background(), cache, key)
+	return getJSON[T](cache.context(), cache, key)
 }
 
-// GetJSONContext is the context-aware variant of GetJSON.
-// @group Reads
-func GetJSONContext[T any](ctx context.Context, cache *Cache, key string) (T, bool, error) {
+func getJSON[T any](ctx context.Context, cache *Cache, key string) (T, bool, error) {
 	var zero T
 	start := time.Now()
-	body, ok, err := cache.GetBytesContext(ctx, key)
+	body, ok, err := cache.getBytes(ctx, key)
 	if err != nil || !ok {
 		cache.observe(ctx, "get_json", key, ok, err, start)
 		return zero, ok, err
@@ -247,14 +253,12 @@ func GetJSONContext[T any](ctx context.Context, cache *Cache, key string) (T, bo
 //	mode, ok2, err2 := cache.Get[string](c, "settings:mode")
 //	fmt.Println(err == nil, ok, profile.Name, err2 == nil, ok2, mode) // true true Ada true true dark
 func Get[T any](cache *Cache, key string) (T, bool, error) {
-	return GetContext[T](context.Background(), cache, key)
+	return getValue[T](cache.context(), cache, key)
 }
 
-// GetContext is the context-aware variant of Get.
-// @group Reads
-func GetContext[T any](ctx context.Context, cache *Cache, key string) (T, bool, error) {
+func getValue[T any](ctx context.Context, cache *Cache, key string) (T, bool, error) {
 	var zero T
-	body, ok, err := cache.GetBytesContext(ctx, key)
+	body, ok, err := cache.getBytes(ctx, key)
 	if err != nil || !ok {
 		return zero, ok, err
 	}
@@ -274,12 +278,10 @@ func GetContext[T any](ctx context.Context, cache *Cache, key string) (T, bool, 
 //	c := cache.NewCache(cache.NewMemoryStore(ctx))
 //	fmt.Println(c.SetBytes("token", []byte("abc"), time.Minute) == nil) // true
 func (c *Cache) SetBytes(key string, value []byte, ttl time.Duration) error {
-	return c.SetBytesContext(context.Background(), key, value, ttl)
+	return c.setBytes(c.context(), key, value, ttl)
 }
 
-// SetBytesContext is the context-aware variant of SetBytes.
-// @group Writes
-func (c *Cache) SetBytesContext(ctx context.Context, key string, value []byte, ttl time.Duration) error {
+func (c *Cache) setBytes(ctx context.Context, key string, value []byte, ttl time.Duration) error {
 	start := time.Now()
 	err := c.store.Set(ctx, key, value, c.resolveTTL(ttl))
 	c.observe(ctx, "set", key, false, err, start)
@@ -299,14 +301,12 @@ func (c *Cache) SetBytesContext(ctx context.Context, key string, value []byte, t
 //	}, time.Minute)
 //	fmt.Println(err == nil) // true
 func (c *Cache) BatchSetBytes(values map[string][]byte, ttl time.Duration) error {
-	return c.BatchSetBytesContext(context.Background(), values, ttl)
+	return c.batchSetBytes(c.context(), values, ttl)
 }
 
-// BatchSetBytesContext is the context-aware variant of BatchSetBytes.
-// @group Writes
-func (c *Cache) BatchSetBytesContext(ctx context.Context, values map[string][]byte, ttl time.Duration) error {
+func (c *Cache) batchSetBytes(ctx context.Context, values map[string][]byte, ttl time.Duration) error {
 	for key, value := range values {
-		if err := c.SetBytesContext(ctx, key, value, ttl); err != nil {
+		if err := c.setBytes(ctx, key, value, ttl); err != nil {
 			return err
 		}
 	}
@@ -326,7 +326,7 @@ func (c *Cache) BatchSetBytesContext(ctx context.Context, values map[string][]by
 //	})
 //	fmt.Println(err == nil, len(body) > 0) // true true
 func (c *Cache) RefreshAheadBytes(key string, ttl, refreshAhead time.Duration, fn func() ([]byte, error)) ([]byte, error) {
-	return c.RefreshAheadBytesContext(context.Background(), key, ttl, refreshAhead, func(ctx context.Context) ([]byte, error) {
+	return c.refreshAheadBytes(c.context(), key, ttl, refreshAhead, func(ctx context.Context) ([]byte, error) {
 		if fn == nil {
 			return nil, errors.New("cache refresh ahead requires a callback")
 		}
@@ -334,9 +334,7 @@ func (c *Cache) RefreshAheadBytes(key string, ttl, refreshAhead time.Duration, f
 	})
 }
 
-// RefreshAheadBytesContext is the context-aware variant of RefreshAheadBytes.
-// @group Refresh Ahead
-func (c *Cache) RefreshAheadBytesContext(ctx context.Context, key string, ttl, refreshAhead time.Duration, fn func(context.Context) ([]byte, error)) ([]byte, error) {
+func (c *Cache) refreshAheadBytes(ctx context.Context, key string, ttl, refreshAhead time.Duration, fn func(context.Context) ([]byte, error)) ([]byte, error) {
 	if ttl <= 0 {
 		return nil, errors.New("cache refresh ahead requires ttl > 0")
 	}
@@ -344,7 +342,7 @@ func (c *Cache) RefreshAheadBytesContext(ctx context.Context, key string, ttl, r
 		return nil, errors.New("cache refresh ahead requires refreshAhead > 0")
 	}
 	start := time.Now()
-	body, ok, err := c.GetBytesContext(ctx, key)
+	body, ok, err := c.getBytes(ctx, key)
 	if err != nil {
 		c.observe(ctx, "refresh_ahead", key, false, err, start)
 		return nil, err
@@ -374,7 +372,7 @@ func (c *Cache) RefreshAheadBytesContext(ctx context.Context, key string, ttl, r
 
 func (c *Cache) maybeTriggerRefreshAhead(key string, ttl, refreshAhead time.Duration, fn func(context.Context) ([]byte, error)) {
 	metaKey := key + refreshMetaSuffix
-	meta, ok, err := c.GetBytesContext(context.Background(), metaKey)
+	meta, ok, err := c.getBytes(context.Background(), metaKey)
 	if err != nil || !ok {
 		return
 	}
@@ -404,11 +402,11 @@ func (c *Cache) maybeTriggerRefreshAhead(key string, ttl, refreshAhead time.Dura
 }
 
 func (c *Cache) setRefreshAheadValue(ctx context.Context, key string, value []byte, ttl time.Duration) error {
-	if err := c.SetBytesContext(ctx, key, value, ttl); err != nil {
+	if err := c.setBytes(ctx, key, value, ttl); err != nil {
 		return err
 	}
 	expiresAt := time.Now().Add(c.resolveTTL(ttl)).UnixNano()
-	return c.SetBytesContext(ctx, key+refreshMetaSuffix, []byte(strconv.FormatInt(expiresAt, 10)), ttl)
+	return c.setBytes(ctx, key+refreshMetaSuffix, []byte(strconv.FormatInt(expiresAt, 10)), ttl)
 }
 
 // RefreshAhead returns a typed value and refreshes asynchronously when near expiry.
@@ -424,7 +422,7 @@ func (c *Cache) setRefreshAheadValue(ctx context.Context, key string, value []by
 //	})
 //	fmt.Println(err == nil, s.Text) // true ok
 func RefreshAhead[T any](cache *Cache, key string, ttl, refreshAhead time.Duration, fn func() (T, error)) (T, error) {
-	return RefreshAheadContext(context.Background(), cache, key, ttl, refreshAhead, func(ctx context.Context) (T, error) {
+	return refreshAheadValue[T](cache.context(), cache, key, ttl, refreshAhead, func(ctx context.Context) (T, error) {
 		if fn == nil {
 			var zero T
 			return zero, errors.New("cache refresh ahead requires a callback")
@@ -433,9 +431,7 @@ func RefreshAhead[T any](cache *Cache, key string, ttl, refreshAhead time.Durati
 	})
 }
 
-// RefreshAheadContext is the context-aware variant of RefreshAhead.
-// @group Refresh Ahead
-func RefreshAheadContext[T any](ctx context.Context, cache *Cache, key string, ttl, refreshAhead time.Duration, fn func(context.Context) (T, error)) (T, error) {
+func refreshAheadValue[T any](ctx context.Context, cache *Cache, key string, ttl, refreshAhead time.Duration, fn func(context.Context) (T, error)) (T, error) {
 	return RefreshAheadValueWithCodec(ctx, cache, key, ttl, refreshAhead, func() (T, error) {
 		if fn == nil {
 			var zero T
@@ -449,7 +445,7 @@ func RefreshAheadContext[T any](ctx context.Context, cache *Cache, key string, t
 // @group Refresh Ahead
 func RefreshAheadValueWithCodec[T any](ctx context.Context, cache *Cache, key string, ttl, refreshAhead time.Duration, fn func() (T, error), codec ValueCodec[T]) (T, error) {
 	var zero T
-	body, err := cache.RefreshAheadBytesContext(ctx, key, ttl, refreshAhead, func(ctx context.Context) ([]byte, error) {
+	body, err := cache.refreshAheadBytes(ctx, key, ttl, refreshAhead, func(ctx context.Context) ([]byte, error) {
 		if fn == nil {
 			return nil, errors.New("cache refresh ahead requires a callback")
 		}
@@ -478,14 +474,12 @@ func RefreshAheadValueWithCodec[T any](ctx context.Context, cache *Cache, key st
 //	c := cache.NewCache(cache.NewMemoryStore(ctx))
 //	fmt.Println(c.SetString("user:42:name", "Ada", time.Minute) == nil) // true
 func (c *Cache) SetString(key string, value string, ttl time.Duration) error {
-	return c.SetStringContext(context.Background(), key, value, ttl)
+	return c.setString(c.context(), key, value, ttl)
 }
 
-// SetStringContext is the context-aware variant of SetString.
-// @group Writes
-func (c *Cache) SetStringContext(ctx context.Context, key string, value string, ttl time.Duration) error {
+func (c *Cache) setString(ctx context.Context, key string, value string, ttl time.Duration) error {
 	start := time.Now()
-	err := c.SetBytesContext(ctx, key, []byte(value), ttl)
+	err := c.setBytes(ctx, key, []byte(value), ttl)
 	c.observe(ctx, "set_string", key, false, err, start)
 	return err
 }
@@ -501,19 +495,17 @@ func (c *Cache) SetStringContext(ctx context.Context, key string, value string, 
 //	err := cache.SetJSON(c, "settings:alerts", Settings{Enabled: true}, time.Minute)
 //	fmt.Println(err == nil) // true
 func SetJSON[T any](cache *Cache, key string, value T, ttl time.Duration) error {
-	return SetJSONContext[T](context.Background(), cache, key, value, ttl)
+	return setJSON[T](cache.context(), cache, key, value, ttl)
 }
 
-// SetJSONContext is the context-aware variant of SetJSON.
-// @group Writes
-func SetJSONContext[T any](ctx context.Context, cache *Cache, key string, value T, ttl time.Duration) error {
+func setJSON[T any](ctx context.Context, cache *Cache, key string, value T, ttl time.Duration) error {
 	start := time.Now()
 	body, err := json.Marshal(value)
 	if err != nil {
 		cache.observe(ctx, "set_json", key, false, err, start)
 		return err
 	}
-	err = cache.SetBytesContext(ctx, key, body, ttl)
+	err = cache.setBytes(ctx, key, body, ttl)
 	cache.observe(ctx, "set_json", key, false, err, start)
 	return err
 }
@@ -530,17 +522,15 @@ func SetJSONContext[T any](ctx context.Context, cache *Cache, key string, value 
 //	err2 := cache.Set(c, "settings:mode", "dark", time.Minute)
 //	fmt.Println(err == nil, err2 == nil) // true true
 func Set[T any](cache *Cache, key string, value T, ttl time.Duration) error {
-	return SetContext[T](context.Background(), cache, key, value, ttl)
+	return setValue[T](cache.context(), cache, key, value, ttl)
 }
 
-// SetContext is the context-aware variant of Set.
-// @group Writes
-func SetContext[T any](ctx context.Context, cache *Cache, key string, value T, ttl time.Duration) error {
+func setValue[T any](ctx context.Context, cache *Cache, key string, value T, ttl time.Duration) error {
 	body, err := defaultValueCodec[T]().Encode(value)
 	if err != nil {
 		return err
 	}
-	return cache.SetBytesContext(ctx, key, body, ttl)
+	return cache.setBytes(ctx, key, body, ttl)
 }
 
 // Add writes value only when key is not already present.
@@ -553,12 +543,10 @@ func SetContext[T any](ctx context.Context, cache *Cache, key string, value T, t
 //	created, _ := c.Add("boot:seeded", []byte("1"), time.Hour)
 //	fmt.Println(created) // true
 func (c *Cache) Add(key string, value []byte, ttl time.Duration) (bool, error) {
-	return c.AddContext(context.Background(), key, value, ttl)
+	return c.add(c.context(), key, value, ttl)
 }
 
-// AddContext is the context-aware variant of Add.
-// @group Writes
-func (c *Cache) AddContext(ctx context.Context, key string, value []byte, ttl time.Duration) (bool, error) {
+func (c *Cache) add(ctx context.Context, key string, value []byte, ttl time.Duration) (bool, error) {
 	start := time.Now()
 	created, err := c.store.Add(ctx, key, value, c.resolveTTL(ttl))
 	c.observe(ctx, "add", key, created, err, start)
@@ -575,12 +563,10 @@ func (c *Cache) AddContext(ctx context.Context, key string, value []byte, ttl ti
 //	val, _ := c.Increment("rate:login:42", 1, time.Minute)
 //	fmt.Println(val) // 1
 func (c *Cache) Increment(key string, delta int64, ttl time.Duration) (int64, error) {
-	return c.IncrementContext(context.Background(), key, delta, ttl)
+	return c.increment(c.context(), key, delta, ttl)
 }
 
-// IncrementContext is the context-aware variant of Increment.
-// @group Writes
-func (c *Cache) IncrementContext(ctx context.Context, key string, delta int64, ttl time.Duration) (int64, error) {
+func (c *Cache) increment(ctx context.Context, key string, delta int64, ttl time.Duration) (int64, error) {
 	start := time.Now()
 	val, err := c.store.Increment(ctx, key, delta, c.resolveTTL(ttl))
 	c.observe(ctx, "increment", key, err == nil, err, start)
@@ -597,12 +583,10 @@ func (c *Cache) IncrementContext(ctx context.Context, key string, delta int64, t
 //	val, _ := c.Decrement("rate:login:42", 1, time.Minute)
 //	fmt.Println(val) // -1
 func (c *Cache) Decrement(key string, delta int64, ttl time.Duration) (int64, error) {
-	return c.DecrementContext(context.Background(), key, delta, ttl)
+	return c.decrement(c.context(), key, delta, ttl)
 }
 
-// DecrementContext is the context-aware variant of Decrement.
-// @group Writes
-func (c *Cache) DecrementContext(ctx context.Context, key string, delta int64, ttl time.Duration) (int64, error) {
+func (c *Cache) decrement(ctx context.Context, key string, delta int64, ttl time.Duration) (int64, error) {
 	start := time.Now()
 	val, err := c.store.Decrement(ctx, key, delta, c.resolveTTL(ttl))
 	c.observe(ctx, "decrement", key, err == nil, err, start)
@@ -620,12 +604,10 @@ func (c *Cache) DecrementContext(ctx context.Context, key string, delta int64, t
 //	fmt.Println(err == nil, res.Allowed, res.Count, res.Remaining, !res.ResetAt.IsZero())
 //	// Output: true true 1 99 true
 func (c *Cache) RateLimit(key string, limit int64, window time.Duration) (RateLimitStatus, error) {
-	return c.RateLimitContext(context.Background(), key, limit, window)
+	return c.rateLimit(c.context(), key, limit, window)
 }
 
-// RateLimitContext is the context-aware variant of RateLimit.
-// @group Rate Limiting
-func (c *Cache) RateLimitContext(ctx context.Context, key string, limit int64, window time.Duration) (RateLimitStatus, error) {
+func (c *Cache) rateLimit(ctx context.Context, key string, limit int64, window time.Duration) (RateLimitStatus, error) {
 	if limit <= 0 {
 		return RateLimitStatus{}, errors.New("cache rate limit requires limit > 0")
 	}
@@ -636,7 +618,7 @@ func (c *Cache) RateLimitContext(ctx context.Context, key string, limit int64, w
 	now := time.Now()
 	bucket := now.UnixNano() / window.Nanoseconds()
 	bucketKey := fmt.Sprintf("%s:%d", key, bucket)
-	count, err := c.IncrementContext(ctx, bucketKey, 1, window)
+	count, err := c.increment(ctx, bucketKey, 1, window)
 	if err != nil {
 		return RateLimitStatus{}, err
 	}
@@ -663,12 +645,10 @@ func (c *Cache) RateLimitContext(ctx context.Context, key string, limit int64, w
 //	locked, _ := c.TryLock("job:sync", 10*time.Second)
 //	fmt.Println(locked) // true
 func (c *Cache) TryLock(key string, ttl time.Duration) (bool, error) {
-	return c.TryLockContext(context.Background(), key, ttl)
+	return c.tryLock(c.context(), key, ttl)
 }
 
-// TryLockContext is the context-aware variant of TryLock.
-// @group Locking
-func (c *Cache) TryLockContext(ctx context.Context, key string, ttl time.Duration) (bool, error) {
+func (c *Cache) tryLock(ctx context.Context, key string, ttl time.Duration) (bool, error) {
 	if ttl <= 0 {
 		return false, errors.New("cache try lock requires ttl > 0")
 	}
@@ -688,24 +668,22 @@ func (c *Cache) TryLockContext(ctx context.Context, key string, ttl time.Duratio
 //	locked, err := c.Lock("job:sync", 10*time.Second, time.Second)
 //	fmt.Println(err == nil, locked) // true true
 func (c *Cache) Lock(key string, ttl, timeout time.Duration) (bool, error) {
-	ctx := context.Background()
+	ctx := c.context()
 	if timeout > 0 {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, timeout)
 		defer cancel()
 	}
-	return c.LockContext(ctx, key, ttl, defaultLockRetryInterval)
+	return c.lock(ctx, key, ttl, defaultLockRetryInterval)
 }
 
-// LockContext retries lock acquisition until success or context cancellation.
-// @group Locking
-func (c *Cache) LockContext(ctx context.Context, key string, ttl, retryInterval time.Duration) (bool, error) {
+func (c *Cache) lock(ctx context.Context, key string, ttl, retryInterval time.Duration) (bool, error) {
 	if retryInterval <= 0 {
 		retryInterval = defaultLockRetryInterval
 	}
 	start := time.Now()
 	for {
-		locked, err := c.TryLockContext(ctx, key, ttl)
+		locked, err := c.tryLock(ctx, key, ttl)
 		if err != nil {
 			c.observe(ctx, "lock", key, false, err, start)
 			return false, err
@@ -736,12 +714,10 @@ func (c *Cache) LockContext(ctx context.Context, key string, ttl, retryInterval 
 //		_ = c.Unlock("job:sync")
 //	}
 func (c *Cache) Unlock(key string) error {
-	return c.UnlockContext(context.Background(), key)
+	return c.unlock(c.context(), key)
 }
 
-// UnlockContext is the context-aware variant of Unlock.
-// @group Locking
-func (c *Cache) UnlockContext(ctx context.Context, key string) error {
+func (c *Cache) unlock(ctx context.Context, key string) error {
 	start := time.Now()
 	err := c.store.Delete(ctx, lockPrefix+key)
 	c.observe(ctx, "unlock", key, err == nil, err, start)
@@ -759,19 +735,17 @@ func (c *Cache) UnlockContext(ctx context.Context, key string) error {
 //	body, ok, _ := c.PullBytes("reset:token:42")
 //	fmt.Println(ok, string(body)) // true abc
 func (c *Cache) PullBytes(key string) ([]byte, bool, error) {
-	return c.PullBytesContext(context.Background(), key)
+	return c.pullBytes(c.context(), key)
 }
 
-// PullBytesContext is the context-aware variant of PullBytes.
-// @group Invalidation
-func (c *Cache) PullBytesContext(ctx context.Context, key string) ([]byte, bool, error) {
+func (c *Cache) pullBytes(ctx context.Context, key string) ([]byte, bool, error) {
 	start := time.Now()
-	body, ok, err := c.GetBytesContext(ctx, key)
+	body, ok, err := c.getBytes(ctx, key)
 	if err != nil || !ok {
 		c.observe(ctx, "pull", key, ok, err, start)
 		return nil, ok, err
 	}
-	if err := c.DeleteContext(ctx, key); err != nil {
+	if err := c.delete(ctx, key); err != nil {
 		c.observe(ctx, "pull", key, false, err, start)
 		return nil, false, err
 	}
@@ -791,14 +765,12 @@ func (c *Cache) PullBytesContext(ctx context.Context, key string) ([]byte, bool,
 //	tok, ok, err := cache.Pull[Token](c, "reset:token:42")
 //	fmt.Println(err == nil, ok, tok.Value) // true true abc
 func Pull[T any](cache *Cache, key string) (T, bool, error) {
-	return PullContext[T](context.Background(), cache, key)
+	return pullValue[T](cache.context(), cache, key)
 }
 
-// PullContext is the context-aware variant of Pull.
-// @group Invalidation
-func PullContext[T any](ctx context.Context, cache *Cache, key string) (T, bool, error) {
+func pullValue[T any](ctx context.Context, cache *Cache, key string) (T, bool, error) {
 	var zero T
-	body, ok, err := cache.PullBytesContext(ctx, key)
+	body, ok, err := cache.pullBytes(ctx, key)
 	if err != nil || !ok {
 		return zero, ok, err
 	}
@@ -819,12 +791,10 @@ func PullContext[T any](ctx context.Context, cache *Cache, key string) (T, bool,
 //	_ = c.SetBytes("a", []byte("1"), time.Minute)
 //	fmt.Println(c.Delete("a") == nil) // true
 func (c *Cache) Delete(key string) error {
-	return c.DeleteContext(context.Background(), key)
+	return c.delete(c.context(), key)
 }
 
-// DeleteContext is the context-aware variant of Delete.
-// @group Invalidation
-func (c *Cache) DeleteContext(ctx context.Context, key string) error {
+func (c *Cache) delete(ctx context.Context, key string) error {
 	start := time.Now()
 	err := c.store.Delete(ctx, key)
 	c.observe(ctx, "delete", key, err == nil, err, start)
@@ -840,12 +810,10 @@ func (c *Cache) DeleteContext(ctx context.Context, key string) error {
 //	c := cache.NewCache(cache.NewMemoryStore(ctx))
 //	fmt.Println(c.DeleteMany("a", "b") == nil) // true
 func (c *Cache) DeleteMany(keys ...string) error {
-	return c.DeleteManyContext(context.Background(), keys...)
+	return c.deleteMany(c.context(), keys...)
 }
 
-// DeleteManyContext is the context-aware variant of DeleteMany.
-// @group Invalidation
-func (c *Cache) DeleteManyContext(ctx context.Context, keys ...string) error {
+func (c *Cache) deleteMany(ctx context.Context, keys ...string) error {
 	start := time.Now()
 	err := c.store.DeleteMany(ctx, keys...)
 	for _, key := range keys {
@@ -864,12 +832,10 @@ func (c *Cache) DeleteManyContext(ctx context.Context, keys ...string) error {
 //	_ = c.SetBytes("a", []byte("1"), time.Minute)
 //	fmt.Println(c.Flush() == nil) // true
 func (c *Cache) Flush() error {
-	return c.FlushContext(context.Background())
+	return c.flush(c.context())
 }
 
-// FlushContext is the context-aware variant of Flush.
-// @group Invalidation
-func (c *Cache) FlushContext(ctx context.Context) error {
+func (c *Cache) flush(ctx context.Context) error {
 	start := time.Now()
 	err := c.store.Flush(ctx)
 	c.observe(ctx, "flush", "", err == nil, err, start)
@@ -888,7 +854,7 @@ func (c *Cache) FlushContext(ctx context.Context) error {
 //	})
 //	fmt.Println(err == nil, string(data)) // true payload
 func (c *Cache) RememberBytes(key string, ttl time.Duration, fn func() ([]byte, error)) ([]byte, error) {
-	return c.RememberBytesContext(context.Background(), key, ttl, func(ctx context.Context) ([]byte, error) {
+	return c.rememberBytes(c.context(), key, ttl, func(ctx context.Context) ([]byte, error) {
 		if fn == nil {
 			return nil, errors.New("cache remember requires a callback")
 		}
@@ -916,7 +882,7 @@ const refreshLockPrefix = "__refresh_lock:"
 //	})
 //	fmt.Println(err == nil, usedStale, len(body) > 0)
 func (c *Cache) RememberStaleBytes(key string, ttl, staleTTL time.Duration, fn func() ([]byte, error)) ([]byte, bool, error) {
-	return c.RememberStaleBytesContext(context.Background(), key, ttl, staleTTL, func(ctx context.Context) ([]byte, error) {
+	return c.rememberStaleBytes(c.context(), key, ttl, staleTTL, func(ctx context.Context) ([]byte, error) {
 		if fn == nil {
 			return nil, errors.New("cache remember stale requires a callback")
 		}
@@ -924,13 +890,11 @@ func (c *Cache) RememberStaleBytes(key string, ttl, staleTTL time.Duration, fn f
 	})
 }
 
-// RememberStaleBytesContext is the context-aware variant of RememberStaleBytes.
-// @group Read Through
-func (c *Cache) RememberStaleBytesContext(ctx context.Context, key string, ttl, staleTTL time.Duration, fn func(context.Context) ([]byte, error)) ([]byte, bool, error) {
+func (c *Cache) rememberStaleBytes(ctx context.Context, key string, ttl, staleTTL time.Duration, fn func(context.Context) ([]byte, error)) ([]byte, bool, error) {
 	start := time.Now()
 	staleKey := key + staleSuffix
 
-	body, ok, err := c.GetBytesContext(ctx, key)
+	body, ok, err := c.getBytes(ctx, key)
 	if err != nil {
 		c.observe(ctx, "remember_stale", key, false, err, start)
 		return nil, false, err
@@ -947,7 +911,7 @@ func (c *Cache) RememberStaleBytesContext(ctx context.Context, key string, ttl, 
 
 	value, err := fn(ctx)
 	if err == nil {
-		if err := c.SetBytesContext(ctx, key, value, ttl); err != nil {
+		if err := c.setBytes(ctx, key, value, ttl); err != nil {
 			c.observe(ctx, "remember_stale", key, false, err, start)
 			return nil, false, err
 		}
@@ -955,13 +919,13 @@ func (c *Cache) RememberStaleBytesContext(ctx context.Context, key string, ttl, 
 			staleTTL = ttl
 		}
 		if staleTTL > 0 {
-			_ = c.SetBytesContext(ctx, staleKey, value, staleTTL)
+			_ = c.setBytes(ctx, staleKey, value, staleTTL)
 		}
 		c.observe(ctx, "remember_stale", key, true, nil, start)
 		return value, false, nil
 	}
 
-	staleBody, staleOK, staleErr := c.GetBytesContext(ctx, staleKey)
+	staleBody, staleOK, staleErr := c.getBytes(ctx, staleKey)
 	if staleErr == nil && staleOK {
 		c.observe(ctx, "remember_stale", key, true, nil, start)
 		return staleBody, true, nil
@@ -973,11 +937,9 @@ func (c *Cache) RememberStaleBytesContext(ctx context.Context, key string, ttl, 
 	return nil, false, err
 }
 
-// RememberBytesContext is the context-aware variant of RememberBytes.
-// @group Read Through
-func (c *Cache) RememberBytesContext(ctx context.Context, key string, ttl time.Duration, fn func(context.Context) ([]byte, error)) ([]byte, error) {
+func (c *Cache) rememberBytes(ctx context.Context, key string, ttl time.Duration, fn func(context.Context) ([]byte, error)) ([]byte, error) {
 	start := time.Now()
-	body, ok, err := c.GetBytesContext(ctx, key)
+	body, ok, err := c.getBytes(ctx, key)
 	if err != nil {
 		c.observe(ctx, "remember", key, ok, err, start)
 		return nil, err
@@ -996,7 +958,7 @@ func (c *Cache) RememberBytesContext(ctx context.Context, key string, ttl time.D
 		c.observe(ctx, "remember", key, false, err, start)
 		return nil, err
 	}
-	if err := c.SetBytesContext(ctx, key, body, ttl); err != nil {
+	if err := c.setBytes(ctx, key, body, ttl); err != nil {
 		c.observe(ctx, "remember", key, false, err, start)
 		return nil, err
 	}
@@ -1017,7 +979,7 @@ func (c *Cache) RememberBytesContext(ctx context.Context, key string, ttl time.D
 //	})
 //	fmt.Println(err == nil, usedStale, profile.Name) // true false Ada
 func RememberStale[T any](cache *Cache, key string, ttl, staleTTL time.Duration, fn func() (T, error)) (T, bool, error) {
-	return RememberStaleContext(context.Background(), cache, key, ttl, staleTTL, func(ctx context.Context) (T, error) {
+	return rememberStaleValue[T](cache.context(), cache, key, ttl, staleTTL, func(ctx context.Context) (T, error) {
 		if fn == nil {
 			var zero T
 			return zero, errors.New("cache remember stale requires a callback")
@@ -1039,7 +1001,7 @@ func RememberStale[T any](cache *Cache, key string, ttl, staleTTL time.Duration,
 //	})
 //	fmt.Println(err == nil, profile.Name) // true Ada
 func Remember[T any](cache *Cache, key string, ttl time.Duration, fn func() (T, error)) (T, error) {
-	return RememberContext(context.Background(), cache, key, ttl, func(context.Context) (T, error) {
+	return rememberValue[T](cache.context(), cache, key, ttl, func(context.Context) (T, error) {
 		if fn == nil {
 			var zero T
 			return zero, errors.New("cache remember requires a callback")
@@ -1048,9 +1010,7 @@ func Remember[T any](cache *Cache, key string, ttl time.Duration, fn func() (T, 
 	})
 }
 
-// RememberContext is the context-aware variant of Remember.
-// @group Read Through
-func RememberContext[T any](ctx context.Context, cache *Cache, key string, ttl time.Duration, fn func(context.Context) (T, error)) (T, error) {
+func rememberValue[T any](ctx context.Context, cache *Cache, key string, ttl time.Duration, fn func(context.Context) (T, error)) (T, error) {
 	return rememberValueWithCodecContext(ctx, cache, key, ttl, func() (T, error) {
 		if fn == nil {
 			var zero T
@@ -1080,7 +1040,7 @@ func defaultValueCodec[T any]() ValueCodec[T] {
 
 func rememberValueWithCodecContext[T any](ctx context.Context, cache *Cache, key string, ttl time.Duration, fn func() (T, error), codec ValueCodec[T]) (T, error) {
 	var zero T
-	body, ok, err := cache.GetBytesContext(ctx, key)
+	body, ok, err := cache.getBytes(ctx, key)
 	if err != nil {
 		return zero, err
 	}
@@ -1098,7 +1058,7 @@ func rememberValueWithCodecContext[T any](ctx context.Context, cache *Cache, key
 	if err != nil {
 		return zero, err
 	}
-	if err := cache.SetBytesContext(ctx, key, encoded, ttl); err != nil {
+	if err := cache.setBytes(ctx, key, encoded, ttl); err != nil {
 		return zero, err
 	}
 	return val, nil
@@ -1106,7 +1066,7 @@ func rememberValueWithCodecContext[T any](ctx context.Context, cache *Cache, key
 
 func rememberStaleValueWithCodecContext[T any](ctx context.Context, cache *Cache, key string, ttl, staleTTL time.Duration, fn func() (T, error), codec ValueCodec[T]) (T, bool, error) {
 	var zero T
-	body, stale, err := cache.RememberStaleBytesContext(ctx, key, ttl, staleTTL, func(ctx context.Context) ([]byte, error) {
+	body, stale, err := cache.rememberStaleBytes(ctx, key, ttl, staleTTL, func(ctx context.Context) ([]byte, error) {
 		if fn == nil {
 			return nil, errors.New("cache remember stale requires a callback")
 		}
@@ -1126,19 +1086,7 @@ func rememberStaleValueWithCodecContext[T any](ctx context.Context, cache *Cache
 	return out, stale, nil
 }
 
-// RememberStaleContext returns a typed value with stale fallback semantics using JSON encoding by default.
-// @group Read Through
-//
-// Example: remember stale typed with context
-//
-//	type Profile struct { Name string `json:"name"` }
-//	ctx := context.Background()
-//	c := cache.NewCache(cache.NewMemoryStore(ctx))
-//	profile, usedStale, err := cache.RememberStaleContext[Profile](ctx, c, "profile:42", time.Minute, 10*time.Minute, func(ctx context.Context) (Profile, error) {
-//		return Profile{Name: "Ada"}, nil
-//	})
-//	fmt.Println(err == nil, usedStale, profile.Name) // true false Ada
-func RememberStaleContext[T any](ctx context.Context, cache *Cache, key string, ttl, staleTTL time.Duration, fn func(context.Context) (T, error)) (T, bool, error) {
+func rememberStaleValue[T any](ctx context.Context, cache *Cache, key string, ttl, staleTTL time.Duration, fn func(context.Context) (T, error)) (T, bool, error) {
 	return rememberStaleValueWithCodecContext(ctx, cache, key, ttl, staleTTL, func() (T, error) {
 		if fn == nil {
 			var zero T

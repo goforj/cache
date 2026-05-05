@@ -17,19 +17,19 @@ Cache resolves TTL with:
 
 | API | TTL Input | Effective TTL Written |
 |---|---|---|
-| Set / SetContext | ttl > 0 | ttl |
-| Set / SetContext | ttl <= 0 | defaultTTL |
-| SetString / SetStringContext | same as Set | same as Set |
+| Set / WithContext(...).Set | ttl > 0 | ttl |
+| Set / WithContext(...).Set | ttl <= 0 | defaultTTL |
+| SetString / WithContext(...).SetString | same as Set | same as Set |
 | SetJSON / SetJSONContext | same as Set | same as Set |
-| Add / AddContext | ttl > 0 | ttl |
-| Add / AddContext | ttl <= 0 | defaultTTL |
-| Increment / IncrementContext | ttl > 0 | ttl |
-| Increment / IncrementContext | ttl <= 0 | defaultTTL |
-| Decrement / DecrementContext | ttl > 0 | ttl |
-| Decrement / DecrementContext | ttl <= 0 | defaultTTL |
-| BatchSetBytes / BatchSetBytesContext | each key uses same rule as Set | per-key resolved TTL |
-| Remember* (non-stale) | forwards ttl to SetContext | resolved as above |
-| RememberStale* primary key | forwards ttl to SetContext | resolved as above |
+| Add / WithContext(...).Add | ttl > 0 | ttl |
+| Add / WithContext(...).Add | ttl <= 0 | defaultTTL |
+| Increment / WithContext(...).Increment | ttl > 0 | ttl |
+| Increment / WithContext(...).Increment | ttl <= 0 | defaultTTL |
+| Decrement / WithContext(...).Decrement | ttl > 0 | ttl |
+| Decrement / WithContext(...).Decrement | ttl <= 0 | defaultTTL |
+| BatchSetBytes / WithContext(...).BatchSetBytes | each key uses same rule as Set | per-key resolved TTL |
+| Remember* (non-stale) | forwards ttl to Set | resolved as above |
+| RememberStale* primary key | forwards ttl to Set | resolved as above |
 | RateLimit* bucket key | uses window as TTL | exactly window (must be > 0) |
 | TryLock* lock key | uses provided ttl | exactly provided ttl (must be > 0) |
 | RefreshAhead* primary key | requires ttl > 0 | exactly ttl |
@@ -99,7 +99,7 @@ Refresh-ahead caveats:
   - Unlock deletes lock key without owner token validation
   - use short TTLs and keep critical sections bounded
 
-## Rate limiting (RateLimit, RateLimitContext)
+## Rate limiting (RateLimit, WithContext(...).RateLimit)
 
 - Algorithm: fixed-window counter.
 - Keying: bucketKey = key + ":" + floor(now/window).

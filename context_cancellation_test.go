@@ -89,15 +89,15 @@ func (s *blockingCtxStore) snapshot() blockingCtxStore {
 	}
 }
 
-func TestContextCancellation_GetSetLockContextReturnPromptlyAndRespectContext(t *testing.T) {
-	t.Run("getctx", func(t *testing.T) {
+func TestContextCancellation_GetSetLockReturnPromptlyAndRespectContext(t *testing.T) {
+	t.Run("get", func(t *testing.T) {
 		store := &blockingCtxStore{}
 		c := NewCache(store)
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
 		defer cancel()
 
 		start := time.Now()
-		_, ok, err := c.GetBytesContext(ctx, "k")
+		_, ok, err := c.WithContext(ctx).GetBytes("k")
 		elapsed := time.Since(start)
 
 		if ok {
@@ -107,42 +107,42 @@ func TestContextCancellation_GetSetLockContextReturnPromptlyAndRespectContext(t 
 			t.Fatalf("expected context deadline exceeded, got %v", err)
 		}
 		if elapsed > 250*time.Millisecond {
-			t.Fatalf("getctx returned too slowly after cancellation: %v", elapsed)
+			t.Fatalf("get returned too slowly after cancellation: %v", elapsed)
 		}
 		if got := store.snapshot(); got.getCalls != 1 || got.setCalls != 0 || got.addCalls != 0 {
 			t.Fatalf("unexpected store calls: %+v", got)
 		}
 	})
 
-	t.Run("setctx", func(t *testing.T) {
+	t.Run("set", func(t *testing.T) {
 		store := &blockingCtxStore{}
 		c := NewCache(store)
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
 		defer cancel()
 
 		start := time.Now()
-		err := c.SetBytesContext(ctx, "k", []byte("v"), time.Minute)
+		err := c.WithContext(ctx).SetBytes("k", []byte("v"), time.Minute)
 		elapsed := time.Since(start)
 
 		if err == nil || err != context.DeadlineExceeded {
 			t.Fatalf("expected context deadline exceeded, got %v", err)
 		}
 		if elapsed > 250*time.Millisecond {
-			t.Fatalf("setctx returned too slowly after cancellation: %v", elapsed)
+			t.Fatalf("set returned too slowly after cancellation: %v", elapsed)
 		}
 		if got := store.snapshot(); got.setCalls != 1 || got.getCalls != 0 || got.addCalls != 0 {
 			t.Fatalf("unexpected store calls: %+v", got)
 		}
 	})
 
-	t.Run("lockctx", func(t *testing.T) {
+	t.Run("lock", func(t *testing.T) {
 		store := &blockingCtxStore{}
 		c := NewCache(store)
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
 		defer cancel()
 
 		start := time.Now()
-		locked, err := c.LockContext(ctx, "k", time.Minute, time.Millisecond)
+		locked, err := c.lock(ctx, "k", time.Minute, time.Millisecond)
 		elapsed := time.Since(start)
 
 		if locked {
@@ -152,7 +152,7 @@ func TestContextCancellation_GetSetLockContextReturnPromptlyAndRespectContext(t 
 			t.Fatalf("expected context deadline exceeded, got %v", err)
 		}
 		if elapsed > 250*time.Millisecond {
-			t.Fatalf("lockctx returned too slowly after cancellation: %v", elapsed)
+			t.Fatalf("lock returned too slowly after cancellation: %v", elapsed)
 		}
 		before := store.snapshot().addCalls
 		time.Sleep(10 * time.Millisecond)
@@ -172,12 +172,12 @@ func TestContextCancellation_RefreshAheadAndRememberHelpersDoNotInvokeCallbacks(
 
 	cases := []testCase{
 		{
-			name: "refresh_ahead_ctx",
+			name: "refresh_ahead",
 			run: func(t *testing.T, c *Cache, ctx context.Context) {
 				t.Helper()
 				called := false
 				start := time.Now()
-				_, err := c.RefreshAheadBytesContext(ctx, "ra", time.Minute, 10*time.Second, func(context.Context) ([]byte, error) {
+				_, err := c.refreshAheadBytes(ctx, "ra", time.Minute, 10*time.Second, func(context.Context) ([]byte, error) {
 					called = true
 					return []byte("v"), nil
 				})
@@ -195,12 +195,12 @@ func TestContextCancellation_RefreshAheadAndRememberHelpersDoNotInvokeCallbacks(
 			wantCalls: blockingCtxStore{getCalls: 1},
 		},
 		{
-			name: "remember_ctx",
+			name: "remember",
 			run: func(t *testing.T, c *Cache, ctx context.Context) {
 				t.Helper()
 				called := false
 				start := time.Now()
-				_, err := c.RememberBytesContext(ctx, "r", time.Minute, func(context.Context) ([]byte, error) {
+				_, err := c.rememberBytes(ctx, "r", time.Minute, func(context.Context) ([]byte, error) {
 					called = true
 					return []byte("v"), nil
 				})
@@ -218,11 +218,11 @@ func TestContextCancellation_RefreshAheadAndRememberHelpersDoNotInvokeCallbacks(
 			wantCalls: blockingCtxStore{getCalls: 1},
 		},
 		{
-			name: "remember_string_ctx",
+			name: "remember_string",
 			run: func(t *testing.T, c *Cache, ctx context.Context) {
 				t.Helper()
 				called := false
-				_, err := RememberContext[string](ctx, c, "rs", time.Minute, func(context.Context) (string, error) {
+				_, err := Remember[string](c.WithContext(ctx), "rs", time.Minute, func() (string, error) {
 					called = true
 					return "v", nil
 				})
@@ -236,12 +236,12 @@ func TestContextCancellation_RefreshAheadAndRememberHelpersDoNotInvokeCallbacks(
 			wantCalls: blockingCtxStore{getCalls: 1},
 		},
 		{
-			name: "remember_json_ctx",
+			name: "remember_json",
 			run: func(t *testing.T, c *Cache, ctx context.Context) {
 				t.Helper()
 				called := false
 				type payload struct{ Name string }
-				_, err := RememberContext[payload](ctx, c, "rj", time.Minute, func(context.Context) (payload, error) {
+				_, err := Remember[payload](c.WithContext(ctx), "rj", time.Minute, func() (payload, error) {
 					called = true
 					return payload{Name: "Ada"}, nil
 				})
@@ -255,11 +255,11 @@ func TestContextCancellation_RefreshAheadAndRememberHelpersDoNotInvokeCallbacks(
 			wantCalls: blockingCtxStore{getCalls: 1},
 		},
 		{
-			name: "remember_stale_ctx",
+			name: "remember_stale",
 			run: func(t *testing.T, c *Cache, ctx context.Context) {
 				t.Helper()
 				called := false
-				_, _, err := RememberStaleContext[map[string]string](ctx, c, "rst", time.Minute, 2*time.Minute, func(context.Context) (map[string]string, error) {
+				_, _, err := RememberStale[map[string]string](c.WithContext(ctx), "rst", time.Minute, 2*time.Minute, func() (map[string]string, error) {
 					called = true
 					return map[string]string{"name": "Ada"}, nil
 				})
@@ -273,11 +273,11 @@ func TestContextCancellation_RefreshAheadAndRememberHelpersDoNotInvokeCallbacks(
 			wantCalls: blockingCtxStore{getCalls: 1},
 		},
 		{
-			name: "get_json_ctx",
+			name: "get_json",
 			run: func(t *testing.T, c *Cache, ctx context.Context) {
 				t.Helper()
 				type payload struct{ Name string }
-				_, ok, err := GetJSONContext[payload](ctx, c, "gj")
+				_, ok, err := GetJSON[payload](c.WithContext(ctx), "gj")
 				if ok {
 					t.Fatalf("expected miss on canceled get json")
 				}
@@ -288,11 +288,11 @@ func TestContextCancellation_RefreshAheadAndRememberHelpersDoNotInvokeCallbacks(
 			wantCalls: blockingCtxStore{getCalls: 1},
 		},
 		{
-			name: "set_json_ctx",
+			name: "set_json",
 			run: func(t *testing.T, c *Cache, ctx context.Context) {
 				t.Helper()
 				type payload struct{ Name string }
-				err := SetJSONContext(ctx, c, "sj", payload{Name: "Ada"}, time.Minute)
+				err := SetJSON(c.WithContext(ctx), "sj", payload{Name: "Ada"}, time.Minute)
 				if err != context.DeadlineExceeded {
 					t.Fatalf("expected deadline exceeded, got %v", err)
 				}
@@ -319,7 +319,7 @@ func TestContextCancellation_RefreshAheadAndRememberHelpersDoNotInvokeCallbacks(
 	}
 }
 
-func TestContextCancellation_RememberJSONContextDoesNotDecodeOrSetAfterCanceledGet(t *testing.T) {
+func TestContextCancellation_RememberJSONDoesNotDecodeOrSetAfterCanceledGet(t *testing.T) {
 	store := &blockingCtxStore{}
 	c := NewCache(store)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
@@ -327,7 +327,7 @@ func TestContextCancellation_RememberJSONContextDoesNotDecodeOrSetAfterCanceledG
 
 	type payload struct{ Name string }
 	called := false
-	_, err := RememberContext[payload](ctx, c, "json-cancel", time.Minute, func(context.Context) (payload, error) {
+	_, err := Remember[payload](c.WithContext(ctx), "json-cancel", time.Minute, func() (payload, error) {
 		called = true
 		return payload{Name: "Ada"}, nil
 	})

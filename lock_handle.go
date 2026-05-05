@@ -21,6 +21,7 @@ type LockHandle struct {
 	key   string
 	ttl   time.Duration
 	held  atomic.Bool
+	ctx   context.Context
 }
 
 // NewLockHandle creates a reusable lock handle for a key/ttl pair.
@@ -44,6 +45,19 @@ func (c *Cache) NewLockHandle(key string, ttl time.Duration) *LockHandle {
 	}
 }
 
+func (l *LockHandle) WithContext(ctx context.Context) *LockHandle {
+	clone := *l
+	clone.ctx = ctx
+	return &clone
+}
+
+func (l *LockHandle) context() context.Context {
+	if l == nil || l.ctx == nil {
+		return l.cache.context()
+	}
+	return l.ctx
+}
+
 // Acquire attempts to acquire the lock once (non-blocking).
 // @group Locking
 //
@@ -55,13 +69,7 @@ func (c *Cache) NewLockHandle(key string, ttl time.Duration) *LockHandle {
 //	locked, err := lock.Acquire()
 //	fmt.Println(err == nil, locked) // true true
 func (l *LockHandle) Acquire() (bool, error) {
-	return l.AcquireContext(context.Background())
-}
-
-// AcquireContext is the context-aware variant of Acquire.
-// @group Locking
-func (l *LockHandle) AcquireContext(ctx context.Context) (bool, error) {
-	locked, err := l.cache.TryLockContext(ctx, l.key, l.ttl)
+	locked, err := l.cache.tryLock(l.context(), l.key, l.ttl)
 	if locked && err == nil {
 		l.held.Store(true)
 	}
@@ -84,16 +92,10 @@ func (l *LockHandle) AcquireContext(ctx context.Context) (bool, error) {
 //		_ = lock.Release()
 //	}
 func (l *LockHandle) Release() error {
-	return l.ReleaseContext(context.Background())
-}
-
-// ReleaseContext is the context-aware variant of Release.
-// @group Locking
-func (l *LockHandle) ReleaseContext(ctx context.Context) error {
 	if !l.held.Load() {
 		return nil
 	}
-	if err := l.cache.UnlockContext(ctx, l.key); err != nil {
+	if err := l.cache.unlock(l.context(), l.key); err != nil {
 		return err
 	}
 	l.held.Store(false)
@@ -114,7 +116,7 @@ func (l *LockHandle) ReleaseContext(ctx context.Context) error {
 //	})
 //	fmt.Println(err == nil, locked) // true true
 func (l *LockHandle) Get(fn func() error) (bool, error) {
-	return l.GetContext(context.Background(), func(context.Context) error {
+	return l.get(l.context(), func(context.Context) error {
 		if fn == nil {
 			return errors.New("cache lock handle requires a callback")
 		}
@@ -122,14 +124,13 @@ func (l *LockHandle) Get(fn func() error) (bool, error) {
 	})
 }
 
-// GetContext is the context-aware variant of Get.
-// @group Locking
-func (l *LockHandle) GetContext(ctx context.Context, fn func(context.Context) error) (bool, error) {
-	locked, err := l.AcquireContext(ctx)
+func (l *LockHandle) get(ctx context.Context, fn func(context.Context) error) (bool, error) {
+	locked, err := l.cache.tryLock(ctx, l.key, l.ttl)
 	if err != nil || !locked {
 		return locked, err
 	}
-	defer func() { _ = l.ReleaseContext(ctx) }()
+	l.held.Store(true)
+	defer func() { _ = l.WithContext(ctx).Release() }()
 	if fn == nil {
 		return true, errors.New("cache lock handle requires a callback")
 	}
@@ -152,13 +153,13 @@ func (l *LockHandle) GetContext(ctx context.Context, fn func(context.Context) er
 //	})
 //	fmt.Println(err == nil, locked) // true true
 func (l *LockHandle) Block(timeout, retryInterval time.Duration, fn func() error) (bool, error) {
-	ctx := context.Background()
+	ctx := l.context()
 	if timeout > 0 {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, timeout)
 		defer cancel()
 	}
-	return l.BlockContext(ctx, retryInterval, func(context.Context) error {
+	return l.block(ctx, retryInterval, func(context.Context) error {
 		if fn == nil {
 			return errors.New("cache lock handle requires a callback")
 		}
@@ -166,15 +167,13 @@ func (l *LockHandle) Block(timeout, retryInterval time.Duration, fn func() error
 	})
 }
 
-// BlockContext is the context-aware variant of Block.
-// @group Locking
-func (l *LockHandle) BlockContext(ctx context.Context, retryInterval time.Duration, fn func(context.Context) error) (bool, error) {
-	locked, err := l.cache.LockContext(ctx, l.key, l.ttl, retryInterval)
+func (l *LockHandle) block(ctx context.Context, retryInterval time.Duration, fn func(context.Context) error) (bool, error) {
+	locked, err := l.cache.lock(ctx, l.key, l.ttl, retryInterval)
 	if err != nil || !locked {
 		return locked, err
 	}
 	l.held.Store(true)
-	defer func() { _ = l.ReleaseContext(ctx) }()
+	defer func() { _ = l.WithContext(ctx).Release() }()
 	if fn == nil {
 		return true, errors.New("cache lock handle requires a callback")
 	}

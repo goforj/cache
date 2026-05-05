@@ -121,8 +121,8 @@ func TestLockHandleContextCancellation(t *testing.T) {
 	cancel()
 
 	lock := c.NewLockHandle("lh:ctx:acquire", time.Second)
-	locked, err := lock.AcquireContext(ctx)
-	// memory store is context-agnostic; AcquireContext may succeed because TryLockContext
+	locked, err := lock.WithContext(ctx).Acquire()
+	// memory store is context-agnostic; bound-context Acquire may succeed because tryLock
 	// delegates to store.Add, which ignores ctx for local drivers.
 	if err != nil && !errors.Is(err, context.Canceled) {
 		t.Fatalf("unexpected acquire ctx error: %v", err)
@@ -140,7 +140,8 @@ func TestLockHandleContextCancellation(t *testing.T) {
 	blockCtx, cancelBlock := context.WithCancel(context.Background())
 	cancelBlock()
 	waiter := c.NewLockHandle("lh:ctx:block", time.Second)
-	locked, err = waiter.BlockContext(blockCtx, 10*time.Millisecond, func(context.Context) error { return nil })
+	waiter = waiter.WithContext(blockCtx)
+	locked, err = waiter.block(blockCtx, 10*time.Millisecond, func(context.Context) error { return nil })
 	if err == nil || locked {
 		t.Fatalf("expected canceled block, locked=%v err=%v", locked, err)
 	}

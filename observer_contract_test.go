@@ -92,16 +92,16 @@ func TestObserverContract_HelperOpsEmitExpectedMetadata(t *testing.T) {
 
 	t.Run("get_hit_and_miss", func(t *testing.T) {
 		before := obs.len()
-		if _, ok, err := c.GetBytesContext(ctx, "missing:get"); err != nil || ok {
+		if _, ok, err := c.WithContext(ctx).GetBytes("missing:get"); err != nil || ok {
 			t.Fatalf("expected miss: ok=%v err=%v", ok, err)
 		}
 		assertLast(t, before, "get", "missing:get", false, nil)
 
-		if err := c.SetBytesContext(ctx, "present:get", []byte("v"), time.Minute); err != nil {
+		if err := c.WithContext(ctx).SetBytes("present:get", []byte("v"), time.Minute); err != nil {
 			t.Fatalf("set failed: %v", err)
 		}
 		before = obs.len()
-		if _, ok, err := c.GetBytesContext(ctx, "present:get"); err != nil || !ok {
+		if _, ok, err := c.WithContext(ctx).GetBytes("present:get"); err != nil || !ok {
 			t.Fatalf("expected hit: ok=%v err=%v", ok, err)
 		}
 		assertLast(t, before, "get", "present:get", true, nil)
@@ -109,13 +109,13 @@ func TestObserverContract_HelperOpsEmitExpectedMetadata(t *testing.T) {
 
 	t.Run("string_and_json_helpers", func(t *testing.T) {
 		before := obs.len()
-		if err := c.SetStringContext(ctx, "s:key", "value", time.Minute); err != nil {
+		if err := c.WithContext(ctx).SetString("s:key", "value", time.Minute); err != nil {
 			t.Fatalf("set string failed: %v", err)
 		}
 		assertLast(t, before, "set_string", "s:key", false, nil)
 
 		before = obs.len()
-		if _, ok, err := c.GetStringContext(ctx, "s:key"); err != nil || !ok {
+		if _, ok, err := c.WithContext(ctx).GetString("s:key"); err != nil || !ok {
 			t.Fatalf("get string failed: ok=%v err=%v", ok, err)
 		}
 		assertLast(t, before, "get_string", "s:key", true, nil)
@@ -124,13 +124,13 @@ func TestObserverContract_HelperOpsEmitExpectedMetadata(t *testing.T) {
 			Name string `json:"name"`
 		}
 		before = obs.len()
-		if err := SetJSONContext(ctx, c, "j:key", payload{Name: "Ada"}, time.Minute); err != nil {
+		if err := SetJSON(c.WithContext(ctx), "j:key", payload{Name: "Ada"}, time.Minute); err != nil {
 			t.Fatalf("set json failed: %v", err)
 		}
 		assertLast(t, before, "set_json", "j:key", false, nil)
 
 		before = obs.len()
-		if _, ok, err := GetJSONContext[payload](ctx, c, "j:key"); err != nil || !ok {
+		if _, ok, err := GetJSON[payload](c.WithContext(ctx), "j:key"); err != nil || !ok {
 			t.Fatalf("get json failed: ok=%v err=%v", ok, err)
 		}
 		assertLast(t, before, "get_json", "j:key", true, nil)
@@ -138,27 +138,27 @@ func TestObserverContract_HelperOpsEmitExpectedMetadata(t *testing.T) {
 
 	t.Run("add_and_counters", func(t *testing.T) {
 		before := obs.len()
-		created, err := c.AddContext(ctx, "add:key", []byte("1"), time.Minute)
+		created, err := c.WithContext(ctx).Add("add:key", []byte("1"), time.Minute)
 		if err != nil || !created {
 			t.Fatalf("add create failed: created=%v err=%v", created, err)
 		}
 		assertLast(t, before, "add", "add:key", true, nil)
 
 		before = obs.len()
-		created, err = c.AddContext(ctx, "add:key", []byte("2"), time.Minute)
+		created, err = c.WithContext(ctx).Add("add:key", []byte("2"), time.Minute)
 		if err != nil || created {
 			t.Fatalf("add duplicate failed: created=%v err=%v", created, err)
 		}
 		assertLast(t, before, "add", "add:key", false, nil)
 
 		before = obs.len()
-		if _, err := c.IncrementContext(ctx, "ctr:key", 2, time.Minute); err != nil {
+		if _, err := c.WithContext(ctx).Increment("ctr:key", 2, time.Minute); err != nil {
 			t.Fatalf("increment failed: %v", err)
 		}
 		assertLast(t, before, "increment", "ctr:key", true, nil)
 
 		before = obs.len()
-		if _, err := c.DecrementContext(ctx, "ctr:key", 1, time.Minute); err != nil {
+		if _, err := c.WithContext(ctx).Decrement("ctr:key", 1, time.Minute); err != nil {
 			t.Fatalf("decrement failed: %v", err)
 		}
 		assertLast(t, before, "decrement", "ctr:key", true, nil)
@@ -166,54 +166,54 @@ func TestObserverContract_HelperOpsEmitExpectedMetadata(t *testing.T) {
 
 	t.Run("locking", func(t *testing.T) {
 		before := obs.len()
-		locked, err := c.TryLockContext(ctx, "lock:key", time.Minute)
+		locked, err := c.WithContext(ctx).TryLock("lock:key", time.Minute)
 		if err != nil || !locked {
 			t.Fatalf("try lock failed: locked=%v err=%v", locked, err)
 		}
 		assertLast(t, before, "try_lock", "lock:key", true, nil)
 
 		before = obs.len()
-		if err := c.UnlockContext(ctx, "lock:key"); err != nil {
+		if err := c.WithContext(ctx).Unlock("lock:key"); err != nil {
 			t.Fatalf("unlock failed: %v", err)
 		}
 		assertLast(t, before, "unlock", "lock:key", true, nil)
 
 		before = obs.len()
-		locked, err = c.LockContext(ctx, "lock:key2", time.Minute, time.Millisecond)
+		locked, err = c.lock(ctx, "lock:key2", time.Minute, time.Millisecond)
 		if err != nil || !locked {
 			t.Fatalf("lock failed: locked=%v err=%v", locked, err)
 		}
 		assertLast(t, before, "lock", "lock:key2", true, nil)
-		_ = c.UnlockContext(ctx, "lock:key2")
+		_ = c.WithContext(ctx).Unlock("lock:key2")
 	})
 
 	t.Run("pull_delete_delete_many_flush", func(t *testing.T) {
-		if err := c.SetBytesContext(ctx, "pull:key", []byte("v"), time.Minute); err != nil {
+		if err := c.WithContext(ctx).SetBytes("pull:key", []byte("v"), time.Minute); err != nil {
 			t.Fatalf("seed pull failed: %v", err)
 		}
 		before := obs.len()
-		if _, ok, err := c.PullBytesContext(ctx, "pull:key"); err != nil || !ok {
+		if _, ok, err := c.WithContext(ctx).PullBytes("pull:key"); err != nil || !ok {
 			t.Fatalf("pull failed: ok=%v err=%v", ok, err)
 		}
 		assertLast(t, before, "pull", "pull:key", true, nil)
 
-		if err := c.SetBytesContext(ctx, "del:key", []byte("v"), time.Minute); err != nil {
+		if err := c.WithContext(ctx).SetBytes("del:key", []byte("v"), time.Minute); err != nil {
 			t.Fatalf("seed delete failed: %v", err)
 		}
 		before = obs.len()
-		if err := c.DeleteContext(ctx, "del:key"); err != nil {
+		if err := c.WithContext(ctx).Delete("del:key"); err != nil {
 			t.Fatalf("delete failed: %v", err)
 		}
 		assertLast(t, before, "delete", "del:key", true, nil)
 
-		if err := c.SetBytesContext(ctx, "dm:a", []byte("1"), time.Minute); err != nil {
+		if err := c.WithContext(ctx).SetBytes("dm:a", []byte("1"), time.Minute); err != nil {
 			t.Fatalf("seed delete many a failed: %v", err)
 		}
-		if err := c.SetBytesContext(ctx, "dm:b", []byte("2"), time.Minute); err != nil {
+		if err := c.WithContext(ctx).SetBytes("dm:b", []byte("2"), time.Minute); err != nil {
 			t.Fatalf("seed delete many b failed: %v", err)
 		}
 		before = obs.len()
-		if err := c.DeleteManyContext(ctx, "dm:a", "dm:b"); err != nil {
+		if err := c.WithContext(ctx).DeleteMany("dm:a", "dm:b"); err != nil {
 			t.Fatalf("delete many failed: %v", err)
 		}
 		events := obs.eventsSince(before)
@@ -227,7 +227,7 @@ func TestObserverContract_HelperOpsEmitExpectedMetadata(t *testing.T) {
 		}
 
 		before = obs.len()
-		if err := c.FlushContext(ctx); err != nil {
+		if err := c.WithContext(ctx).Flush(); err != nil {
 			t.Fatalf("flush failed: %v", err)
 		}
 		assertLast(t, before, "flush", "", true, nil)
@@ -235,7 +235,7 @@ func TestObserverContract_HelperOpsEmitExpectedMetadata(t *testing.T) {
 
 	t.Run("read_through_and_refresh_helpers", func(t *testing.T) {
 		before := obs.len()
-		if _, err := c.RememberBytesContext(ctx, "remember:key", time.Minute, func(context.Context) ([]byte, error) {
+		if _, err := c.rememberBytes(ctx, "remember:key", time.Minute, func(context.Context) ([]byte, error) {
 			return []byte("v"), nil
 		}); err != nil {
 			t.Fatalf("remember failed: %v", err)
@@ -243,7 +243,7 @@ func TestObserverContract_HelperOpsEmitExpectedMetadata(t *testing.T) {
 		assertLast(t, before, "remember", "remember:key", true, nil)
 
 		before = obs.len()
-		if _, err := RememberContext[string](ctx, c, "remember:string", time.Minute, func(context.Context) (string, error) {
+		if _, err := Remember[string](c.WithContext(ctx), "remember:string", time.Minute, func() (string, error) {
 			return "v", nil
 		}); err != nil {
 			t.Fatalf("remember string failed: %v", err)
@@ -255,7 +255,7 @@ func TestObserverContract_HelperOpsEmitExpectedMetadata(t *testing.T) {
 			Name string `json:"name"`
 		}
 		before = obs.len()
-		if _, err := RememberContext[payload](ctx, c, "remember:json", time.Minute, func(context.Context) (payload, error) {
+		if _, err := Remember[payload](c.WithContext(ctx), "remember:json", time.Minute, func() (payload, error) {
 			return payload{Name: "Ada"}, nil
 		}); err != nil {
 			t.Fatalf("remember json failed: %v", err)
@@ -263,7 +263,7 @@ func TestObserverContract_HelperOpsEmitExpectedMetadata(t *testing.T) {
 		assertLast(t, before, "set", "remember:json", false, nil)
 
 		before = obs.len()
-		if _, _, err := RememberStaleContext[string](ctx, c, "remember:stale", time.Minute, 2*time.Minute, func(context.Context) (string, error) {
+		if _, _, err := RememberStale[string](c.WithContext(ctx), "remember:stale", time.Minute, 2*time.Minute, func() (string, error) {
 			return "v", nil
 		}); err != nil {
 			t.Fatalf("remember stale failed: %v", err)
@@ -271,7 +271,7 @@ func TestObserverContract_HelperOpsEmitExpectedMetadata(t *testing.T) {
 		assertLast(t, before, "remember_stale", "remember:stale", true, nil)
 
 		before = obs.len()
-		if _, err := c.RefreshAheadBytesContext(ctx, "refresh:miss", time.Minute, 10*time.Second, func(context.Context) ([]byte, error) {
+		if _, err := c.refreshAheadBytes(ctx, "refresh:miss", time.Minute, 10*time.Second, func(context.Context) ([]byte, error) {
 			return []byte("v"), nil
 		}); err != nil {
 			t.Fatalf("refresh ahead miss failed: %v", err)
@@ -281,7 +281,7 @@ func TestObserverContract_HelperOpsEmitExpectedMetadata(t *testing.T) {
 
 	t.Run("rate_limit_helpers_emit_increment_ops", func(t *testing.T) {
 		before := obs.len()
-		if _, err := c.RateLimitContext(ctx, "rl:key", 5, time.Minute); err != nil {
+		if _, err := c.WithContext(ctx).RateLimit("rl:key", 5, time.Minute); err != nil {
 			t.Fatalf("rate limit failed: %v", err)
 		}
 		last := assertLast(t, before, "increment", "*", true, nil)
@@ -290,7 +290,7 @@ func TestObserverContract_HelperOpsEmitExpectedMetadata(t *testing.T) {
 		}
 
 		before = obs.len()
-		if _, err := c.RateLimitContext(ctx, "rl:key2", 5, time.Minute); err != nil {
+		if _, err := c.WithContext(ctx).RateLimit("rl:key2", 5, time.Minute); err != nil {
 			t.Fatalf("rate limit failed: %v", err)
 		}
 		last = assertLast(t, before, "increment", "*", true, nil)
@@ -315,11 +315,11 @@ func TestObserverContract_ErrorPropagation(t *testing.T) {
 	}
 
 	t.Run("get_json_decode_error", func(t *testing.T) {
-		if err := c.SetBytesContext(ctx, "bad:json", []byte("{"), time.Minute); err != nil {
+		if err := c.WithContext(ctx).SetBytes("bad:json", []byte("{"), time.Minute); err != nil {
 			t.Fatalf("seed bad json failed: %v", err)
 		}
 		before := obs.len()
-		_, ok, err := GetJSONContext[map[string]any](ctx, c, "bad:json")
+		_, ok, err := GetJSON[map[string]any](c.WithContext(ctx), "bad:json")
 		if err == nil || ok {
 			t.Fatalf("expected decode error and miss semantics: ok=%v err=%v", ok, err)
 		}
@@ -337,7 +337,7 @@ func TestObserverContract_ErrorPropagation(t *testing.T) {
 
 	t.Run("remember_nil_callback", func(t *testing.T) {
 		before := obs.len()
-		_, err := c.RememberBytesContext(ctx, "remember:nil", time.Minute, nil)
+		_, err := c.rememberBytes(ctx, "remember:nil", time.Minute, nil)
 		if err == nil {
 			t.Fatalf("expected error")
 		}
@@ -349,7 +349,7 @@ func TestObserverContract_ErrorPropagation(t *testing.T) {
 
 	t.Run("refresh_ahead_nil_callback", func(t *testing.T) {
 		before := obs.len()
-		_, err := c.RefreshAheadBytesContext(ctx, "refresh:nil", time.Minute, 10*time.Second, nil)
+		_, err := c.refreshAheadBytes(ctx, "refresh:nil", time.Minute, 10*time.Second, nil)
 		if err == nil {
 			t.Fatalf("expected error")
 		}
@@ -360,17 +360,17 @@ func TestObserverContract_ErrorPropagation(t *testing.T) {
 	})
 
 	t.Run("lock_context_timeout", func(t *testing.T) {
-		locked, err := c.TryLockContext(ctx, "lock:timeout", time.Minute)
+		locked, err := c.WithContext(ctx).TryLock("lock:timeout", time.Minute)
 		if err != nil || !locked {
 			t.Fatalf("seed lock failed: locked=%v err=%v", locked, err)
 		}
-		t.Cleanup(func() { _ = c.UnlockContext(context.Background(), "lock:timeout") })
+		t.Cleanup(func() { _ = c.Unlock("lock:timeout") })
 
 		lockCtx, cancel := context.WithTimeout(ctx, 15*time.Millisecond)
 		defer cancel()
 
 		before := obs.len()
-		locked, err = c.LockContext(lockCtx, "lock:timeout", time.Minute, time.Millisecond)
+		locked, err = c.lock(lockCtx, "lock:timeout", time.Minute, time.Millisecond)
 		if err == nil || locked {
 			t.Fatalf("expected timeout error: locked=%v err=%v", locked, err)
 		}
