@@ -34,6 +34,74 @@ type storeFactory struct {
 }
 
 func TestStoreContract_AllDrivers(t *testing.T) {
+	fixtures := integrationFixtures(t)
+
+	if len(fixtures) == 0 {
+		t.Skip("no integration drivers selected")
+	}
+
+	for _, fx := range fixtures {
+		fx := fx
+		t.Run(fx.name, func(t *testing.T) {
+			store, cleanup := fx.new(t)
+			t.Cleanup(cleanup)
+
+			opts := fx.opts
+			opts.CaseName = t.Name()
+			cachetest.RunStoreContract(t, store, opts)
+			if fx.inspector {
+				cachetest.RunInspectorContract(t, store)
+			}
+		})
+	}
+}
+
+func TestObserverContextPropagation_AllDrivers(t *testing.T) {
+	fixtures := integrationFixtures(t)
+	if len(fixtures) == 0 {
+		t.Skip("no integration drivers selected")
+	}
+
+	for _, fx := range fixtures {
+		fx := fx
+		t.Run(fx.name, func(t *testing.T) {
+			store, cleanup := fx.new(t)
+			t.Cleanup(cleanup)
+
+			type ctxKey string
+			const key ctxKey = "observer-context"
+			ctx := context.WithValue(context.Background(), key, fx.name)
+			got := make(chan string, 1)
+
+			c := cache.NewCache(store).WithObserver(cache.ObserverFunc(func(obsCtx context.Context, op string, keyName string, hit bool, err error, dur time.Duration, driver cachecore.Driver) {
+				if op == "set" && keyName == "ctx:key" {
+					value, _ := obsCtx.Value(key).(string)
+					select {
+					case got <- value:
+					default:
+					}
+				}
+			}))
+
+			if err := c.WithContext(ctx).SetBytes("ctx:key", []byte("v"), time.Minute); err != nil {
+				t.Fatalf("SetBytes returned error: %v", err)
+			}
+
+			select {
+			case value := <-got:
+				if value != fx.name {
+					t.Fatalf("observer ctx value = %q, want %q", value, fx.name)
+				}
+			case <-time.After(5 * time.Second):
+				t.Fatal("timed out waiting for observer context propagation")
+			}
+		})
+	}
+}
+
+func integrationFixtures(t *testing.T) []storeFactory {
+	t.Helper()
+
 	var fixtures []storeFactory
 
 	if integrationDriverEnabled("null") {
@@ -272,25 +340,7 @@ func TestStoreContract_AllDrivers(t *testing.T) {
 			inspector: true,
 		})
 	}
-
-	if len(fixtures) == 0 {
-		t.Skip("no integration drivers selected")
-	}
-
-	for _, fx := range fixtures {
-		fx := fx
-		t.Run(fx.name, func(t *testing.T) {
-			store, cleanup := fx.new(t)
-			t.Cleanup(cleanup)
-
-			opts := fx.opts
-			opts.CaseName = t.Name()
-			cachetest.RunStoreContract(t, store, opts)
-			if fx.inspector {
-				cachetest.RunInspectorContract(t, store)
-			}
-		})
-	}
+	return fixtures
 }
 
 func integrationDriverEnabled(name string) bool {
