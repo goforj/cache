@@ -7,29 +7,38 @@ import (
 	"github.com/goforj/cache/cachecore"
 )
 
+type CacheOpEvent struct {
+	Operation string
+	Key       string
+	Hit       bool
+	Err       error
+	Duration  time.Duration
+	Driver    cachecore.Driver
+}
+
 // Observer receives events for cache operations.
 // It is called from Cache helpers after each operation completes.
 type Observer interface {
-	OnCacheOp(ctx context.Context, op string, key string, hit bool, err error, dur time.Duration, driver cachecore.Driver)
+	OnCacheOp(ctx context.Context, event CacheOpEvent)
 }
 
 // ObserverFunc adapts a function to the Observer interface.
-type ObserverFunc func(ctx context.Context, op string, key string, hit bool, err error, dur time.Duration, driver cachecore.Driver)
+type ObserverFunc func(ctx context.Context, event CacheOpEvent)
 
 // OnCacheOp implements Observer.
 // @group Observability
 //
 // Example: observer func callback
 //
-//	obs := cache.ObserverFunc(func(ctx context.Context, op, key string, hit bool, err error, dur time.Duration, driver cachecore.Driver) {
-//		fmt.Println(op, key, hit, err == nil, driver)
+//	obs := cache.ObserverFunc(func(ctx context.Context, event cache.CacheOpEvent) {
+//		fmt.Println(event.Operation, event.Key, event.Hit, event.Err == nil, event.Driver)
 //		_ = ctx
-//		_ = dur
+//		_ = event.Duration
 //	})
-//	obs.OnCacheOp(context.Background(), "get", "user:42", true, nil, time.Millisecond, cachecore.DriverMemory)
-func (f ObserverFunc) OnCacheOp(ctx context.Context, op string, key string, hit bool, err error, dur time.Duration, driver cachecore.Driver) {
+//	obs.OnCacheOp(context.Background(), cache.CacheOpEvent{Operation: "get", Key: "user:42", Hit: true, Duration: time.Millisecond, Driver: cachecore.DriverMemory})
+func (f ObserverFunc) OnCacheOp(ctx context.Context, event CacheOpEvent) {
 	if f == nil {
 		return
 	}
-	f(ctx, op, key, hit, err, dur, driver)
+	f(ctx, event)
 }

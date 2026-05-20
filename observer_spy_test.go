@@ -4,22 +4,15 @@ import (
 	"context"
 	"testing"
 	"time"
-
-	"github.com/goforj/cache/cachecore"
 )
 
 type spyObserver struct {
 	ops []string
 }
 
-func (s *spyObserver) OnCacheOp(ctx context.Context, op string, key string, hit bool, err error, dur time.Duration, driver cachecore.Driver) {
+func (s *spyObserver) OnCacheOp(ctx context.Context, event CacheOpEvent) {
 	_ = ctx
-	_ = key
-	_ = hit
-	_ = err
-	_ = dur
-	_ = driver
-	s.ops = append(s.ops, op)
+	s.ops = append(s.ops, event.Operation)
 }
 
 func TestObserverRecordsAllOps(t *testing.T) {

@@ -24,15 +24,15 @@ type observerRecorder struct {
 	events []observerEvent
 }
 
-func (r *observerRecorder) OnCacheOp(_ context.Context, op, key string, hit bool, err error, dur time.Duration, driver cachecore.Driver) {
+func (r *observerRecorder) OnCacheOp(_ context.Context, event CacheOpEvent) {
 	r.mu.Lock()
 	r.events = append(r.events, observerEvent{
-		op:     op,
-		key:    key,
-		hit:    hit,
-		err:    err,
-		driver: driver,
-		dur:    dur,
+		op:     event.Operation,
+		key:    event.Key,
+		hit:    event.Hit,
+		err:    event.Err,
+		driver: event.Driver,
+		dur:    event.Duration,
 	})
 	r.mu.Unlock()
 }

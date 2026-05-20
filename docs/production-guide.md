@@ -103,19 +103,19 @@ Attach an observer to capture hit/miss/error/latency by operation and driver:
 
 ```go
 type Observer interface {
-	OnCacheOp(ctx context.Context, op string, key string, hit bool, err error, dur time.Duration, driver cachecore.Driver)
+	OnCacheOp(ctx context.Context, event cache.CacheOpEvent)
 }
 ```
 
 Practical metrics pattern (Prometheus/OpenTelemetry):
 
 ```go
-c = c.WithObserver(cache.ObserverFunc(func(ctx context.Context, op, key string, hit bool, err error, dur time.Duration, driver cachecore.Driver) {
+c = c.WithObserver(cache.ObserverFunc(func(ctx context.Context, event cache.CacheOpEvent) {
 	_ = ctx
-	_ = key // do not use raw keys as metric labels (high cardinality)
+	_ = event.Key // do not use raw keys as metric labels (high cardinality)
 
 	status := "ok"
-	if err != nil {
+	if event.Err != nil {
 		status = "error"
 	}
 
@@ -123,17 +123,17 @@ c = c.WithObserver(cache.ObserverFunc(func(ctx context.Context, op, key string, 
 	// cache_duration_seconds{op,driver}
 	// cache_reads_total{op,driver,result="hit|miss"} for read-ish ops
 
-	if op == "get" || op == "get_json" || op == "get_string" || op == "remember" || op == "remember_stale" || op == "refresh_ahead" {
+	if event.Operation == "get" || event.Operation == "get_json" || event.Operation == "get_string" || event.Operation == "remember" || event.Operation == "remember_stale" || event.Operation == "refresh_ahead" {
 		result := "miss"
-		if hit {
+		if event.Hit {
 			result = "hit"
 		}
 		_ = result
 	}
 
 	_ = status
-	_ = dur
-	_ = driver
+	_ = event.Duration
+	_ = event.Driver
 }))
 ```
 

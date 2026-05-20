@@ -128,15 +128,15 @@ func TestObserverFuncAndErrorStoreDriver(t *testing.T) {
 
 	// Nil ObserverFunc should be a no-op.
 	var nilObs ObserverFunc
-	nilObs.OnCacheOp(context.Background(), "get", "k", false, nil, 0, cachecore.DriverMemory)
+	nilObs.OnCacheOp(context.Background(), CacheOpEvent{Operation: "get", Key: "k", Driver: cachecore.DriverMemory})
 
 	called := false
-	ObserverFunc(func(ctx context.Context, op, key string, hit bool, err error, dur time.Duration, driver cachecore.Driver) {
+	ObserverFunc(func(ctx context.Context, event CacheOpEvent) {
 		called = true
-		if op != "set" || key != "k" || driver != cachecore.DriverMemory {
+		if event.Operation != "set" || event.Key != "k" || event.Driver != cachecore.DriverMemory {
 			t.Fatalf("unexpected observer payload")
 		}
-	}).OnCacheOp(context.Background(), "set", "k", true, nil, time.Millisecond, cachecore.DriverMemory)
+	}).OnCacheOp(context.Background(), CacheOpEvent{Operation: "set", Key: "k", Hit: true, Duration: time.Millisecond, Driver: cachecore.DriverMemory})
 	if !called {
 		t.Fatalf("observer func was not called")
 	}

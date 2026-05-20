@@ -1107,5 +1107,12 @@ func (c *Cache) observe(ctx context.Context, op, key string, hit bool, err error
 	if c.observer == nil {
 		return
 	}
-	c.observer.OnCacheOp(ctx, op, key, hit, err, time.Since(start), c.Driver())
+	c.observer.OnCacheOp(ctx, CacheOpEvent{
+		Operation: op,
+		Key:       key,
+		Hit:       hit,
+		Err:       err,
+		Duration:  time.Since(start),
+		Driver:    c.Driver(),
+	})
 }

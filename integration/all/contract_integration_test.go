@@ -73,8 +73,8 @@ func TestObserverContextPropagation_AllDrivers(t *testing.T) {
 			ctx := context.WithValue(context.Background(), key, fx.name)
 			got := make(chan string, 1)
 
-			c := cache.NewCache(store).WithObserver(cache.ObserverFunc(func(obsCtx context.Context, op string, keyName string, hit bool, err error, dur time.Duration, driver cachecore.Driver) {
-				if op == "set" && keyName == "ctx:key" {
+			c := cache.NewCache(store).WithObserver(cache.ObserverFunc(func(obsCtx context.Context, event cache.CacheOpEvent) {
+				if event.Operation == "set" && event.Key == "ctx:key" {
 					value, _ := obsCtx.Value(key).(string)
 					select {
 					case got <- value:

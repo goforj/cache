@@ -14,12 +14,12 @@ func main() {
 	// Example: attach observer
 	ctx := context.Background()
 	c := cache.NewCache(cache.NewMemoryStore(ctx))
-	c = c.WithObserver(cache.ObserverFunc(func(ctx context.Context, op, key string, hit bool, err error, dur time.Duration, driver cachecore.Driver) {
+	c = c.WithObserver(cache.ObserverFunc(func(ctx context.Context, event cache.CacheOpEvent) {
 		// See docs/production-guide.md for a real metrics recipe.
-		fmt.Println(op, driver, hit, err == nil)
+		fmt.Println(event.Operation, event.Driver, event.Hit, event.Err == nil)
 		_ = ctx
-		_ = key
-		_ = dur
+		_ = event.Key
+		_ = event.Duration
 	}))
 	_, _, _ = c.GetBytes("profile:42")
 }
