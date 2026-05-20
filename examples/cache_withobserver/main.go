@@ -3,9 +3,8 @@ package main
 import (
 	"context"
 	"fmt"
+
 	"github.com/goforj/cache"
-	"github.com/goforj/cache/cachecore"
-	"time"
 )
 
 func main() {
