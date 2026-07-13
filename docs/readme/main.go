@@ -446,7 +446,7 @@ func renderAPI(root string, funcs []*FuncDoc) string {
 
 		buf.WriteString(fmt.Sprintf("| **%s** | %s |\n",
 			group,
-			strings.Join(links, " "),
+			strings.Join(links, " · "),
 		))
 	}
 
@@ -613,7 +613,7 @@ func renderDriverConfigIndexRow(root string) string {
 	for _, d := range docs {
 		links = append(links, fmt.Sprintf("[%s](#%s)", d.IndexLabel, d.Anchor))
 	}
-	return fmt.Sprintf("| **Driver Configs** | %s |\n", strings.Join(links, " "))
+	return fmt.Sprintf("| **Driver Configs** | %s |\n", strings.Join(links, " · "))
 }
 
 func renderDriverConfigIndex(root string) string {
