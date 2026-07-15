@@ -6,6 +6,7 @@ import (
 	"time"
 )
 
+// TestNullStoreNoOps verifies the disabled backend consistently succeeds on writes and misses on reads.
 func TestNullStoreNoOps(t *testing.T) {
 	store := newNullStore()
 	ctx := context.Background()

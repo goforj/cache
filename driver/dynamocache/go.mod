@@ -7,7 +7,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/config v1.27.1
 	github.com/aws/aws-sdk-go-v2/credentials v1.17.10
 	github.com/aws/aws-sdk-go-v2/service/dynamodb v1.27.1
-	github.com/goforj/cache/cachecore v0.0.0
+	github.com/goforj/cache/cachecore v0.4.0
 )
 
 require (
@@ -27,5 +27,3 @@ require (
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
-
-replace github.com/goforj/cache/cachecore => ../../cachecore

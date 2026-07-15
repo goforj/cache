@@ -22,6 +22,7 @@ type integrationRuntime struct {
 
 var integrationRuntimes = map[string]*integrationRuntime{}
 
+// TestMain prepares explicitly enabled backends before running root integration tests.
 func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
@@ -51,6 +52,7 @@ func selectedIntegrationDrivers() map[string]bool {
 	return selected
 }
 
+// integrationDriverEnabled reports whether the root integration selector includes a driver.
 func integrationDriverEnabled(name string) bool {
 	return selectedIntegrationDrivers()[strings.ToLower(name)]
 }

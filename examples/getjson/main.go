@@ -7,11 +7,14 @@ import (
 	"time"
 )
 
+// main keeps this generated example executable so API drift fails during compilation.
 func main() {
 	// GetJSON decodes a JSON value into T when key exists, using background context.
 
 	// Example: get typed JSON
-	type Profile struct { Name string `json:"name"` }
+	type Profile struct {
+		Name string `json:"name"`
+	}
 	ctx := context.Background()
 	c := cache.NewCache(cache.NewMemoryStore(ctx))
 	_ = cache.SetJSON(c, "profile:42", Profile{Name: "Ada"}, time.Minute)

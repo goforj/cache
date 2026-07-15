@@ -7,18 +7,22 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/goforj/cache/cachecore"
 )
 
+// newTempFileStore isolates file-store records in the calling test's temporary directory.
 func newTempFileStore(t *testing.T) cachecore.Store {
 	t.Helper()
 	dir := t.TempDir()
 	return newFileStore(dir, 0)
 }
 
+// TestFileStoreSetGetDelete verifies persisted bytes round-trip and disappear after removal.
 func TestFileStoreSetGetDelete(t *testing.T) {
 	store := newTempFileStore(t)
 	ctx := context.Background()
@@ -46,6 +50,7 @@ func TestFileStoreSetGetDelete(t *testing.T) {
 	}
 }
 
+// TestFileStoreTTLExpiry verifies expired records become misses on read.
 func TestFileStoreTTLExpiry(t *testing.T) {
 	store := newTempFileStore(t)
 	ctx := context.Background()
@@ -63,6 +68,7 @@ func TestFileStoreTTLExpiry(t *testing.T) {
 	}
 }
 
+// TestFileStoreAddDefaultsTTL verifies conditional writes use the configured TTL when none is supplied.
 func TestFileStoreAddDefaultsTTL(t *testing.T) {
 	store := newTempFileStore(t)
 	ctx := context.Background()
@@ -72,6 +78,7 @@ func TestFileStoreAddDefaultsTTL(t *testing.T) {
 	}
 }
 
+// TestFileStoreFlushEmpty verifies flushing an unused store is an idempotent success.
 func TestFileStoreFlushEmpty(t *testing.T) {
 	store := newTempFileStore(t)
 	ctx := context.Background()
@@ -80,6 +87,7 @@ func TestFileStoreFlushEmpty(t *testing.T) {
 	}
 }
 
+// TestFileStoreAddIncrementDecrement verifies conditional creation and persisted counters share file locking safely.
 func TestFileStoreAddIncrementDecrement(t *testing.T) {
 	store := newTempFileStore(t)
 	ctx := context.Background()
@@ -106,6 +114,54 @@ func TestFileStoreAddIncrementDecrement(t *testing.T) {
 	}
 }
 
+// TestFileStoreConcurrentMutations verifies process-local atomicity for lock and counter primitives.
+func TestFileStoreConcurrentMutations(t *testing.T) {
+	dir := t.TempDir()
+	stores := []cachecore.Store{
+		newFileStore(dir, time.Minute),
+		newFileStore(filepath.Join(dir, "."), time.Minute),
+	}
+	ctx := context.Background()
+	const workers = 64
+
+	var created atomic.Int64
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+	errs := make(chan error, workers*2)
+	for worker := range workers {
+		wg.Add(1)
+		go func(store cachecore.Store) {
+			defer wg.Done()
+			<-start
+			ok, err := store.Add(ctx, "once:concurrent", []byte("value"), time.Minute)
+			if err != nil {
+				errs <- err
+				return
+			}
+			if ok {
+				created.Add(1)
+			}
+			if _, err := store.Increment(ctx, "counter:concurrent", 1, time.Minute); err != nil {
+				errs <- err
+			}
+		}(stores[worker%len(stores)])
+	}
+	close(start)
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		t.Fatalf("concurrent mutation failed: %v", err)
+	}
+	if got := created.Load(); got != 1 {
+		t.Fatalf("successful Add calls = %d, want 1", got)
+	}
+	body, ok, err := stores[0].Get(ctx, "counter:concurrent")
+	if err != nil || !ok || string(body) != "64" {
+		t.Fatalf("counter = %q, ok=%v err=%v; want 64", body, ok, err)
+	}
+}
+
+// TestFileStoreFlushAndDeleteMany verifies bulk removal and namespace flush clear only requested records.
 func TestFileStoreFlushAndDeleteMany(t *testing.T) {
 	store := newTempFileStore(t)
 	ctx := context.Background()
@@ -134,6 +190,36 @@ func TestFileStoreFlushAndDeleteMany(t *testing.T) {
 	}
 }
 
+// TestFileStoreFlushPreservesUnrelatedFiles verifies a shared directory is not destructively emptied.
+func TestFileStoreFlushPreservesUnrelatedFiles(t *testing.T) {
+	dir := t.TempDir()
+	store := newFileStore(dir, time.Minute)
+	sentinels := []string{
+		filepath.Join(dir, "keep.txt"),
+		filepath.Join(dir, "keep.cache"),
+	}
+	for _, sentinel := range sentinels {
+		if err := os.WriteFile(sentinel, []byte("keep"), 0o600); err != nil {
+			t.Fatalf("write sentinel: %v", err)
+		}
+	}
+	if err := store.Set(context.Background(), "managed", []byte("value"), time.Minute); err != nil {
+		t.Fatalf("set managed value: %v", err)
+	}
+	if err := store.Flush(context.Background()); err != nil {
+		t.Fatalf("flush: %v", err)
+	}
+	for _, sentinel := range sentinels {
+		if body, err := os.ReadFile(sentinel); err != nil || string(body) != "keep" {
+			t.Fatalf("unrelated file changed: path=%s body=%q err=%v", sentinel, body, err)
+		}
+	}
+	if _, ok, err := store.Get(context.Background(), "managed"); err != nil || ok {
+		t.Fatalf("managed value survived flush: ok=%v err=%v", ok, err)
+	}
+}
+
+// TestFileStoreIncrementNonNumeric verifies counters reject persisted non-integer payloads.
 func TestFileStoreIncrementNonNumeric(t *testing.T) {
 	store := newTempFileStore(t)
 	ctx := context.Background()
@@ -146,6 +232,7 @@ func TestFileStoreIncrementNonNumeric(t *testing.T) {
 	}
 }
 
+// TestFileStoreUsesSpecifiedDir verifies configured roots contain every persisted cache record.
 func TestFileStoreUsesSpecifiedDir(t *testing.T) {
 	dir := t.TempDir()
 	store := newFileStore(dir, 0)
@@ -165,6 +252,7 @@ func TestFileStoreUsesSpecifiedDir(t *testing.T) {
 	}
 }
 
+// TestFileStoreSetUsesDefaultTTLWhenZero verifies zero-TTL writes resolve to the store default.
 func TestFileStoreSetUsesDefaultTTLWhenZero(t *testing.T) {
 	dir := t.TempDir()
 	store := newFileStore(dir, time.Minute)
@@ -195,6 +283,7 @@ func TestFileStoreSetUsesDefaultTTLWhenZero(t *testing.T) {
 	}
 }
 
+// TestFileStoreGetRemovesExpiredAndCorrupt verifies unreadable or expired records are pruned instead of returned.
 func TestFileStoreGetRemovesExpiredAndCorrupt(t *testing.T) {
 	dir := t.TempDir()
 	store := newFileStore(dir, time.Minute)
@@ -222,6 +311,37 @@ func TestFileStoreGetRemovesExpiredAndCorrupt(t *testing.T) {
 	}
 }
 
+// TestFileStoreInspectorOmitsExpiredEntries verifies browsing follows the same TTL semantics as Get.
+func TestFileStoreInspectorOmitsExpiredEntries(t *testing.T) {
+	dir := t.TempDir()
+	store := newFileStore(dir, time.Minute)
+	fs := store.(*fileStore)
+	expired := fileRecord{
+		Key:       "expired",
+		ExpiresAt: time.Now().Add(-time.Minute).UnixNano(),
+		Value:     []byte("old"),
+	}
+	body, err := json.Marshal(expired)
+	if err != nil {
+		t.Fatalf("marshal expired record: %v", err)
+	}
+	if err := os.WriteFile(fs.path("expired"), body, 0o600); err != nil {
+		t.Fatalf("write expired record: %v", err)
+	}
+
+	page, err := fs.ListPage(context.Background(), cachecore.ListPageOptions{})
+	if err != nil {
+		t.Fatalf("list page: %v", err)
+	}
+	if len(page.Entries) != 0 {
+		t.Fatalf("expired entries = %+v, want none", page.Entries)
+	}
+	if _, err := os.Stat(fs.path("expired")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("expired inspector record was not removed: %v", err)
+	}
+}
+
+// TestFileStoreGetReadsLegacyJSONRecord verifies reads remain compatible with the prior JSON record format.
 func TestFileStoreGetReadsLegacyJSONRecord(t *testing.T) {
 	dir := t.TempDir()
 	store := newFileStore(dir, time.Minute)
@@ -245,6 +365,7 @@ func TestFileStoreGetReadsLegacyJSONRecord(t *testing.T) {
 	}
 }
 
+// TestFileStoreDeleteManyEmptyAndMissing verifies empty batches and absent paths remain idempotent.
 func TestFileStoreDeleteManyEmptyAndMissing(t *testing.T) {
 	store := newTempFileStore(t)
 	ctx := context.Background()
@@ -256,6 +377,7 @@ func TestFileStoreDeleteManyEmptyAndMissing(t *testing.T) {
 	}
 }
 
+// TestFileStoreFlushMissingDir verifies a removed storage directory is treated as already flushed.
 func TestFileStoreFlushMissingDir(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "missing-dir")
 	store := &fileStore{dir: dir, defaultTTL: time.Minute}
@@ -264,6 +386,7 @@ func TestFileStoreFlushMissingDir(t *testing.T) {
 	}
 }
 
+// TestFileStoreSetPermissionError verifies directory permission failures reach callers.
 func TestFileStoreSetPermissionError(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.Chmod(dir, 0o000); err != nil {
@@ -275,8 +398,12 @@ func TestFileStoreSetPermissionError(t *testing.T) {
 	if err := store.Set(context.Background(), "k", []byte("v"), time.Second); err == nil {
 		t.Fatalf("expected set to fail on permissions")
 	}
+	if created, err := store.Add(context.Background(), "k", []byte("v"), time.Second); err == nil || created {
+		t.Fatalf("failed add = (created=%v, err=%v), want false and an error", created, err)
+	}
 }
 
+// TestFileStoreSetWriteError verifies temporary-record write failures do not report success.
 func TestFileStoreSetWriteError(t *testing.T) {
 	dir := t.TempDir()
 	store := newFileStore(dir, time.Second)
@@ -297,6 +424,7 @@ func TestFileStoreSetWriteError(t *testing.T) {
 	}
 }
 
+// TestFileStoreSetRenameError verifies atomic replacement failures are preserved.
 func TestFileStoreSetRenameError(t *testing.T) {
 	dir := t.TempDir()
 	store := newFileStore(dir, time.Second)
@@ -310,6 +438,7 @@ func TestFileStoreSetRenameError(t *testing.T) {
 	}
 }
 
+// TestFileStoreDeletePermissionError verifies single-key removal preserves filesystem permission errors.
 func TestFileStoreDeletePermissionError(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.Chmod(dir, 0o000); err != nil {
@@ -322,6 +451,7 @@ func TestFileStoreDeletePermissionError(t *testing.T) {
 	}
 }
 
+// TestFileStoreDeleteManyError verifies bulk removal stops and returns filesystem failures.
 func TestFileStoreDeleteManyError(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.Chmod(dir, 0o000); err != nil {
@@ -334,6 +464,7 @@ func TestFileStoreDeleteManyError(t *testing.T) {
 	}
 }
 
+// TestNewFileStoreDefaultsDir verifies an omitted root resolves to the documented temporary directory.
 func TestNewFileStoreDefaultsDir(t *testing.T) {
 	store := newFileStore("", 0)
 	fs := store.(*fileStore)

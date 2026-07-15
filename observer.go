@@ -7,13 +7,20 @@ import (
 	"github.com/goforj/cache/cachecore"
 )
 
+// CacheOpEvent describes one completed cache operation for observability hooks.
 type CacheOpEvent struct {
+	// Operation is the stable operation name, such as "get" or "set".
 	Operation string
-	Key       string
-	Hit       bool
-	Err       error
-	Duration  time.Duration
-	Driver    cachecore.Driver
+	// Key is the logical cache key and may contain sensitive or high-cardinality data.
+	Key string
+	// Hit reports successful presence or acquisition for operations with hit semantics.
+	Hit bool
+	// Err is the operation error, if any.
+	Err error
+	// Duration is the end-to-end helper latency.
+	Duration time.Duration
+	// Driver identifies the underlying cache backend.
+	Driver cachecore.Driver
 }
 
 // Observer receives events for cache operations.

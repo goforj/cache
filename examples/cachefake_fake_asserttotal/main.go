@@ -5,6 +5,7 @@ import (
 	"testing"
 )
 
+// main keeps this generated example executable so API drift fails during compilation.
 func main() {
 	// AssertTotal ensures the total call count for an op matches times.
 

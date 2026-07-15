@@ -10,10 +10,12 @@ type observerSpy struct {
 	ops []string
 }
 
+// OnCacheOp records observed operations so assertions can inspect hook delivery.
 func (o *observerSpy) OnCacheOp(_ context.Context, event CacheOpEvent) {
 	o.ops = append(o.ops, event.Operation)
 }
 
+// TestWithObserverHooks verifies observer hooks receive cache operations and metadata.
 func TestWithObserverHooks(t *testing.T) {
 	obs := &observerSpy{}
 	c := NewCache(newMemoryStore(0, 0)).WithObserver(obs)

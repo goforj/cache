@@ -9,6 +9,7 @@ import (
 	"time"
 )
 
+// main keeps this generated example executable so API drift fails during compilation.
 func main() {
 	// Unlock releases a previously acquired lock key.
 

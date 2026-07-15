@@ -24,6 +24,7 @@ type observerRecorder struct {
 	events []observerEvent
 }
 
+// OnCacheOp records a copy of each event so later assertions are race-safe.
 func (r *observerRecorder) OnCacheOp(_ context.Context, event CacheOpEvent) {
 	r.mu.Lock()
 	r.events = append(r.events, observerEvent{
@@ -37,12 +38,14 @@ func (r *observerRecorder) OnCacheOp(_ context.Context, event CacheOpEvent) {
 	r.mu.Unlock()
 }
 
+// len returns the number of events observed so far.
 func (r *observerRecorder) len() int {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return len(r.events)
 }
 
+// eventsSince returns a defensive copy of events recorded after the given offset.
 func (r *observerRecorder) eventsSince(n int) []observerEvent {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -54,6 +57,7 @@ func (r *observerRecorder) eventsSince(n int) []observerEvent {
 	return out
 }
 
+// TestObserverContract_HelperOpsEmitExpectedMetadata verifies helper operations report stable observer metadata.
 func TestObserverContract_HelperOpsEmitExpectedMetadata(t *testing.T) {
 	ctx := context.Background()
 	obs := &observerRecorder{}
@@ -300,6 +304,7 @@ func TestObserverContract_HelperOpsEmitExpectedMetadata(t *testing.T) {
 	})
 }
 
+// TestObserverContract_ErrorPropagation verifies observer events retain operation failures.
 func TestObserverContract_ErrorPropagation(t *testing.T) {
 	ctx := context.Background()
 	obs := &observerRecorder{}

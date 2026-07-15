@@ -8,6 +8,7 @@ import (
 	"github.com/goforj/cache/driver/natscache"
 )
 
+// main keeps this generated example executable so API drift fails during compilation.
 func main() {
 	// Example: inject NATS key-value bucket via explicit driver config.
 	var kv natscache.KeyValue // provided by your NATS setup

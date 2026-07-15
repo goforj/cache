@@ -1,85 +1,32 @@
 package cache
 
-import (
-	"bytes"
-	"compress/gzip"
-	"errors"
-	"io"
-
-	"github.com/goforj/cache/cachecore"
-)
+import "github.com/goforj/cache/cachecore"
 
 // CompressionCodec represents a value compression algorithm.
 type CompressionCodec = cachecore.CompressionCodec
 
 const (
-	CompressionNone   = cachecore.CompressionNone
-	CompressionGzip   = cachecore.CompressionGzip
+	// CompressionNone leaves values uncompressed.
+	CompressionNone = cachecore.CompressionNone
+	// CompressionGzip encodes values with gzip.
+	CompressionGzip = cachecore.CompressionGzip
+	// CompressionSnappy is reserved for Snappy support and is currently unsupported.
 	CompressionSnappy = cachecore.CompressionSnappy
 )
 
 var (
-	compressMagic = []byte("CMP1")
-
-	ErrValueTooLarge      = errors.New("cache: value exceeds max size")
-	ErrUnsupportedCodec   = errors.New("cache: unsupported compression codec")
-	ErrCorruptCompression = errors.New("cache: corrupt compressed payload")
+	// ErrValueTooLarge reports that a logical or encoded cache value exceeds MaxValueBytes.
+	ErrValueTooLarge = cachecore.ErrValueTooLarge
+	// ErrInvalidMaxValueBytes reports a negative MaxValueBytes configuration.
+	ErrInvalidMaxValueBytes = cachecore.ErrInvalidMaxValueBytes
+	// ErrUnsupportedCodec reports a compression codec that this release cannot encode or decode.
+	ErrUnsupportedCodec = cachecore.ErrUnsupportedCodec
+	// ErrCorruptCompression reports a malformed compressed value envelope.
+	ErrCorruptCompression = cachecore.ErrCorruptCompression
+	// ErrEncryptionKey reports an AES key whose length is not 16, 24, or 32 bytes.
+	ErrEncryptionKey = cachecore.ErrEncryptionKey
+	// ErrDecryptFailed reports an invalid or wrong-key encrypted value envelope.
+	ErrDecryptFailed = cachecore.ErrDecryptFailed
+	// ErrEncryptValueTooBig is retained for compatibility with callers that classify shaping failures.
+	ErrEncryptValueTooBig = cachecore.ErrEncryptValueTooBig
 )
-
-func encodeValue(codec CompressionCodec, max int, value []byte) ([]byte, error) {
-	if max > 0 && len(value) > max {
-		return nil, ErrValueTooLarge
-	}
-	switch codec {
-	case CompressionNone:
-		return value, nil
-	case CompressionGzip:
-		var buf bytes.Buffer
-		buf.Write(compressMagic)
-		_ = buf.WriteByte('g')
-		zw, _ := gzip.NewWriterLevel(&buf, gzip.BestSpeed)
-		if _, err := zw.Write(value); err != nil {
-			return nil, err
-		}
-		if err := zw.Close(); err != nil {
-			return nil, err
-		}
-		out := buf.Bytes()
-		if max > 0 && len(out) > max {
-			return nil, ErrValueTooLarge
-		}
-		return out, nil
-	case CompressionSnappy:
-		return nil, ErrUnsupportedCodec
-	default:
-		return nil, ErrUnsupportedCodec
-	}
-}
-
-func decodeValue(in []byte) ([]byte, error) {
-	if len(in) < len(compressMagic)+1 {
-		return in, nil
-	}
-	if !bytes.Equal(in[:len(compressMagic)], compressMagic) {
-		return in, nil
-	}
-	codec := in[len(compressMagic)]
-	payload := in[len(compressMagic)+1:]
-	switch codec {
-	case 'g':
-		gr, err := gzip.NewReader(bytes.NewReader(payload))
-		if err != nil {
-			return nil, ErrCorruptCompression
-		}
-		defer gr.Close()
-		out, err := io.ReadAll(gr)
-		if err != nil {
-			return nil, ErrCorruptCompression
-		}
-		return out, nil
-	case 's':
-		return nil, ErrUnsupportedCodec
-	default:
-		return nil, ErrUnsupportedCodec
-	}
-}

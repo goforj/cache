@@ -2,12 +2,72 @@ package cache
 
 import (
 	"context"
+	"errors"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/goforj/cache/cachecore"
 )
 
+// blockingMemoGetStore captures one read before allowing the caller to resume it.
+type blockingMemoGetStore struct {
+	inner   cachecore.Store
+	started chan struct{}
+	release chan struct{}
+	block   atomic.Bool
+}
+
+// Driver delegates backend identification to the wrapped store.
+func (s *blockingMemoGetStore) Driver() cachecore.Driver { return s.inner.Driver() }
+
+// Ready delegates readiness to the wrapped store.
+func (s *blockingMemoGetStore) Ready(ctx context.Context) error { return s.inner.Ready(ctx) }
+
+// Get pauses the first completed backing read so a concurrent mutation can overtake it.
+func (s *blockingMemoGetStore) Get(ctx context.Context, key string) ([]byte, bool, error) {
+	body, ok, err := s.inner.Get(ctx, key)
+	if s.block.CompareAndSwap(true, false) {
+		close(s.started)
+		<-s.release
+	}
+	return body, ok, err
+}
+
+// Set delegates writes to the wrapped store.
+func (s *blockingMemoGetStore) Set(ctx context.Context, key string, value []byte, ttl time.Duration) error {
+	return s.inner.Set(ctx, key, value, ttl)
+}
+
+// Add delegates conditional writes to the wrapped store.
+func (s *blockingMemoGetStore) Add(ctx context.Context, key string, value []byte, ttl time.Duration) (bool, error) {
+	return s.inner.Add(ctx, key, value, ttl)
+}
+
+// Increment delegates counter increments to the wrapped store.
+func (s *blockingMemoGetStore) Increment(ctx context.Context, key string, delta int64, ttl time.Duration) (int64, error) {
+	return s.inner.Increment(ctx, key, delta, ttl)
+}
+
+// Decrement delegates counter decrements to the wrapped store.
+func (s *blockingMemoGetStore) Decrement(ctx context.Context, key string, delta int64, ttl time.Duration) (int64, error) {
+	return s.inner.Decrement(ctx, key, delta, ttl)
+}
+
+// Delete delegates deletion to the wrapped store.
+func (s *blockingMemoGetStore) Delete(ctx context.Context, key string) error {
+	return s.inner.Delete(ctx, key)
+}
+
+// DeleteMany delegates batch deletion to the wrapped store.
+func (s *blockingMemoGetStore) DeleteMany(ctx context.Context, keys ...string) error {
+	return s.inner.DeleteMany(ctx, keys...)
+}
+
+// Flush delegates scoped deletion to the wrapped store.
+func (s *blockingMemoGetStore) Flush(ctx context.Context) error { return s.inner.Flush(ctx) }
+
+// TestMemoStoreCachesReadsAndInvalidatesOnMutation verifies memoized hits are reused until a local write changes the key.
 func TestMemoStoreCachesReadsAndInvalidatesOnMutation(t *testing.T) {
 	ctx := context.Background()
 	base := newMemoryStore(0, 0)
@@ -39,6 +99,86 @@ func TestMemoStoreCachesReadsAndInvalidatesOnMutation(t *testing.T) {
 	}
 }
 
+// TestMemoStoreConcurrentReadDoesNotRepublishStaleValue verifies local invalidation wins over an in-flight read.
+func TestMemoStoreConcurrentReadDoesNotRepublishStaleValue(t *testing.T) {
+	ctx := context.Background()
+	base := newMemoryStore(0, 0)
+	if err := base.Set(ctx, "k", []byte("v1"), time.Minute); err != nil {
+		t.Fatalf("seed base: %v", err)
+	}
+	blocking := &blockingMemoGetStore{
+		inner:   base,
+		started: make(chan struct{}),
+		release: make(chan struct{}),
+	}
+	blocking.block.Store(true)
+	store := NewMemoStore(blocking)
+
+	readDone := make(chan error, 1)
+	go func() {
+		body, ok, err := store.Get(ctx, "k")
+		if err == nil && (!ok || string(body) != "v1") {
+			err = errors.New("blocked read returned an unexpected value")
+		}
+		readDone <- err
+	}()
+	<-blocking.started
+	if err := store.Set(ctx, "k", []byte("v2"), time.Minute); err != nil {
+		t.Fatalf("concurrent set: %v", err)
+	}
+	close(blocking.release)
+	if err := <-readDone; err != nil {
+		t.Fatalf("blocked read: %v", err)
+	}
+
+	body, ok, err := store.Get(ctx, "k")
+	if err != nil || !ok || string(body) != "v2" {
+		t.Fatalf("stale read was republished: body=%q ok=%v err=%v", body, ok, err)
+	}
+}
+
+// TestMemoStoreMutationInvalidatesUnrelatedInflightPublish documents the bounded global generation tradeoff.
+func TestMemoStoreMutationInvalidatesUnrelatedInflightPublish(t *testing.T) {
+	ctx := context.Background()
+	base := newMemoryStore(0, 0)
+	if err := base.Set(ctx, "read-key", []byte("v1"), time.Minute); err != nil {
+		t.Fatalf("seed read key: %v", err)
+	}
+	blocking := &blockingMemoGetStore{
+		inner:   base,
+		started: make(chan struct{}),
+		release: make(chan struct{}),
+	}
+	blocking.block.Store(true)
+	store := NewMemoStore(blocking)
+
+	readDone := make(chan error, 1)
+	go func() {
+		body, ok, err := store.Get(ctx, "read-key")
+		if err == nil && (!ok || string(body) != "v1") {
+			err = errors.New("blocked read returned an unexpected value")
+		}
+		readDone <- err
+	}()
+	<-blocking.started
+	if err := store.Set(ctx, "write-key", []byte("mutation"), time.Minute); err != nil {
+		t.Fatalf("unrelated mutation: %v", err)
+	}
+	if err := base.Set(ctx, "read-key", []byte("v2"), time.Minute); err != nil {
+		t.Fatalf("external read-key update: %v", err)
+	}
+	close(blocking.release)
+	if err := <-readDone; err != nil {
+		t.Fatalf("blocked read: %v", err)
+	}
+
+	body, ok, err := store.Get(ctx, "read-key")
+	if err != nil || !ok || string(body) != "v2" {
+		t.Fatalf("unrelated mutation did not stop stale publish: body=%q ok=%v err=%v", body, ok, err)
+	}
+}
+
+// TestMemoStoreMutationPathsInvalidateCache verifies every mutating operation clears affected memo entries.
 func TestMemoStoreMutationPathsInvalidateCache(t *testing.T) {
 	ctx := context.Background()
 	store := NewMemoStore(newMemoryStore(0, 0))
@@ -84,6 +224,7 @@ func TestMemoStoreMutationPathsInvalidateCache(t *testing.T) {
 	}
 }
 
+// TestMemoStoreDeleteInvalidates verifies deletion prevents a previously memoized hit from resurfacing.
 func TestMemoStoreDeleteInvalidates(t *testing.T) {
 	ctx := context.Background()
 	base := newMemoryStore(0, 0)
@@ -110,6 +251,7 @@ func TestMemoStoreDeleteInvalidates(t *testing.T) {
 	}
 }
 
+// TestMemoStoreExternalWritesDoNotInvalidateMemoizedHitsOrMisses documents that out-of-band mutations remain invisible until memo expiry.
 func TestMemoStoreExternalWritesDoNotInvalidateMemoizedHitsOrMisses(t *testing.T) {
 	ctx := context.Background()
 	base := newMemoryStore(0, 0)
@@ -149,6 +291,7 @@ func TestMemoStoreExternalWritesDoNotInvalidateMemoizedHitsOrMisses(t *testing.T
 	}
 }
 
+// TestMemoStoreInvalidationIsLocalAcrossMemoStoresSharingBase verifies invalidation does not coordinate independent memo layers.
 func TestMemoStoreInvalidationIsLocalAcrossMemoStoresSharingBase(t *testing.T) {
 	ctx := context.Background()
 	base := newMemoryStore(0, 0)

@@ -9,6 +9,7 @@ import (
 	"github.com/goforj/cache/driver/dynamocache"
 )
 
+// main keeps this generated example executable so API drift fails during compilation.
 func main() {
 	// Example: set dynamo region via explicit driver config.
 	ctx := context.Background()

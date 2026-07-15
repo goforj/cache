@@ -20,11 +20,23 @@ type blockingCtxStore struct {
 	deleteCalls    int
 }
 
+type blockingCtxStoreSnapshot struct {
+	getCalls       int
+	setCalls       int
+	addCalls       int
+	incrementCalls int
+	deleteCalls    int
+}
+
+// Driver identifies the blocking test store as an in-memory backend.
 func (s *blockingCtxStore) Driver() cachecore.Driver { return cachecore.DriverMemory }
+
+// Ready reports the blocking test store as available.
 func (s *blockingCtxStore) Ready(context.Context) error {
 	return nil
 }
 
+// Get records the read and blocks until its context is canceled.
 func (s *blockingCtxStore) Get(ctx context.Context, key string) ([]byte, bool, error) {
 	s.mu.Lock()
 	s.getCalls++
@@ -33,6 +45,7 @@ func (s *blockingCtxStore) Get(ctx context.Context, key string) ([]byte, bool, e
 	return nil, false, ctx.Err()
 }
 
+// Set records the write and blocks until its context is canceled.
 func (s *blockingCtxStore) Set(ctx context.Context, key string, value []byte, ttl time.Duration) error {
 	s.mu.Lock()
 	s.setCalls++
@@ -41,6 +54,7 @@ func (s *blockingCtxStore) Set(ctx context.Context, key string, value []byte, tt
 	return ctx.Err()
 }
 
+// Add records the conditional write and blocks until its context is canceled.
 func (s *blockingCtxStore) Add(ctx context.Context, key string, value []byte, ttl time.Duration) (bool, error) {
 	s.mu.Lock()
 	s.addCalls++
@@ -49,6 +63,7 @@ func (s *blockingCtxStore) Add(ctx context.Context, key string, value []byte, tt
 	return false, ctx.Err()
 }
 
+// Increment records the counter update and blocks until its context is canceled.
 func (s *blockingCtxStore) Increment(ctx context.Context, key string, delta int64, ttl time.Duration) (int64, error) {
 	s.mu.Lock()
 	s.incrementCalls++
@@ -57,10 +72,12 @@ func (s *blockingCtxStore) Increment(ctx context.Context, key string, delta int6
 	return 0, ctx.Err()
 }
 
+// Decrement exercises the same cancellation path as Increment with an inverse delta.
 func (s *blockingCtxStore) Decrement(ctx context.Context, key string, delta int64, ttl time.Duration) (int64, error) {
 	return s.Increment(ctx, key, -delta, ttl)
 }
 
+// Delete records the removal and blocks until its context is canceled.
 func (s *blockingCtxStore) Delete(ctx context.Context, key string) error {
 	s.mu.Lock()
 	s.deleteCalls++
@@ -69,18 +86,21 @@ func (s *blockingCtxStore) Delete(ctx context.Context, key string) error {
 	return ctx.Err()
 }
 
+// DeleteMany reuses the single-key blocking path because only cancellation is under test.
 func (s *blockingCtxStore) DeleteMany(ctx context.Context, keys ...string) error {
 	return s.Delete(ctx, "")
 }
 
+// Flush reuses the deletion blocking path because only cancellation is under test.
 func (s *blockingCtxStore) Flush(ctx context.Context) error {
 	return s.Delete(ctx, "")
 }
 
-func (s *blockingCtxStore) snapshot() blockingCtxStore {
+// snapshot returns a synchronized copy of operation counts for callback assertions.
+func (s *blockingCtxStore) snapshot() blockingCtxStoreSnapshot {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return blockingCtxStore{
+	return blockingCtxStoreSnapshot{
 		getCalls:       s.getCalls,
 		setCalls:       s.setCalls,
 		addCalls:       s.addCalls,
@@ -89,6 +109,7 @@ func (s *blockingCtxStore) snapshot() blockingCtxStore {
 	}
 }
 
+// TestContextCancellation_GetSetLockReturnPromptlyAndRespectContext verifies core operations stop promptly on cancellation.
 func TestContextCancellation_GetSetLockReturnPromptlyAndRespectContext(t *testing.T) {
 	t.Run("get", func(t *testing.T) {
 		store := &blockingCtxStore{}
@@ -163,11 +184,12 @@ func TestContextCancellation_GetSetLockReturnPromptlyAndRespectContext(t *testin
 	})
 }
 
+// TestContextCancellation_RefreshAheadAndRememberHelpersDoNotInvokeCallbacks verifies canceled helper calls skip loaders.
 func TestContextCancellation_RefreshAheadAndRememberHelpersDoNotInvokeCallbacks(t *testing.T) {
 	type testCase struct {
 		name      string
 		run       func(t *testing.T, c *Cache, ctx context.Context)
-		wantCalls blockingCtxStore
+		wantCalls blockingCtxStoreSnapshot
 	}
 
 	cases := []testCase{
@@ -192,7 +214,7 @@ func TestContextCancellation_RefreshAheadAndRememberHelpersDoNotInvokeCallbacks(
 					t.Fatalf("refresh_ahead returned too slowly after cancellation: %v", elapsed)
 				}
 			},
-			wantCalls: blockingCtxStore{getCalls: 1},
+			wantCalls: blockingCtxStoreSnapshot{getCalls: 1},
 		},
 		{
 			name: "remember",
@@ -215,7 +237,7 @@ func TestContextCancellation_RefreshAheadAndRememberHelpersDoNotInvokeCallbacks(
 					t.Fatalf("remember returned too slowly after cancellation: %v", elapsed)
 				}
 			},
-			wantCalls: blockingCtxStore{getCalls: 1},
+			wantCalls: blockingCtxStoreSnapshot{getCalls: 1},
 		},
 		{
 			name: "remember_string",
@@ -233,7 +255,7 @@ func TestContextCancellation_RefreshAheadAndRememberHelpersDoNotInvokeCallbacks(
 					t.Fatalf("remember string callback should not run when get is canceled")
 				}
 			},
-			wantCalls: blockingCtxStore{getCalls: 1},
+			wantCalls: blockingCtxStoreSnapshot{getCalls: 1},
 		},
 		{
 			name: "remember_json",
@@ -252,7 +274,7 @@ func TestContextCancellation_RefreshAheadAndRememberHelpersDoNotInvokeCallbacks(
 					t.Fatalf("remember json callback should not run when get is canceled")
 				}
 			},
-			wantCalls: blockingCtxStore{getCalls: 1},
+			wantCalls: blockingCtxStoreSnapshot{getCalls: 1},
 		},
 		{
 			name: "remember_stale",
@@ -270,7 +292,7 @@ func TestContextCancellation_RefreshAheadAndRememberHelpersDoNotInvokeCallbacks(
 					t.Fatalf("remember stale callback should not run when get is canceled")
 				}
 			},
-			wantCalls: blockingCtxStore{getCalls: 1},
+			wantCalls: blockingCtxStoreSnapshot{getCalls: 1},
 		},
 		{
 			name: "get_json",
@@ -285,7 +307,7 @@ func TestContextCancellation_RefreshAheadAndRememberHelpersDoNotInvokeCallbacks(
 					t.Fatalf("expected deadline exceeded, got %v", err)
 				}
 			},
-			wantCalls: blockingCtxStore{getCalls: 1},
+			wantCalls: blockingCtxStoreSnapshot{getCalls: 1},
 		},
 		{
 			name: "set_json",
@@ -297,7 +319,7 @@ func TestContextCancellation_RefreshAheadAndRememberHelpersDoNotInvokeCallbacks(
 					t.Fatalf("expected deadline exceeded, got %v", err)
 				}
 			},
-			wantCalls: blockingCtxStore{setCalls: 1},
+			wantCalls: blockingCtxStoreSnapshot{setCalls: 1},
 		},
 	}
 
@@ -319,6 +341,7 @@ func TestContextCancellation_RefreshAheadAndRememberHelpersDoNotInvokeCallbacks(
 	}
 }
 
+// TestContextCancellation_RememberJSONDoesNotDecodeOrSetAfterCanceledGet verifies cancellation prevents follow-up codec and write work.
 func TestContextCancellation_RememberJSONDoesNotDecodeOrSetAfterCanceledGet(t *testing.T) {
 	store := &blockingCtxStore{}
 	c := NewCache(store)

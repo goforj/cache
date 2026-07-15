@@ -7,11 +7,14 @@ import (
 	"time"
 )
 
+// main keeps this generated example executable so API drift fails during compilation.
 func main() {
 	// Set encodes value with the default codec (JSON) and writes it to key.
 
 	// Example: set typed values (struct + string)
-	type Settings struct { Enabled bool `json:"enabled"` }
+	type Settings struct {
+		Enabled bool `json:"enabled"`
+	}
 	ctx := context.Background()
 	c := cache.NewCache(cache.NewMemoryStore(ctx))
 	err := cache.Set(c, "settings:alerts", Settings{Enabled: true}, time.Minute)

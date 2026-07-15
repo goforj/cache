@@ -7,9 +7,10 @@ import (
 	"time"
 )
 
+// main keeps this generated example executable so API drift fails during compilation.
 func main() {
 	// New builds a Memcached-backed cachecore.Store.
-	// 
+	//
 	// Defaults:
 	// - Addresses: []string{"127.0.0.1:11211"} when empty
 	// - DefaultTTL: 5*time.Minute when zero

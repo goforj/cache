@@ -14,14 +14,22 @@ import (
 type Op string
 
 const (
-	OpGet        Op = "get"
-	OpSet        Op = "set"
-	OpAdd        Op = "add"
-	OpInc        Op = "inc"
-	OpDec        Op = "dec"
-	OpDelete     Op = "delete"
+	// OpGet identifies raw cache reads in fake assertions.
+	OpGet Op = "get"
+	// OpSet identifies unconditional cache writes in fake assertions.
+	OpSet Op = "set"
+	// OpAdd identifies conditional cache writes in fake assertions.
+	OpAdd Op = "add"
+	// OpInc identifies counter increments in fake assertions.
+	OpInc Op = "inc"
+	// OpDec identifies counter decrements in fake assertions.
+	OpDec Op = "dec"
+	// OpDelete identifies single-key removals in fake assertions.
+	OpDelete Op = "delete"
+	// OpDeleteMany identifies batch removals in fake assertions.
 	OpDeleteMany Op = "delete_many"
-	OpFlush      Op = "flush"
+	// OpFlush identifies namespace flushes in fake assertions.
+	OpFlush Op = "flush"
 )
 
 // Fake exposes a deterministic in-memory store plus assertion helpers for tests.
@@ -156,6 +164,7 @@ func (f *Fake) Total(op Op) int {
 	return sum
 }
 
+// record serializes assertion state because fakes are commonly shared by concurrent code under test.
 func (f *Fake) record(op Op, key string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -171,41 +180,51 @@ type countingStore struct {
 	onCount func(Op, string)
 }
 
+// Driver identifies the backend for diagnostics and capability-specific behavior.
 func (s *countingStore) Driver() cachecore.Driver { return s.inner.Driver() }
+
+// Ready verifies that the backend can serve cache operations.
 func (s *countingStore) Ready(ctx context.Context) error {
 	return s.inner.Ready(ctx)
 }
 
+// Get returns an owned copy of a stored value and distinguishes misses from failures.
 func (s *countingStore) Get(ctx context.Context, key string) ([]byte, bool, error) {
 	s.bump(OpGet, key)
 	return s.inner.Get(ctx, key)
 }
 
+// Set stores an owned copy of a value using the requested or default TTL.
 func (s *countingStore) Set(ctx context.Context, key string, val []byte, ttl time.Duration) error {
 	s.bump(OpSet, key)
 	return s.inner.Set(ctx, key, val, ttl)
 }
 
+// Add stores a value only when the key is currently absent.
 func (s *countingStore) Add(ctx context.Context, key string, val []byte, ttl time.Duration) (bool, error) {
 	s.bump(OpAdd, key)
 	return s.inner.Add(ctx, key, val, ttl)
 }
 
+// Increment atomically adds delta while preserving the store's TTL contract.
 func (s *countingStore) Increment(ctx context.Context, key string, delta int64, ttl time.Duration) (int64, error) {
 	s.bump(OpInc, key)
 	return s.inner.Increment(ctx, key, delta, ttl)
 }
 
+// Decrement atomically subtracts delta while preserving the store's TTL contract.
 func (s *countingStore) Decrement(ctx context.Context, key string, delta int64, ttl time.Duration) (int64, error) {
 	s.bump(OpDec, key)
 	return s.inner.Decrement(ctx, key, delta, ttl)
 }
 
+// Delete removes a key and treats an existing miss as success.
 func (s *countingStore) Delete(ctx context.Context, key string) error {
 	s.bump(OpDelete, key)
 	return s.inner.Delete(ctx, key)
 }
 
+// DeleteMany removes every requested key under the store's namespace.
 func (s *countingStore) DeleteMany(ctx context.Context, keys ...string) error {
 	for _, k := range keys {
 		s.bump(OpDeleteMany, k)
@@ -213,11 +232,13 @@ func (s *countingStore) DeleteMany(ctx context.Context, keys ...string) error {
 	return s.inner.DeleteMany(ctx, keys...)
 }
 
+// Flush removes entries within the store's configured scope.
 func (s *countingStore) Flush(ctx context.Context) error {
 	s.bump(OpFlush, "")
 	return s.inner.Flush(ctx)
 }
 
+// bump keeps instrumentation optional for independently constructed counting stores.
 func (s *countingStore) bump(op Op, key string) {
 	if s.onCount != nil {
 		s.onCount(op, key)

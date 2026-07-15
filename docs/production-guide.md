@@ -46,6 +46,21 @@ Guidelines:
 - Use `DeleteMany` for coordinated invalidation of known key sets.
 - Bump key version when changing serialized payload semantics.
 
+## Shaping Rollout
+
+Compression, value limits, and encryption are enforced by every driver. A reader configured with
+shaping can still read unmarked values written by older versions. The reverse is not true: older
+optional-driver binaries cannot decode new `CMP1` or `ENC1` values because those drivers previously
+ignored the shared shaping fields.
+
+For an optional backend, upgrade every process that reads the cache before allowing upgraded
+processes to write shaped values. A coordinated deployment or a temporary write pause is required.
+When both features are enabled, the persisted order is `CMP1(ENC1(plaintext))`; changing the order
+would make existing combined envelopes unreadable.
+
+Treat encryption-key changes as a data migration. Flush the cache or keep the previous key available
+until every value encrypted with it has expired; a wrong key fails closed with `ErrDecryptFailed`.
+
 ## TTL And Expiration Strategy
 
 - Use shorter TTLs for frequently changing data.

@@ -10,11 +10,13 @@ type spyObserver struct {
 	ops []string
 }
 
+// OnCacheOp appends each operation so tests can assert observer ordering and contents.
 func (s *spyObserver) OnCacheOp(ctx context.Context, event CacheOpEvent) {
 	_ = ctx
 	s.ops = append(s.ops, event.Operation)
 }
 
+// TestObserverRecordsAllOps verifies every cache operation reaches the configured observer.
 func TestObserverRecordsAllOps(t *testing.T) {
 	ctx := context.Background()
 	obs := &spyObserver{}
@@ -33,6 +35,7 @@ func TestObserverRecordsAllOps(t *testing.T) {
 	}
 }
 
+// TestObserverNilIsSafe verifies cache operations remain safe when no observer is configured.
 func TestObserverNilIsSafe(t *testing.T) {
 	ctx := context.Background()
 	c := NewCache(newMemoryStore(0, 0)) // no observer

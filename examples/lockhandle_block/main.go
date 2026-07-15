@@ -7,9 +7,10 @@ import (
 	"time"
 )
 
+// main keeps this generated example executable so API drift fails during compilation.
 func main() {
 	// Block waits up to timeout to acquire the lock, runs fn if acquired, then releases.
-	// 
+	//
 	// retryInterval <= 0 falls back to the cache default lock retry interval.
 
 	// Example: wait for lock, then auto-release

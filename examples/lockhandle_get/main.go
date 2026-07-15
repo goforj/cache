@@ -7,6 +7,7 @@ import (
 	"time"
 )
 
+// main keeps this generated example executable so API drift fails during compilation.
 func main() {
 	// Get acquires the lock once, runs fn if acquired, then releases automatically.
 

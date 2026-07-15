@@ -7,6 +7,7 @@ import (
 	"strings"
 )
 
+// NormalizeListLimit applies the default page size and the inspector safety cap.
 func NormalizeListLimit(limit int) int {
 	if limit <= 0 {
 		return 100
@@ -17,6 +18,7 @@ func NormalizeListLimit(limit int) int {
 	return limit
 }
 
+// DecodeOffsetCursor decodes an offset cursor and rejects malformed or negative values.
 func DecodeOffsetCursor(cursor string) (int, error) {
 	cursor = strings.TrimSpace(cursor)
 	if cursor == "" {
@@ -29,6 +31,7 @@ func DecodeOffsetCursor(cursor string) (int, error) {
 	return offset, nil
 }
 
+// EncodeOffsetCursor encodes a positive offset and returns an empty cursor for the first page.
 func EncodeOffsetCursor(offset int) string {
 	if offset <= 0 {
 		return ""
@@ -36,6 +39,7 @@ func EncodeOffsetCursor(offset int) string {
 	return strconv.Itoa(offset)
 }
 
+// ListFilterTerm returns Query when present and otherwise honors the legacy Prefix field.
 func ListFilterTerm(opts ListPageOptions) string {
 	query := strings.TrimSpace(opts.Query)
 	if query != "" {
@@ -44,6 +48,7 @@ func ListFilterTerm(opts ListPageOptions) string {
 	return strings.TrimSpace(opts.Prefix)
 }
 
+// FilterAndSortEntries applies a substring filter and returns entries in deterministic key order.
 func FilterAndSortEntries(entries []CacheEntry, filter string) []CacheEntry {
 	filter = strings.TrimSpace(filter)
 	filtered := make([]CacheEntry, 0, len(entries))
@@ -59,6 +64,7 @@ func FilterAndSortEntries(entries []CacheEntry, filter string) []CacheEntry {
 	return filtered
 }
 
+// SliceEntries applies normalized offset pagination to an ordered entry list.
 func SliceEntries(entries []CacheEntry, offset int, limit int) ListPageResult {
 	limit = NormalizeListLimit(limit)
 	if offset < 0 {

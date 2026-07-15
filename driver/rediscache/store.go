@@ -84,17 +84,21 @@ func New(cfg Config) cachecore.Store {
 			TLSConfig: cfg.TLSConfig,
 		})
 	}
-	return &store{
+	backend := &store{
 		client:     client,
 		defaultTTL: ttl,
 		prefix:     prefix,
 	}
+	wrapped, _ := cachecore.WrapStore(backend, cfg.BaseConfig)
+	return wrapped
 }
 
+// Driver identifies the backend for diagnostics and capability-specific behavior.
 func (s *store) Driver() cachecore.Driver {
 	return cachecore.DriverRedis
 }
 
+// Ready verifies that the backend can serve cache operations.
 func (s *store) Ready(ctx context.Context) error {
 	if s.client == nil {
 		return errors.New("redis cache client unavailable")
@@ -102,6 +106,7 @@ func (s *store) Ready(ctx context.Context) error {
 	return s.client.Ping(ctx).Err()
 }
 
+// Get returns an owned copy of a stored value and distinguishes misses from failures.
 func (s *store) Get(ctx context.Context, key string) ([]byte, bool, error) {
 	if s.client == nil {
 		return nil, false, errors.New("redis cache client unavailable")
@@ -116,6 +121,7 @@ func (s *store) Get(ctx context.Context, key string) ([]byte, bool, error) {
 	return value, true, nil
 }
 
+// Set stores an owned copy of a value using the requested or default TTL.
 func (s *store) Set(ctx context.Context, key string, value []byte, ttl time.Duration) error {
 	if s.client == nil {
 		return errors.New("redis cache client unavailable")
@@ -126,6 +132,7 @@ func (s *store) Set(ctx context.Context, key string, value []byte, ttl time.Dura
 	return s.client.Set(ctx, s.cacheKey(key), value, ttl).Err()
 }
 
+// Add stores a value only when the key is currently absent.
 func (s *store) Add(ctx context.Context, key string, value []byte, ttl time.Duration) (bool, error) {
 	if s.client == nil {
 		return false, errors.New("redis cache client unavailable")
@@ -140,6 +147,7 @@ func (s *store) Add(ctx context.Context, key string, value []byte, ttl time.Dura
 	return created, nil
 }
 
+// Increment atomically adds delta while preserving the store's TTL contract.
 func (s *store) Increment(ctx context.Context, key string, delta int64, ttl time.Duration) (int64, error) {
 	if s.client == nil {
 		return 0, errors.New("redis cache client unavailable")
@@ -160,10 +168,12 @@ func (s *store) Increment(ctx context.Context, key string, delta int64, ttl time
 	return value, nil
 }
 
+// Decrement atomically subtracts delta while preserving the store's TTL contract.
 func (s *store) Decrement(ctx context.Context, key string, delta int64, ttl time.Duration) (int64, error) {
 	return s.Increment(ctx, key, -delta, ttl)
 }
 
+// Delete removes a key and treats an existing miss as success.
 func (s *store) Delete(ctx context.Context, key string) error {
 	if s.client == nil {
 		return errors.New("redis cache client unavailable")
@@ -171,6 +181,7 @@ func (s *store) Delete(ctx context.Context, key string) error {
 	return s.client.Del(ctx, s.cacheKey(key)).Err()
 }
 
+// DeleteMany removes every requested key under the store's namespace.
 func (s *store) DeleteMany(ctx context.Context, keys ...string) error {
 	if s.client == nil {
 		return errors.New("redis cache client unavailable")
@@ -185,6 +196,7 @@ func (s *store) DeleteMany(ctx context.Context, keys ...string) error {
 	return s.client.Del(ctx, cacheKeys...).Err()
 }
 
+// Flush removes entries within the store's configured scope.
 func (s *store) Flush(ctx context.Context) error {
 	if s.client == nil {
 		return errors.New("redis cache client unavailable")
@@ -208,10 +220,12 @@ func (s *store) Flush(ctx context.Context) error {
 	}
 }
 
+// cacheKey applies the configured namespace before a key reaches the backend.
 func (s *store) cacheKey(key string) string {
 	return s.prefix + ":" + key
 }
 
+// Capabilities reports the optional inspection operations supported by the store.
 func (s *store) Capabilities() cachecore.InspectorCapabilities {
 	return cachecore.InspectorCapabilities{
 		CanList:   true,
@@ -220,6 +234,7 @@ func (s *store) Capabilities() cachecore.InspectorCapabilities {
 	}
 }
 
+// ListPage returns a filtered, deterministic page of inspectable cache entries.
 func (s *store) ListPage(ctx context.Context, opts cachecore.ListPageOptions) (cachecore.ListPageResult, error) {
 	if s.client == nil {
 		return cachecore.ListPageResult{}, errors.New("redis cache client unavailable")

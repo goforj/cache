@@ -15,6 +15,7 @@ import (
 	"github.com/goforj/cache/cachecore"
 )
 
+// TestIntegrationBackendFaultRecovery_AllDrivers verifies enabled backends recover after a forced outage.
 func TestIntegrationBackendFaultRecovery_AllDrivers(t *testing.T) {
 	fixtures := integrationFixtures(t)
 	ran := false
@@ -35,6 +36,7 @@ func TestIntegrationBackendFaultRecovery_AllDrivers(t *testing.T) {
 	}
 }
 
+// testBackendFaultRecoveryForDriver verifies one backend before, during, and after a forced restart.
 func testBackendFaultRecoveryForDriver(t *testing.T, fx storeFactory) {
 	t.Helper()
 	store, cleanup := fx.new(t)
@@ -135,6 +137,7 @@ func testBackendFaultRecoveryForDriver(t *testing.T, fx storeFactory) {
 	})
 }
 
+// restartIntegrationBackend stops a container, checks outage behavior, and starts it again.
 func restartIntegrationBackend(t *testing.T, name string) error {
 	t.Helper()
 	rt := integrationRuntimeFor(name)
@@ -164,6 +167,7 @@ func restartIntegrationBackend(t *testing.T, name string) error {
 	return nil
 }
 
+// assertBackendOutageErrors verifies reads, writes, and locks fail promptly while a backend is stopped.
 func assertBackendOutageErrors(t *testing.T, driverName string) error {
 	t.Helper()
 
@@ -228,6 +232,7 @@ func assertBackendOutageErrors(t *testing.T, driverName string) error {
 	return nil
 }
 
+// waitForDriverRecovery polls fresh stores until a write and read round trip succeeds.
 func waitForDriverRecovery(t *testing.T, fx storeFactory) {
 	t.Helper()
 
@@ -254,6 +259,7 @@ func waitForDriverRecovery(t *testing.T, fx storeFactory) {
 	t.Fatalf("backend did not recover in time for driver %s: lastErr=%v", fx.name, lastErr)
 }
 
+// integrationRuntimeFor returns the container runtime registered for a normalized driver name.
 func integrationRuntimeFor(name string) *integrationRuntime {
 	return integrationRuntimes[strings.ToLower(name)]
 }

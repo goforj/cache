@@ -10,6 +10,7 @@ import (
 	"github.com/goforj/cache/cachecore"
 )
 
+// main keeps this generated example executable so API drift fails during compilation.
 func main() {
 	// Example: encrypt values via explicit StoreConfig.
 	ctx := context.Background()

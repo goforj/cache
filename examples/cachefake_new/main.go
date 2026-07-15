@@ -2,6 +2,7 @@ package main
 
 import "github.com/goforj/cache/cachefake"
 
+// main keeps this generated example executable so API drift fails during compilation.
 func main() {
 	// New creates a Fake using an in-memory store.
 

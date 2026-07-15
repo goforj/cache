@@ -10,6 +10,7 @@ import (
 	"github.com/goforj/cache/cachecore"
 )
 
+// main keeps this generated example executable so API drift fails during compilation.
 func main() {
 	// Example: limit value size via explicit StoreConfig.
 	ctx := context.Background()

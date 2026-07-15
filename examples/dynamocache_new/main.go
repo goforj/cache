@@ -8,9 +8,10 @@ import (
 	"time"
 )
 
+// main keeps this generated example executable so API drift fails during compilation.
 func main() {
 	// New builds a DynamoDB-backed cachecore.Store.
-	// 
+	//
 	// Defaults:
 	// - Region: "us-east-1" when empty
 	// - Table: "cache_entries" when empty

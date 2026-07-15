@@ -7,8 +7,10 @@ import (
 	"time"
 )
 
+// main keeps this generated example executable so API drift fails during compilation.
 func main() {
 	// NewCacheWithTTL lets callers override the default TTL applied when ttl <= 0.
+	// NewCacheWithTTL panics when store is nil because accepting invalid wiring would defer failure to the first operation.
 
 	// Example: cache with custom default TTL
 	ctx := context.Background()

@@ -7,6 +7,7 @@ import (
 	"github.com/goforj/cache/cachecore"
 )
 
+// TestSQLDriverErrorsWhenMissingDSN verifies construction rejects an unusable SQL configuration.
 func TestSQLDriverErrorsWhenMissingDSN(t *testing.T) {
 	store, err := New(Config{DriverName: "pgfake"})
 	if err == nil {
@@ -15,6 +16,7 @@ func TestSQLDriverErrorsWhenMissingDSN(t *testing.T) {
 	_ = store
 }
 
+// TestSQLDriverName verifies SQL-backed stores report the shared SQL driver identity.
 func TestSQLDriverName(t *testing.T) {
 	store, err := New(Config{DriverName: "pgfake", DSN: "irrelevant", Table: "t"})
 	if err != nil {
@@ -28,6 +30,7 @@ func TestSQLDriverName(t *testing.T) {
 	}
 }
 
+// TestSQLEnsureSchemaPostgresAndMySQL verifies schema creation uses dialect-appropriate definitions.
 func TestSQLEnsureSchemaPostgresAndMySQL(t *testing.T) {
 	if _, err := New(Config{
 		DriverName: "pgfake",
@@ -52,6 +55,7 @@ func TestSQLEnsureSchemaPostgresAndMySQL(t *testing.T) {
 	}
 }
 
+// TestSQLEnsureSchemaError verifies initialization preserves DDL failures.
 func TestSQLEnsureSchemaError(t *testing.T) {
 	if _, err := New(Config{
 		DriverName: "pgfail",
@@ -62,6 +66,7 @@ func TestSQLEnsureSchemaError(t *testing.T) {
 	}
 }
 
+// TestSQLPingError verifies readiness preserves database connectivity failures.
 func TestSQLPingError(t *testing.T) {
 	if _, err := New(Config{
 		DriverName: "pingfail",

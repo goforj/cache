@@ -16,7 +16,8 @@ func RunInspectorContract(t *testing.T, store cachecore.Store) {
 	if !ok {
 		t.Fatalf("store %T does not implement cachecore.Inspector", store)
 	}
-	if caps := inspector.Capabilities(); !caps.CanList {
+	caps := inspector.Capabilities()
+	if !caps.CanList {
 		t.Fatalf("expected CanList capability")
 	}
 
@@ -47,6 +48,13 @@ func RunInspectorContract(t *testing.T, store cachecore.Store) {
 	}
 	if first.Entries[0].SizeBytes <= 0 {
 		t.Fatalf("expected size metadata on first entry")
+	}
+	if caps.CanTTL {
+		expiresAt := first.Entries[0].ExpiresAt
+		now := time.Now()
+		if expiresAt == nil || *expiresAt < now.UnixMilli() || *expiresAt > now.Add(2*time.Minute).UnixMilli() {
+			t.Fatalf("expected Unix-millisecond expiration metadata, got %v", expiresAt)
+		}
 	}
 
 	second, err := inspector.ListPage(ctx, cachecore.ListPageOptions{

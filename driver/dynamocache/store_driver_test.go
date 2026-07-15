@@ -11,6 +11,7 @@ import (
 	"github.com/goforj/cache/cachecore"
 )
 
+// TestDynamoDriverMethods verifies identity, readiness, inspection capabilities, and pagination metadata.
 func TestDynamoDriverMethods(t *testing.T) {
 	ctx := context.Background()
 	stub := newDynStub()
@@ -46,6 +47,7 @@ func TestDynamoDriverMethods(t *testing.T) {
 	}
 }
 
+// TestNewDynamoClientError verifies canceled configuration loading is returned to constructors.
 func TestNewDynamoClientError(t *testing.T) {
 	t.Setenv("AWS_REGION", "")
 	t.Setenv("AWS_DEFAULT_REGION", "")
@@ -60,6 +62,7 @@ func TestNewDynamoClientError(t *testing.T) {
 	}
 }
 
+// createEmptyTempFile creates an AWS config fixture with no fallback region.
 func createEmptyTempFile(t *testing.T) string {
 	t.Helper()
 	f, err := os.CreateTemp("", "empty-aws-config-*.txt")
@@ -70,6 +73,7 @@ func createEmptyTempFile(t *testing.T) string {
 	return f.Name()
 }
 
+// TestExpiredHelper verifies expiration parsing distinguishes past, future, absent, and malformed metadata.
 func TestExpiredHelper(t *testing.T) {
 	if expired(map[string]types.AttributeValue{}) {
 		t.Fatalf("missing attribute should not expire")
@@ -79,6 +83,7 @@ func TestExpiredHelper(t *testing.T) {
 	}
 }
 
+// TestNewDynamoClientWithoutEndpoint verifies standard AWS endpoint resolution remains available by default.
 func TestNewDynamoClientWithoutEndpoint(t *testing.T) {
 	client, err := newDynamoClient(context.Background(), Config{Region: "us-east-1"})
 	if err != nil {

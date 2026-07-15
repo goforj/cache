@@ -9,6 +9,7 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
+// main keeps this generated example executable so API drift fails during compilation.
 func main() {
 	// Example: explicit Redis driver config.
 	rdb := redis.NewClient(&redis.Options{Addr: "127.0.0.1:6379"})

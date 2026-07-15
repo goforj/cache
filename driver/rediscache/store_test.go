@@ -3,6 +3,7 @@ package rediscache
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/goforj/cache/cachetest"
 )
 
+// TestNewNilClientErrors verifies construction fails fast when no Redis client is supplied.
 func TestNewNilClientErrors(t *testing.T) {
 	store := New(Config{})
 	if err := store.Ready(context.Background()); err == nil {
@@ -41,6 +43,38 @@ func TestNewNilClientErrors(t *testing.T) {
 	}
 }
 
+// TestNewAppliesShapingConfiguration verifies the driver honors shared BaseConfig fields.
+func TestNewAppliesShapingConfiguration(t *testing.T) {
+	client := newStubClient()
+	store := New(Config{
+		Client: client,
+		BaseConfig: cachecore.BaseConfig{
+			Compression:   cachecore.CompressionGzip,
+			EncryptionKey: []byte("0123456789abcdef0123456789abcdef"),
+		},
+	})
+	ctx := context.Background()
+	if err := store.Set(ctx, "secret", []byte("payload"), time.Minute); err != nil {
+		t.Fatalf("set shaped value: %v", err)
+	}
+	if raw := client.store["app:secret"]; !strings.HasPrefix(raw, "CMP1") {
+		t.Fatalf("persisted value is not shaped: %x", raw)
+	}
+	got, ok, err := store.Get(ctx, "secret")
+	if err != nil || !ok || string(got) != "payload" {
+		t.Fatalf("shaped round trip: got=%q ok=%v err=%v", got, ok, err)
+	}
+}
+
+// TestNewShapingConfigFailureFailsClosed verifies Store-only construction preserves the config error.
+func TestNewShapingConfigFailureFailsClosed(t *testing.T) {
+	store := New(Config{BaseConfig: cachecore.BaseConfig{EncryptionKey: []byte("short")}})
+	if err := store.Ready(context.Background()); !errors.Is(err, cachecore.ErrEncryptionKey) {
+		t.Fatalf("Ready error = %v, want ErrEncryptionKey", err)
+	}
+}
+
+// TestNewWithAddrCreatesClient verifies address-based construction owns a usable Redis client.
 func TestNewWithAddrCreatesClient(t *testing.T) {
 	s := New(Config{Addr: "127.0.0.1:6379"})
 	impl, ok := s.(*store)
@@ -52,6 +86,7 @@ func TestNewWithAddrCreatesClient(t *testing.T) {
 	}
 }
 
+// TestOperationsWithStubClient verifies Redis commands implement the complete store operation contract.
 func TestOperationsWithStubClient(t *testing.T) {
 	ctx := context.Background()
 	client := newStubClient()
@@ -122,6 +157,7 @@ func TestOperationsWithStubClient(t *testing.T) {
 	}
 }
 
+// TestReadyErrorPropagation verifies ping failures remain visible to readiness callers.
 func TestReadyErrorPropagation(t *testing.T) {
 	ctx := context.Background()
 	client := newStubClient()
@@ -132,6 +168,7 @@ func TestReadyErrorPropagation(t *testing.T) {
 	}
 }
 
+// TestGetMissing verifies Redis nil responses normalize to cache misses.
 func TestGetMissing(t *testing.T) {
 	ctx := context.Background()
 	client := newStubClient()
@@ -145,6 +182,7 @@ func TestGetMissing(t *testing.T) {
 	}
 }
 
+// TestExpireError verifies counter TTL refresh failures are not ignored.
 func TestExpireError(t *testing.T) {
 	ctx := context.Background()
 	client := newStubClient()
@@ -155,6 +193,7 @@ func TestExpireError(t *testing.T) {
 	}
 }
 
+// TestErrorPropagation verifies command failures survive each Redis store boundary.
 func TestErrorPropagation(t *testing.T) {
 	ctx := context.Background()
 	client := newStubClient()
@@ -194,6 +233,7 @@ func TestErrorPropagation(t *testing.T) {
 	}
 }
 
+// TestStoreContractWithStubClient verifies the stubbed Redis backend satisfies the shared store suite.
 func TestStoreContractWithStubClient(t *testing.T) {
 	store := New(Config{Client: newStubClient(), BaseConfig: cachecore.BaseConfig{Prefix: "contract"}})
 	cachetest.RunStoreContract(t, store, cachetest.Options{

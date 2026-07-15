@@ -9,6 +9,7 @@ import (
 	"github.com/goforj/cache"
 )
 
+// main keeps this generated example executable so API drift fails during compilation.
 func main() {
 	// Store returns the underlying store implementation.
 

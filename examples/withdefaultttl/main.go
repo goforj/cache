@@ -11,6 +11,7 @@ import (
 	"time"
 )
 
+// main keeps this generated example executable so API drift fails during compilation.
 func main() {
 	// Example: override default TTL via explicit StoreConfig.
 	ctx := context.Background()

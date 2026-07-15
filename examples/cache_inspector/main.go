@@ -6,6 +6,7 @@ import (
 	"github.com/goforj/cache"
 )
 
+// main keeps this generated example executable so API drift fails during compilation.
 func main() {
 	// Inspector returns the optional browsing interface for the underlying store.
 

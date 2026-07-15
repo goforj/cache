@@ -4,15 +4,16 @@ go 1.24.4
 
 require (
 	github.com/goforj/cache v0.0.0
-	github.com/goforj/cache/cachecore v0.0.0
+	github.com/goforj/cache/cachecore v0.4.0
 	github.com/goforj/cache/driver/dynamocache v0.0.0
 	github.com/goforj/cache/driver/memcachedcache v0.0.0
 	github.com/goforj/cache/driver/mysqlcache v0.0.0
 	github.com/goforj/cache/driver/natscache v0.0.0
 	github.com/goforj/cache/driver/postgrescache v0.0.0
 	github.com/goforj/cache/driver/rediscache v0.0.0
-	github.com/goforj/cache/driver/sqlcore v0.0.0
+	github.com/goforj/cache/driver/sqlcore v0.4.0
 	github.com/goforj/cache/driver/sqlitecache v0.0.0
+	modernc.org/sqlite v1.27.0
 )
 
 require (
@@ -63,7 +64,6 @@ require (
 	modernc.org/mathutil v1.6.0 // indirect
 	modernc.org/memory v1.7.2 // indirect
 	modernc.org/opt v0.1.3 // indirect
-	modernc.org/sqlite v1.27.0 // indirect
 	modernc.org/strutil v1.1.3 // indirect
 	modernc.org/token v1.0.1 // indirect
 )

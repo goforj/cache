@@ -1,0 +1,18 @@
+go 1.24.4
+
+use (
+	.
+	./cachecore
+	./cachetest
+	./docs
+	./driver/dynamocache
+	./driver/memcachedcache
+	./driver/mysqlcache
+	./driver/natscache
+	./driver/postgrescache
+	./driver/rediscache
+	./driver/sqlcore
+	./driver/sqlitecache
+	./examples
+	./integration
+)

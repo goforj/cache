@@ -1,5 +1,6 @@
 //go:build integration
 
+// Package cache_test exercises the public cache API against integration backends.
 package cache_test
 
 import (
@@ -38,26 +39,32 @@ const (
 	refreshMetaSuffix = ":__refresh_exp"
 )
 
+// testWithDefaultTTL returns a fixture option that overrides backend expiration defaults.
 func testWithDefaultTTL(ttl time.Duration) testStoreOption {
 	return func(cfg StoreConfig) StoreConfig { cfg.DefaultTTL = ttl; return cfg }
 }
 
+// testWithPrefix returns a fixture option that scopes physical backend keys.
 func testWithPrefix(prefix string) testStoreOption {
 	return func(cfg StoreConfig) StoreConfig { cfg.Prefix = prefix; return cfg }
 }
 
+// testWithCompression returns a fixture option that enables the requested payload codec.
 func testWithCompression(codec CompressionCodec) testStoreOption {
 	return func(cfg StoreConfig) StoreConfig { cfg.Compression = codec; return cfg }
 }
 
+// testWithEncryptionKey returns a fixture option that enables payload encryption.
 func testWithEncryptionKey(key []byte) testStoreOption {
 	return func(cfg StoreConfig) StoreConfig { cfg.EncryptionKey = key; return cfg }
 }
 
+// testWithMaxValueBytes returns a fixture option that caps unencoded payload size.
 func testWithMaxValueBytes(limit int) testStoreOption {
 	return func(cfg StoreConfig) StoreConfig { cfg.MaxValueBytes = limit; return cfg }
 }
 
+// TestStoreContract_AllDrivers applies the shared integration contract to each enabled driver.
 func TestStoreContract_AllDrivers(t *testing.T) {
 	fixtures := integrationFixtures(t)
 	cases := integrationContractCases()
@@ -79,6 +86,7 @@ func TestStoreContract_AllDrivers(t *testing.T) {
 	}
 }
 
+// runStoreContractSuite exercises shared store behavior plus configuration-specific invariants.
 func runStoreContractSuite(t *testing.T, store cachecore.Store, tc contractCase) {
 	t.Helper()
 	ctx := context.Background()
@@ -156,6 +164,7 @@ func runStoreContractSuite(t *testing.T, store cachecore.Store, tc contractCase)
 	}
 }
 
+// contractTTL returns expiration timings widened for second-granularity backends.
 func contractTTL(driver cachecore.Driver) (ttl time.Duration, wait time.Duration) {
 	switch driver {
 	case cachecore.DriverMemcached:
@@ -165,6 +174,7 @@ func contractTTL(driver cachecore.Driver) (ttl time.Duration, wait time.Duration
 	}
 }
 
+// defaultTTLWait returns enough time for each backend's default expiration path.
 func defaultTTLWait(driver cachecore.Driver) time.Duration {
 	switch driver {
 	case cachecore.DriverMemcached, cachecore.DriverRedis:
@@ -177,6 +187,7 @@ func defaultTTLWait(driver cachecore.Driver) time.Duration {
 	}
 }
 
+// runDefaultTTLWriteOpInvariant verifies every write operation applies non-positive TTL defaults.
 func runDefaultTTLWriteOpInvariant(t *testing.T, store cachecore.Store, caseKey func(string) string) {
 	t.Helper()
 	ctx := context.Background()
@@ -233,6 +244,7 @@ func runDefaultTTLWriteOpInvariant(t *testing.T, store cachecore.Store, caseKey 
 	}
 }
 
+// runCacheHelperInvariantSuite exercises helper edge cases once per backend baseline.
 func runCacheHelperInvariantSuite(t *testing.T, store cachecore.Store, caseKey func(string) string) {
 	t.Helper()
 	cache := NewCache(store)
@@ -401,6 +413,7 @@ func runCacheHelperInvariantSuite(t *testing.T, store cachecore.Store, caseKey f
 	runLatencyAndTransientFaultHelperInvariantSuite(t, store, caseKey, noOp)
 }
 
+// runLockHelperInvariantSuite verifies contention, timeout, cancellation, and expiration semantics.
 func runLockHelperInvariantSuite(t *testing.T, cache *Cache, driver cachecore.Driver, caseKey func(string) string, noOp bool) {
 	t.Helper()
 
@@ -510,6 +523,7 @@ func runLockHelperInvariantSuite(t *testing.T, cache *Cache, driver cachecore.Dr
 	})
 }
 
+// runContextCancellationHelperInvariantSuite verifies helper callbacks and operations honor cancellation capabilities.
 func runContextCancellationHelperInvariantSuite(t *testing.T, cache *Cache, driver cachecore.Driver, caseKey func(string) string, noOp bool) {
 	t.Helper()
 
@@ -638,6 +652,7 @@ func runContextCancellationHelperInvariantSuite(t *testing.T, cache *Cache, driv
 	}
 }
 
+// runLatencyAndTransientFaultHelperInvariantSuite verifies helpers return backend delays and failures without hidden retries.
 func runLatencyAndTransientFaultHelperInvariantSuite(t *testing.T, base cachecore.Store, caseKey func(string) string, noOp bool) {
 	t.Helper()
 	if noOp {
@@ -829,6 +844,7 @@ func runLatencyAndTransientFaultHelperInvariantSuite(t *testing.T, base cachecor
 	})
 }
 
+// driverPropagatesCanceledContext identifies clients whose operations consume canceled contexts directly.
 func driverPropagatesCanceledContext(driver cachecore.Driver) bool {
 	switch driver {
 	case cachecore.DriverRedis, cachecore.DriverDynamo, cachecore.DriverSQL:
@@ -838,6 +854,7 @@ func driverPropagatesCanceledContext(driver cachecore.Driver) bool {
 	}
 }
 
+// contextCancelMaxElapsed allows extra shutdown time for networked SDKs without hiding hangs.
 func contextCancelMaxElapsed(driver cachecore.Driver) time.Duration {
 	switch driver {
 	case cachecore.DriverDynamo, cachecore.DriverSQL:
@@ -847,6 +864,7 @@ func contextCancelMaxElapsed(driver cachecore.Driver) time.Duration {
 	}
 }
 
+// runRateLimitHelperInvariantSuite verifies monotonic counts, limits, and window rollover.
 func runRateLimitHelperInvariantSuite(t *testing.T, cache *Cache, driver cachecore.Driver, caseKey func(string) string, noOp bool) {
 	t.Helper()
 
@@ -922,6 +940,7 @@ func runRateLimitHelperInvariantSuite(t *testing.T, cache *Cache, driver cacheco
 	})
 }
 
+// runRefreshAheadHelperInvariantSuite verifies metadata, asynchronous refresh, and failure preservation.
 func runRefreshAheadHelperInvariantSuite(t *testing.T, cache *Cache, driver cachecore.Driver, caseKey func(string) string, noOp bool) {
 	t.Helper()
 	if noOp {
@@ -1035,6 +1054,7 @@ func runRefreshAheadHelperInvariantSuite(t *testing.T, cache *Cache, driver cach
 	})
 }
 
+// runRememberStaleDeeperInvariantSuite verifies independent stale expiry and joined fallback errors.
 func runRememberStaleDeeperInvariantSuite(t *testing.T, cache *Cache, driver cachecore.Driver, caseKey func(string) string, noOp bool) {
 	t.Helper()
 
@@ -1107,6 +1127,7 @@ func runRememberStaleDeeperInvariantSuite(t *testing.T, cache *Cache, driver cac
 	})
 }
 
+// runBatchHelperInvariantSuite verifies partial misses, empty batches, and default expiration.
 func runBatchHelperInvariantSuite(t *testing.T, cache *Cache, driver cachecore.Driver, caseKey func(string) string, noOp bool) {
 	t.Helper()
 
@@ -1161,6 +1182,7 @@ func runBatchHelperInvariantSuite(t *testing.T, cache *Cache, driver cachecore.D
 	})
 }
 
+// runCounterHelperInvariantSuite verifies signed arithmetic and TTL refresh behavior.
 func runCounterHelperInvariantSuite(t *testing.T, cache *Cache, driver cachecore.Driver, caseKey func(string) string, noOp bool) {
 	t.Helper()
 
@@ -1221,6 +1243,7 @@ func runCounterHelperInvariantSuite(t *testing.T, cache *Cache, driver cachecore
 	})
 }
 
+// runDriverFactoryInvariantSuite verifies isolation and shared state across independently created stores.
 func runDriverFactoryInvariantSuite(t *testing.T, fx storeFactory) {
 	t.Helper()
 
@@ -1548,6 +1571,7 @@ func runDriverFactoryInvariantSuite(t *testing.T, fx storeFactory) {
 	})
 }
 
+// largeBinaryRoundtripSizeFor keeps stress payloads below each backend's documented item limit.
 func largeBinaryRoundtripSizeFor(driver cachecore.Driver) int {
 	switch driver {
 	case cachecore.DriverDynamo:
@@ -1565,11 +1589,15 @@ type getErrorInjectStore struct {
 	err    error
 }
 
+// Driver reports the wrapped store's backend identity.
 func (s *getErrorInjectStore) Driver() cachecore.Driver { return s.inner.Driver() }
+
+// Ready delegates readiness checks to the wrapped store.
 func (s *getErrorInjectStore) Ready(ctx context.Context) error {
 	return s.inner.Ready(ctx)
 }
 
+// Get injects an error for one key and delegates all other reads.
 func (s *getErrorInjectStore) Get(ctx context.Context, key string) ([]byte, bool, error) {
 	if key == s.errKey {
 		return nil, false, s.err
@@ -1577,30 +1605,37 @@ func (s *getErrorInjectStore) Get(ctx context.Context, key string) ([]byte, bool
 	return s.inner.Get(ctx, key)
 }
 
+// Set delegates writes unchanged to the wrapped store.
 func (s *getErrorInjectStore) Set(ctx context.Context, key string, value []byte, ttl time.Duration) error {
 	return s.inner.Set(ctx, key, value, ttl)
 }
 
+// Add delegates conditional writes unchanged to the wrapped store.
 func (s *getErrorInjectStore) Add(ctx context.Context, key string, value []byte, ttl time.Duration) (bool, error) {
 	return s.inner.Add(ctx, key, value, ttl)
 }
 
+// Increment delegates counter additions unchanged to the wrapped store.
 func (s *getErrorInjectStore) Increment(ctx context.Context, key string, delta int64, ttl time.Duration) (int64, error) {
 	return s.inner.Increment(ctx, key, delta, ttl)
 }
 
+// Decrement delegates counter subtractions unchanged to the wrapped store.
 func (s *getErrorInjectStore) Decrement(ctx context.Context, key string, delta int64, ttl time.Duration) (int64, error) {
 	return s.inner.Decrement(ctx, key, delta, ttl)
 }
 
+// Delete delegates single-key removal unchanged to the wrapped store.
 func (s *getErrorInjectStore) Delete(ctx context.Context, key string) error {
 	return s.inner.Delete(ctx, key)
 }
 
+// DeleteMany delegates batch removal unchanged to the wrapped store.
 func (s *getErrorInjectStore) DeleteMany(ctx context.Context, keys ...string) error {
 	return s.inner.DeleteMany(ctx, keys...)
 }
 
+// Flush delegates whole-store removal unchanged to the wrapped store.
 func (s *getErrorInjectStore) Flush(ctx context.Context) error { return s.inner.Flush(ctx) }
 
 type latencyInjectStore struct {
@@ -1615,11 +1650,15 @@ type latencyInjectStore struct {
 	incrementCalls atomic.Int64
 }
 
+// Driver reports the wrapped store's backend identity.
 func (s *latencyInjectStore) Driver() cachecore.Driver { return s.inner.Driver() }
+
+// Ready delegates readiness checks without injected latency.
 func (s *latencyInjectStore) Ready(ctx context.Context) error {
 	return s.inner.Ready(ctx)
 }
 
+// Get records the read, waits for its configured delay, and then delegates.
 func (s *latencyInjectStore) Get(ctx context.Context, key string) ([]byte, bool, error) {
 	s.getCalls.Add(1)
 	if err := sleepWithContext(ctx, s.get); err != nil {
@@ -1628,10 +1667,12 @@ func (s *latencyInjectStore) Get(ctx context.Context, key string) ([]byte, bool,
 	return s.inner.Get(ctx, key)
 }
 
+// Set delegates writes without injected latency.
 func (s *latencyInjectStore) Set(ctx context.Context, key string, value []byte, ttl time.Duration) error {
 	return s.inner.Set(ctx, key, value, ttl)
 }
 
+// Add records the attempt, waits for its configured delay, and then delegates.
 func (s *latencyInjectStore) Add(ctx context.Context, key string, value []byte, ttl time.Duration) (bool, error) {
 	s.addCalls.Add(1)
 	if err := sleepWithContext(ctx, s.add); err != nil {
@@ -1640,6 +1681,7 @@ func (s *latencyInjectStore) Add(ctx context.Context, key string, value []byte, 
 	return s.inner.Add(ctx, key, value, ttl)
 }
 
+// Increment records the attempt, waits for its configured delay, and then delegates.
 func (s *latencyInjectStore) Increment(ctx context.Context, key string, delta int64, ttl time.Duration) (int64, error) {
 	s.incrementCalls.Add(1)
 	if err := sleepWithContext(ctx, s.increment); err != nil {
@@ -1648,18 +1690,22 @@ func (s *latencyInjectStore) Increment(ctx context.Context, key string, delta in
 	return s.inner.Increment(ctx, key, delta, ttl)
 }
 
+// Decrement delegates counter subtraction without injected latency.
 func (s *latencyInjectStore) Decrement(ctx context.Context, key string, delta int64, ttl time.Duration) (int64, error) {
 	return s.inner.Decrement(ctx, key, delta, ttl)
 }
 
+// Delete delegates single-key removal without injected latency.
 func (s *latencyInjectStore) Delete(ctx context.Context, key string) error {
 	return s.inner.Delete(ctx, key)
 }
 
+// DeleteMany delegates batch removal without injected latency.
 func (s *latencyInjectStore) DeleteMany(ctx context.Context, keys ...string) error {
 	return s.inner.DeleteMany(ctx, keys...)
 }
 
+// Flush delegates whole-store removal without injected latency.
 func (s *latencyInjectStore) Flush(ctx context.Context) error { return s.inner.Flush(ctx) }
 
 type transientOpErrorStore struct {
@@ -1675,11 +1721,15 @@ type transientOpErrorStore struct {
 	incrementCalls atomic.Int64
 }
 
+// Driver reports the wrapped store's backend identity.
 func (s *transientOpErrorStore) Driver() cachecore.Driver { return s.inner.Driver() }
+
+// Ready delegates readiness checks without consuming an injected failure.
 func (s *transientOpErrorStore) Ready(ctx context.Context) error {
 	return s.inner.Ready(ctx)
 }
 
+// Get injects the configured number of read failures before delegating.
 func (s *transientOpErrorStore) Get(ctx context.Context, key string) ([]byte, bool, error) {
 	s.getCalls.Add(1)
 	if atomic.AddInt64(&s.getErrsLeft, -1) >= 0 {
@@ -1688,10 +1738,12 @@ func (s *transientOpErrorStore) Get(ctx context.Context, key string) ([]byte, bo
 	return s.inner.Get(ctx, key)
 }
 
+// Set delegates writes without consuming an injected failure.
 func (s *transientOpErrorStore) Set(ctx context.Context, key string, value []byte, ttl time.Duration) error {
 	return s.inner.Set(ctx, key, value, ttl)
 }
 
+// Add injects the configured number of conditional-write failures before delegating.
 func (s *transientOpErrorStore) Add(ctx context.Context, key string, value []byte, ttl time.Duration) (bool, error) {
 	s.addCalls.Add(1)
 	if atomic.AddInt64(&s.addErrsLeft, -1) >= 0 {
@@ -1700,6 +1752,7 @@ func (s *transientOpErrorStore) Add(ctx context.Context, key string, value []byt
 	return s.inner.Add(ctx, key, value, ttl)
 }
 
+// Increment injects the configured number of counter failures before delegating.
 func (s *transientOpErrorStore) Increment(ctx context.Context, key string, delta int64, ttl time.Duration) (int64, error) {
 	s.incrementCalls.Add(1)
 	if atomic.AddInt64(&s.incErrsLeft, -1) >= 0 {
@@ -1708,20 +1761,25 @@ func (s *transientOpErrorStore) Increment(ctx context.Context, key string, delta
 	return s.inner.Increment(ctx, key, delta, ttl)
 }
 
+// Decrement delegates counter subtraction without consuming an injected failure.
 func (s *transientOpErrorStore) Decrement(ctx context.Context, key string, delta int64, ttl time.Duration) (int64, error) {
 	return s.inner.Decrement(ctx, key, delta, ttl)
 }
 
+// Delete delegates single-key removal without consuming an injected failure.
 func (s *transientOpErrorStore) Delete(ctx context.Context, key string) error {
 	return s.inner.Delete(ctx, key)
 }
 
+// DeleteMany delegates batch removal without consuming an injected failure.
 func (s *transientOpErrorStore) DeleteMany(ctx context.Context, keys ...string) error {
 	return s.inner.DeleteMany(ctx, keys...)
 }
 
+// Flush delegates whole-store removal without consuming an injected failure.
 func (s *transientOpErrorStore) Flush(ctx context.Context) error { return s.inner.Flush(ctx) }
 
+// sleepWithContext injects latency while returning promptly when the operation is canceled.
 func sleepWithContext(ctx context.Context, d time.Duration) error {
 	if d <= 0 {
 		return nil
@@ -1736,6 +1794,7 @@ func sleepWithContext(ctx context.Context, d time.Duration) error {
 	}
 }
 
+// lockTTLFor returns a lock lifetime compatible with each backend's expiration granularity.
 func lockTTLFor(driver cachecore.Driver) time.Duration {
 	if driver == cachecore.DriverMemcached {
 		return time.Second
@@ -1743,6 +1802,7 @@ func lockTTLFor(driver cachecore.Driver) time.Duration {
 	return 300 * time.Millisecond
 }
 
+// lockTTLWaitForExpiry returns enough time for a test lock to become acquirable again.
 func lockTTLWaitForExpiry(driver cachecore.Driver) time.Duration {
 	if driver == cachecore.DriverMemcached {
 		return 1500 * time.Millisecond
@@ -1750,6 +1810,7 @@ func lockTTLWaitForExpiry(driver cachecore.Driver) time.Duration {
 	return 400 * time.Millisecond
 }
 
+// rateLimitWindowFor selects stable rate-limit windows for each backend's counter implementation.
 func rateLimitWindowFor(driver cachecore.Driver) time.Duration {
 	switch driver {
 	case cachecore.DriverRedis:
@@ -1763,11 +1824,13 @@ func rateLimitWindowFor(driver cachecore.Driver) time.Duration {
 	}
 }
 
+// rateLimitResetWaitFor crosses two bucket boundaries to avoid edge-timing flakes.
 func rateLimitResetWaitFor(_ cachecore.Driver, window time.Duration) time.Duration {
 	// Sleep > 2x to avoid boundary flake when test enters near the end of a bucket.
 	return (2 * window) + 20*time.Millisecond
 }
 
+// alignRateLimitWindowStart avoids beginning monotonic-count assertions near a bucket boundary.
 func alignRateLimitWindowStart(window time.Duration) {
 	if window <= 0 {
 		return
@@ -1782,6 +1845,7 @@ func alignRateLimitWindowStart(window time.Duration) {
 	}
 }
 
+// waitForStoreKeyMiss polls the raw store until expiration removes a key or time runs out.
 func waitForStoreKeyMiss(ctx context.Context, store cachecore.Store, key string, maxWait time.Duration) error {
 	deadline := time.Now().Add(maxWait)
 	for {
@@ -1799,6 +1863,7 @@ func waitForStoreKeyMiss(ctx context.Context, store cachecore.Store, key string,
 	}
 }
 
+// waitForCacheKeyMiss polls the cache facade until expiration removes a key or time runs out.
 func waitForCacheKeyMiss(c *Cache, key string, maxWait time.Duration) error {
 	deadline := time.Now().Add(maxWait)
 	for {
@@ -1816,6 +1881,7 @@ func waitForCacheKeyMiss(c *Cache, key string, maxWait time.Duration) error {
 	}
 }
 
+// refreshAheadProfile returns refresh timings compatible with each backend's expiration precision.
 func refreshAheadProfile(driver cachecore.Driver) (ttl, refreshAhead, nearExpirySleep, asyncWait time.Duration) {
 	if driver == cachecore.DriverMemcached {
 		return 2 * time.Second, 1500 * time.Millisecond, 700 * time.Millisecond, 3 * time.Second
@@ -1823,6 +1889,7 @@ func refreshAheadProfile(driver cachecore.Driver) (ttl, refreshAhead, nearExpiry
 	return 300 * time.Millisecond, 250 * time.Millisecond, 80 * time.Millisecond, 2 * time.Second
 }
 
+// rememberStaleTTLProfile separates fresh and stale expiration checks without boundary races.
 func rememberStaleTTLProfile(driver cachecore.Driver) (freshTTL, staleTTL, waitFreshExpire, waitStaleExpire time.Duration) {
 	if driver == cachecore.DriverMemcached {
 		return time.Second, 4 * time.Second, 1500 * time.Millisecond, 3 * time.Second
@@ -1830,6 +1897,7 @@ func rememberStaleTTLProfile(driver cachecore.Driver) (freshTTL, staleTTL, waitF
 	return 80 * time.Millisecond, 240 * time.Millisecond, 120 * time.Millisecond, 180 * time.Millisecond
 }
 
+// batchDefaultTTLProfile returns default expiration timings for batch-write assertions.
 func batchDefaultTTLProfile(driver cachecore.Driver) (defaultTTL, wait time.Duration) {
 	if driver == cachecore.DriverMemcached {
 		return time.Second, 1500 * time.Millisecond
@@ -1837,6 +1905,7 @@ func batchDefaultTTLProfile(driver cachecore.Driver) (defaultTTL, wait time.Dura
 	return 70 * time.Millisecond, 120 * time.Millisecond
 }
 
+// counterTTLRefreshProfile returns timings that distinguish original and refreshed counter deadlines.
 func counterTTLRefreshProfile(driver cachecore.Driver) (ttl, beforeRefresh, afterOriginalExpiry, afterRefreshedExpiry time.Duration) {
 	if driver == cachecore.DriverRedis {
 		return time.Second, 700 * time.Millisecond, 700 * time.Millisecond, 700 * time.Millisecond
@@ -1849,6 +1918,7 @@ func counterTTLRefreshProfile(driver cachecore.Driver) (ttl, beforeRefresh, afte
 	return 120 * time.Millisecond, 70 * time.Millisecond, 90 * time.Millisecond, 140 * time.Millisecond
 }
 
+// integrationContractCases enumerates baseline and payload-shaping configurations for every driver.
 func integrationContractCases() []contractCase {
 	encryptionKey := []byte("0123456789abcdef0123456789abcdef")
 	return []contractCase{
@@ -1886,6 +1956,7 @@ func integrationContractCases() []contractCase {
 	}
 }
 
+// applyStoreOptions applies fixture configuration in caller-specified order.
 func applyStoreOptions(cfg StoreConfig, opts ...testStoreOption) StoreConfig {
 	for _, opt := range opts {
 		cfg = opt(cfg)
@@ -1893,6 +1964,7 @@ func applyStoreOptions(cfg StoreConfig, opts ...testStoreOption) StoreConfig {
 	return cfg
 }
 
+// integrationFixtures builds factories for the selected root integration backends.
 func integrationFixtures(t *testing.T) []storeFactory {
 	t.Helper()
 
@@ -1945,6 +2017,7 @@ func integrationFixtures(t *testing.T) []storeFactory {
 	return fixtures
 }
 
+// integrationNATSBucketName creates a valid, bounded, collision-resistant JetStream bucket name.
 func integrationNATSBucketName(name string) string {
 	normalized := strings.ToUpper(name)
 	var b strings.Builder

@@ -36,6 +36,7 @@ type benchCase struct {
 	new  func(testing.TB) (*cache.Cache, func())
 }
 
+// init suppresses dependency logs so benchmark output remains machine-readable.
 func init() {
 	// Silence testcontainers logs during benchmarks.
 	testcontainers.Logger = log.New(io.Discard, "", 0)
@@ -43,6 +44,7 @@ func init() {
 	mysql.SetLogger(log.New(io.Discard, "", 0))
 }
 
+// BenchmarkCacheSetGet compares byte and typed round-trip costs across selected backends.
 func BenchmarkCacheSetGet(b *testing.B) {
 	ctx := context.Background()
 	wantedDriver := os.Getenv("BENCH_DRIVER")
@@ -183,6 +185,7 @@ func BenchmarkCacheSetGet(b *testing.B) {
 	}
 }
 
+// benchmarkSetGet measures byte and typed round trips against one initialized backend.
 func benchmarkSetGet(b *testing.B, c *cache.Cache) {
 	b.Helper()
 	type profile struct {
@@ -242,6 +245,7 @@ func benchmarkSetGet(b *testing.B, c *cache.Cache) {
 
 // --- case helpers ----
 
+// redisCase builds a Redis benchmark case from an existing server address.
 func redisCase(ctx context.Context, addr string) benchCase {
 	return benchCase{
 		name: "redis",
@@ -253,6 +257,7 @@ func redisCase(ctx context.Context, addr string) benchCase {
 	}
 }
 
+// memcachedCase builds a Memcached benchmark case from an existing server address.
 func memcachedCase(ctx context.Context, addr string) benchCase {
 	return benchCase{
 		name: "memcached",
@@ -263,6 +268,7 @@ func memcachedCase(ctx context.Context, addr string) benchCase {
 	}
 }
 
+// dynamoCase builds a DynamoDB benchmark case from an existing endpoint.
 func dynamoCase(ctx context.Context, endpoint string) benchCase {
 	return benchCase{
 		name: "dynamodb",
@@ -276,6 +282,7 @@ func dynamoCase(ctx context.Context, endpoint string) benchCase {
 	}
 }
 
+// natsCase builds a NATS benchmark case with per-entry expiration.
 func natsCase(ctx context.Context, natsURL string) benchCase {
 	return benchCase{
 		name: "nats",
@@ -289,6 +296,7 @@ func natsCase(ctx context.Context, natsURL string) benchCase {
 	}
 }
 
+// natsBucketTTLCase builds a NATS benchmark case using bucket-level expiration.
 func natsBucketTTLCase(ctx context.Context, natsURL string) benchCase {
 	return benchCase{
 		name: "nats_bucket_ttl",
@@ -302,6 +310,7 @@ func natsBucketTTLCase(ctx context.Context, natsURL string) benchCase {
 	}
 }
 
+// postgresCase builds a PostgreSQL benchmark case from an existing data source.
 func postgresCase(ctx context.Context, dsn string) benchCase {
 	return benchCase{
 		name: "sql_postgres",
@@ -315,6 +324,7 @@ func postgresCase(ctx context.Context, dsn string) benchCase {
 	}
 }
 
+// mysqlCase builds a MySQL benchmark case from an existing data source.
 func mysqlCase(ctx context.Context, dsn string) benchCase {
 	return benchCase{
 		name: "sql_mysql",
@@ -330,6 +340,7 @@ func mysqlCase(ctx context.Context, dsn string) benchCase {
 
 // --- testcontainers fallbacks (best effort) ---
 
+// startRedis launches an isolated Redis container and returns its cache and cleanup.
 func startRedis(ctx context.Context) (*cache.Cache, func(), error) {
 	req := testcontainers.ContainerRequest{
 		Image:        "redis:7-bookworm",
@@ -349,6 +360,7 @@ func startRedis(ctx context.Context) (*cache.Cache, func(), error) {
 	return cache.NewCache(store), cleanup, nil
 }
 
+// startMemcached launches an isolated Memcached container and returns its cache and cleanup.
 func startMemcached(ctx context.Context) (*cache.Cache, func(), error) {
 	req := testcontainers.ContainerRequest{
 		Image:        "memcached:1.6-bookworm",
@@ -364,6 +376,7 @@ func startMemcached(ctx context.Context) (*cache.Cache, func(), error) {
 	return cache.NewCache(store), cleanup, nil
 }
 
+// startDynamo launches DynamoDB Local and returns its initialized cache and cleanup.
 func startDynamo(ctx context.Context) (*cache.Cache, func(), error) {
 	req := testcontainers.ContainerRequest{
 		Image:        "amazon/dynamodb-local:latest",
@@ -384,6 +397,7 @@ func startDynamo(ctx context.Context) (*cache.Cache, func(), error) {
 	return cache.NewCache(store), cleanup, nil
 }
 
+// newDynamoBenchStore applies benchmark options and initializes a DynamoDB store.
 func newDynamoBenchStore(ctx context.Context, endpoint string, opts ...benchStoreOption) (cachecore.Store, error) {
 	cfg := dynamocache.Config{
 		BaseConfig: cachecore.BaseConfig{DefaultTTL: time.Minute},
@@ -418,6 +432,7 @@ func newDynamoBenchStore(ctx context.Context, endpoint string, opts ...benchStor
 	return dynamocache.New(ctx, cfg)
 }
 
+// startNATS launches a JetStream server and returns an isolated key-value cache.
 func startNATS(ctx context.Context, opts ...benchStoreOption) (*cache.Cache, func(), error) {
 	req := testcontainers.ContainerRequest{
 		Image:        "nats:2",
@@ -440,6 +455,7 @@ func startNATS(ctx context.Context, opts ...benchStoreOption) (*cache.Cache, fun
 	}, nil
 }
 
+// startPostgres launches PostgreSQL and returns its initialized cache and cleanup.
 func startPostgres(ctx context.Context) (*cache.Cache, func(), error) {
 	req := testcontainers.ContainerRequest{
 		Image:        "postgres:16-bookworm",
@@ -461,6 +477,7 @@ func startPostgres(ctx context.Context) (*cache.Cache, func(), error) {
 	return cache.NewCache(store), cleanup, nil
 }
 
+// startMySQL launches MySQL and returns its initialized cache and cleanup.
 func startMySQL(ctx context.Context) (*cache.Cache, func(), error) {
 	req := testcontainers.ContainerRequest{
 		Image: "mysql:8",
@@ -490,6 +507,7 @@ func startMySQL(ctx context.Context) (*cache.Cache, func(), error) {
 	return cache.NewCache(store), cleanup, nil
 }
 
+// newSQLBenchStore applies benchmark options and initializes the requested SQL backend.
 func newSQLBenchStore(driverName, dsn string, opts ...benchStoreOption) (cachecore.Store, error) {
 	cfg := sqlcore.Config{
 		DriverName: driverName,
@@ -520,6 +538,7 @@ func newSQLBenchStore(driverName, dsn string, opts ...benchStoreOption) (cacheco
 	return store, nil
 }
 
+// startContainer launches a dependency and resolves its externally reachable address.
 func startContainer(ctx context.Context, req testcontainers.ContainerRequest, port string) (testcontainers.Container, string, error) {
 	c, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
 		ContainerRequest: req,
@@ -541,6 +560,7 @@ func startContainer(ctx context.Context, req testcontainers.ContainerRequest, po
 	return c, host + ":" + mapped.Port(), nil
 }
 
+// natsCacheForURL creates an isolated JetStream bucket and its owning cache connection.
 func natsCacheForURL(ctx context.Context, natsURL string, opts ...benchStoreOption) (*cache.Cache, func(), error) {
 	nc, err := nats.Connect(natsURL)
 	if err != nil {
