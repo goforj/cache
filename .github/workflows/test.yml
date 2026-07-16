@@ -93,7 +93,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        driver: [null, memory, file, rediscache, natscache, memcachedcache, dynamocache, sqlitecache, postgrescache, mysqlcache]
+        driver: ["null", memory, file, rediscache, natscache, memcachedcache, dynamocache, sqlitecache, postgrescache, mysqlcache]
     env:
       GOCACHE: /tmp/go-build-cache
       INTEGRATION_DRIVER: ${{ matrix.driver }}
