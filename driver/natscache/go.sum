@@ -1,3 +1,5 @@
+github.com/goforj/cache/cachecore v0.4.0 h1:h5seAIs60q/e+Zbb2DxC0DwGFR4A1jkR2M2fRyMJV/I=
+github.com/goforj/cache/cachecore v0.4.0/go.mod h1:/f1P+eik1Q59SQsJdOc+PDtJqNMmHu8+WVMQycKlm1M=
 github.com/klauspost/compress v1.18.0 h1:c/Cqfb0r+Yi+JtIEq73FWXVkRonBlf0CRNYc8Zttxdo=
 github.com/klauspost/compress v1.18.0/go.mod h1:2Pp+KzxcywXVXMr50+X0Q/Lsb43OQHYWRCY2AiWywWQ=
 github.com/nats-io/nats.go v1.48.0 h1:pSFyXApG+yWU/TgbKCjmm5K4wrHu86231/w84qRVR+U=

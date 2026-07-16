@@ -1,5 +1,11 @@
 github.com/dustin/go-humanize v1.0.1 h1:GzkhY7T5VNhEkwH0PVJgjz+fX1rhBrR7pRT3mDkpeCY=
 github.com/dustin/go-humanize v1.0.1/go.mod h1:Mu1zIs6XwVuF/gI1OepvI0qD18qycQx+mFykh5fBlto=
+github.com/goforj/cache/cachecore v0.4.0 h1:h5seAIs60q/e+Zbb2DxC0DwGFR4A1jkR2M2fRyMJV/I=
+github.com/goforj/cache/cachecore v0.4.0/go.mod h1:/f1P+eik1Q59SQsJdOc+PDtJqNMmHu8+WVMQycKlm1M=
+github.com/goforj/cache/cachetest v0.4.0 h1:KXcq2zNEU4MajVf74QeuKpJ+oe3UbrviTjU8uR8SsyY=
+github.com/goforj/cache/cachetest v0.4.0/go.mod h1:S9ATKfQ6p5tklYj4bW98y5LNO/YXzdPBd0P6LTmcjxA=
+github.com/goforj/cache/driver/sqlcore v0.4.0 h1:cmkefD376MDTEsrzWIeBB7MNH8aEOdB/3yyuVsLYEYY=
+github.com/goforj/cache/driver/sqlcore v0.4.0/go.mod h1:kBGBn7a0xzDhxMTMboNdv74RQdEmFo7GfQ3g+gy0cZ8=
 github.com/google/go-cmp v0.6.0 h1:ofyhxvXcZhMsU5ulbFiLKl/XBFqE1GSq7atu8tAmTRI=
 github.com/google/go-cmp v0.6.0/go.mod h1:17dUlkBOakJ0+DkrSSNjCkIjxS6bF9zb3elmeNGIjoY=
 github.com/google/pprof v0.0.0-20221118152302-e6195bd50e26 h1:Xim43kblpZXfIBQsbuBVKCudVG457BR2GZFIz3uw3hQ=

@@ -1,2 +1,6 @@
 github.com/go-sql-driver/mysql v1.7.1 h1:lUIinVbN1DY0xBg0eMOzmmtGoHwWBbvnWubQUrtU8EI=
 github.com/go-sql-driver/mysql v1.7.1/go.mod h1:OXbVy3sEdcQ2Doequ6Z5BW6fXNQTmx+9S1MCJN5yJMI=
+github.com/goforj/cache/cachecore v0.4.0 h1:h5seAIs60q/e+Zbb2DxC0DwGFR4A1jkR2M2fRyMJV/I=
+github.com/goforj/cache/cachecore v0.4.0/go.mod h1:/f1P+eik1Q59SQsJdOc+PDtJqNMmHu8+WVMQycKlm1M=
+github.com/goforj/cache/driver/sqlcore v0.4.0 h1:cmkefD376MDTEsrzWIeBB7MNH8aEOdB/3yyuVsLYEYY=
+github.com/goforj/cache/driver/sqlcore v0.4.0/go.mod h1:kBGBn7a0xzDhxMTMboNdv74RQdEmFo7GfQ3g+gy0cZ8=

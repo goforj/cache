@@ -1,2 +1,6 @@
+github.com/goforj/cache/cachecore v0.4.0 h1:h5seAIs60q/e+Zbb2DxC0DwGFR4A1jkR2M2fRyMJV/I=
+github.com/goforj/cache/cachecore v0.4.0/go.mod h1:/f1P+eik1Q59SQsJdOc+PDtJqNMmHu8+WVMQycKlm1M=
+github.com/goforj/cache/cachetest v0.4.0 h1:KXcq2zNEU4MajVf74QeuKpJ+oe3UbrviTjU8uR8SsyY=
+github.com/goforj/cache/cachetest v0.4.0/go.mod h1:S9ATKfQ6p5tklYj4bW98y5LNO/YXzdPBd0P6LTmcjxA=
 github.com/patrickmn/go-cache v2.1.0+incompatible h1:HRMgzkcYKYpi3C8ajMPV8OFXaaRUnok+kx1WdO15EQc=
 github.com/patrickmn/go-cache v2.1.0+incompatible/go.mod h1:3Qf8kWWT7OJRJbdiICTKqZju1ZixQ/KpMGzzAfe6+WQ=
