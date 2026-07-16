@@ -7,6 +7,7 @@ import (
 	"time"
 )
 
+// main keeps this generated example executable so API drift fails during compilation.
 func main() {
 	// RememberStaleBytes returns a fresh value when available, otherwise computes and caches it.
 	// If computing fails and a stale value exists, it returns the stale value.

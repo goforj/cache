@@ -9,6 +9,7 @@ import (
 	"github.com/goforj/cache/driver/sqlitecache"
 )
 
+// main keeps this generated example executable so API drift fails during compilation.
 func main() {
 	// Example: sqlite via explicit driver config.
 	store, err := sqlitecache.New(sqlitecache.Config{

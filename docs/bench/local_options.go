@@ -17,6 +17,7 @@ type benchConfig struct {
 
 type benchStoreOption func(benchConfig) benchConfig
 
+// benchWithPrefix overrides the cache namespace for local benchmark runs.
 func benchWithPrefix(prefix string) benchStoreOption {
 	return func(cfg benchConfig) benchConfig {
 		cfg.BaseConfig.Prefix = prefix
@@ -24,6 +25,7 @@ func benchWithPrefix(prefix string) benchStoreOption {
 	}
 }
 
+// benchWithNATSBucketTTL overrides the JetStream bucket TTL for local benchmark runs.
 func benchWithNATSBucketTTL(enabled bool) benchStoreOption {
 	return func(cfg benchConfig) benchConfig {
 		cfg.NATSBucketTTL = enabled

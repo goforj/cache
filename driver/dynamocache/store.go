@@ -81,6 +81,9 @@ const (
 //	}
 //	fmt.Println(store.Driver()) // dynamo
 func New(ctx context.Context, cfg Config) (cachecore.Store, error) {
+	if err := cachecore.ValidateBaseConfig(cfg.BaseConfig); err != nil {
+		return nil, err
+	}
 	if cfg.Region == "" {
 		cfg.Region = defaultRegion
 	}
@@ -104,14 +107,16 @@ func New(ctx context.Context, cfg Config) (cachecore.Store, error) {
 	if ttl <= 0 {
 		ttl = defaultTTL
 	}
-	return &dynamoStore{
+	backend := &dynamoStore{
 		client:     cfg.Client,
 		table:      cfg.Table,
 		prefix:     cfg.Prefix,
 		defaultTTL: ttl,
-	}, nil
+	}
+	return cachecore.WrapStore(backend, cfg.BaseConfig)
 }
 
+// newDynamoClient builds an AWS client for either DynamoDB or a configured compatible endpoint.
 func newDynamoClient(ctx context.Context, cfg Config) (*dynamodb.Client, error) {
 	awsCfg, err := config.LoadDefaultConfig(ctx,
 		config.WithRegion(cfg.Region),
@@ -132,8 +137,10 @@ func newDynamoClient(ctx context.Context, cfg Config) (*dynamodb.Client, error) 
 	return dynamodb.NewFromConfig(awsCfg), nil
 }
 
+// Driver identifies the backend for diagnostics and capability-specific behavior.
 func (s *dynamoStore) Driver() cachecore.Driver { return cachecore.DriverDynamo }
 
+// Ready verifies that the backend can serve cache operations.
 func (s *dynamoStore) Ready(ctx context.Context) error {
 	if s.client == nil {
 		return errors.New("dynamodb cache client unavailable")
@@ -142,6 +149,7 @@ func (s *dynamoStore) Ready(ctx context.Context) error {
 	return err
 }
 
+// Get returns an owned copy of a stored value and distinguishes misses from failures.
 func (s *dynamoStore) Get(ctx context.Context, key string) ([]byte, bool, error) {
 	out, err := s.client.GetItem(ctx, &dynamodb.GetItemInput{
 		TableName:      aws.String(s.table),
@@ -168,6 +176,7 @@ func (s *dynamoStore) Get(ctx context.Context, key string) ([]byte, bool, error)
 	return cloneBytes(v.Value), true, nil
 }
 
+// Set stores an owned copy of a value using the requested or default TTL.
 func (s *dynamoStore) Set(ctx context.Context, key string, value []byte, ttl time.Duration) error {
 	if ttl <= 0 {
 		ttl = s.defaultTTL
@@ -184,6 +193,7 @@ func (s *dynamoStore) Set(ctx context.Context, key string, value []byte, ttl tim
 	return err
 }
 
+// Add stores a value only when the key is currently absent.
 func (s *dynamoStore) Add(ctx context.Context, key string, value []byte, ttl time.Duration) (bool, error) {
 	if ttl <= 0 {
 		ttl = s.defaultTTL
@@ -212,6 +222,7 @@ func (s *dynamoStore) Add(ctx context.Context, key string, value []byte, ttl tim
 	return true, nil
 }
 
+// Increment atomically adds delta while preserving the store's TTL contract.
 func (s *dynamoStore) Increment(ctx context.Context, key string, delta int64, ttl time.Duration) (int64, error) {
 	body, ok, err := s.Get(ctx, key)
 	if err != nil {
@@ -232,10 +243,12 @@ func (s *dynamoStore) Increment(ctx context.Context, key string, delta int64, tt
 	return next, nil
 }
 
+// Decrement atomically subtracts delta while preserving the store's TTL contract.
 func (s *dynamoStore) Decrement(ctx context.Context, key string, delta int64, ttl time.Duration) (int64, error) {
 	return s.Increment(ctx, key, -delta, ttl)
 }
 
+// Delete removes a key and treats an existing miss as success.
 func (s *dynamoStore) Delete(ctx context.Context, key string) error {
 	_, err := s.client.DeleteItem(ctx, &dynamodb.DeleteItemInput{
 		TableName: aws.String(s.table),
@@ -244,6 +257,7 @@ func (s *dynamoStore) Delete(ctx context.Context, key string) error {
 	return err
 }
 
+// DeleteMany removes every requested key under the store's namespace.
 func (s *dynamoStore) DeleteMany(ctx context.Context, keys ...string) error {
 	if len(keys) == 0 {
 		return nil
@@ -271,6 +285,7 @@ func (s *dynamoStore) DeleteMany(ctx context.Context, keys ...string) error {
 	return nil
 }
 
+// Flush removes entries within the store's configured scope.
 func (s *dynamoStore) Flush(ctx context.Context) error {
 	var lastEvaluatedKey map[string]types.AttributeValue
 	for {
@@ -304,6 +319,7 @@ func (s *dynamoStore) Flush(ctx context.Context) error {
 	}
 }
 
+// cacheKey applies the configured namespace before a key reaches the backend.
 func (s *dynamoStore) cacheKey(key string) string {
 	if s.prefix == "" {
 		return key
@@ -311,6 +327,7 @@ func (s *dynamoStore) cacheKey(key string) string {
 	return s.prefix + ":" + key
 }
 
+// expired reports whether DynamoDB expiration metadata places an item in the past.
 func expired(item map[string]types.AttributeValue) bool {
 	av, ok := item["ea"].(*types.AttributeValueMemberN)
 	if !ok {
@@ -323,6 +340,7 @@ func expired(item map[string]types.AttributeValue) bool {
 	return time.Now().UnixMilli() > exp
 }
 
+// Capabilities reports the optional inspection operations supported by the store.
 func (s *dynamoStore) Capabilities() cachecore.InspectorCapabilities {
 	return cachecore.InspectorCapabilities{
 		CanList:   true,
@@ -332,6 +350,7 @@ func (s *dynamoStore) Capabilities() cachecore.InspectorCapabilities {
 	}
 }
 
+// ListPage returns a filtered, deterministic page of inspectable cache entries.
 func (s *dynamoStore) ListPage(ctx context.Context, opts cachecore.ListPageOptions) (cachecore.ListPageResult, error) {
 	entries := make([]cachecore.CacheEntry, 0)
 	var lastEvaluatedKey map[string]types.AttributeValue
@@ -385,6 +404,7 @@ func (s *dynamoStore) ListPage(ctx context.Context, opts cachecore.ListPageOptio
 	return cachecore.SliceEntries(filtered, offset, opts.Limit), nil
 }
 
+// ensureDynamoTable creates a missing table and retries transient emulator startup failures.
 func ensureDynamoTable(ctx context.Context, client DynamoAPI, table string) error {
 	var lastErr error
 	for attempt := 1; attempt <= dynamoEnsureTableMaxAttempts; attempt++ {
@@ -438,6 +458,7 @@ func ensureDynamoTable(ctx context.Context, client DynamoAPI, table string) erro
 	return fmt.Errorf("ensure dynamo table %q: %w", table, lastErr)
 }
 
+// isDynamoStartupRetryable classifies transient client errors seen while local DynamoDB starts.
 func isDynamoStartupRetryable(err error) bool {
 	if err == nil {
 		return false
@@ -450,6 +471,7 @@ func isDynamoStartupRetryable(err error) bool {
 		strings.Contains(msg, "eof")
 }
 
+// cloneBytes protects store ownership by returning an independent byte slice.
 func cloneBytes(value []byte) []byte {
 	if len(value) == 0 {
 		return nil

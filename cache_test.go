@@ -16,6 +16,7 @@ type testPayload struct {
 	Name string `json:"name"`
 }
 
+// TestCacheRememberCachesValue verifies that a miss computes once and subsequent reads reuse the stored bytes.
 func TestCacheRememberCachesValue(t *testing.T) {
 	repo := NewCache(newMemoryStore(0, 0))
 	ctx := context.Background()
@@ -43,6 +44,7 @@ func TestCacheRememberCachesValue(t *testing.T) {
 	}
 }
 
+// TestRememberValueTyped verifies typed values round-trip through the generic remember helper.
 func TestRememberValueTyped(t *testing.T) {
 	type profile struct{ Name string }
 	c := NewCache(newMemoryStore(0, 0))
@@ -63,6 +65,7 @@ func TestRememberValueTyped(t *testing.T) {
 	}
 }
 
+// TestCacheRememberJSON verifies JSON callbacks populate the cache and hits decode without recomputation.
 func TestCacheRememberJSON(t *testing.T) {
 	repo := NewCache(newMemoryStore(0, 0))
 	ctx := context.Background()
@@ -94,6 +97,7 @@ func TestCacheRememberJSON(t *testing.T) {
 	}
 }
 
+// TestCacheGetSetJSON verifies structured values survive the public JSON write and read path.
 func TestCacheGetSetJSON(t *testing.T) {
 	repo := NewCache(newMemoryStore(0, 0))
 	ctx := context.Background()
@@ -110,6 +114,7 @@ func TestCacheGetSetJSON(t *testing.T) {
 	}
 }
 
+// TestCacheAddIncrementDecrementAndPull verifies conditional writes, counters, and destructive reads compose correctly.
 func TestCacheAddIncrementDecrementAndPull(t *testing.T) {
 	repo := NewCache(newMemoryStore(0, 0))
 	ctx := context.Background()
@@ -163,6 +168,7 @@ func TestCacheAddIncrementDecrementAndPull(t *testing.T) {
 	}
 }
 
+// TestCacheDeleteManyFlushAndErrors verifies bulk mutations delegate and preserve backend failures.
 func TestCacheDeleteManyFlushAndErrors(t *testing.T) {
 	repo := NewCache(newMemoryStore(0, 0))
 	ctx := context.Background()
@@ -238,16 +244,21 @@ type spyStore struct {
 
 var expectedErr = errors.New("expected")
 
+// Driver returns the backend identity configured for the spy.
 func (s *spyStore) Driver() cachecore.Driver { return s.driver }
+
+// Ready returns the configured readiness failure unchanged.
 func (s *spyStore) Ready(context.Context) error {
 	return s.readyErr
 }
 
+// Get counts reads and returns a copy of the configured result.
 func (s *spyStore) Get(context.Context, string) ([]byte, bool, error) {
 	s.getCalls++
 	return cloneBytes(s.getBody), s.getOK, s.getErr
 }
 
+// Set captures the value and TTL before returning the configured failure.
 func (s *spyStore) Set(_ context.Context, _ string, value []byte, ttl time.Duration) error {
 	s.getBody = cloneBytes(value)
 	s.getOK = true
@@ -255,27 +266,34 @@ func (s *spyStore) Set(_ context.Context, _ string, value []byte, ttl time.Durat
 	return s.setErr
 }
 
+// Add captures the TTL and returns the configured insertion result.
 func (s *spyStore) Add(_ context.Context, _ string, _ []byte, ttl time.Duration) (bool, error) {
 	s.ttls = append(s.ttls, ttl)
 	return s.addOK, s.addErr
 }
 
+// Increment accumulates the delta and captures the requested TTL.
 func (s *spyStore) Increment(_ context.Context, _ string, delta int64, ttl time.Duration) (int64, error) {
 	s.incVal += delta
 	s.ttls = append(s.ttls, ttl)
 	return s.incVal, s.incErr
 }
 
+// Decrement applies the inverse delta through Increment so both paths share state.
 func (s *spyStore) Decrement(ctx context.Context, key string, delta int64, ttl time.Duration) (int64, error) {
 	return s.Increment(ctx, key, -delta, ttl)
 }
 
+// Delete returns the configured single-key deletion failure.
 func (s *spyStore) Delete(context.Context, string) error { return s.delErr }
 
+// DeleteMany returns the configured batch deletion failure.
 func (s *spyStore) DeleteMany(context.Context, ...string) error { return s.delMany }
 
+// Flush returns the configured whole-store failure.
 func (s *spyStore) Flush(context.Context) error { return s.flushErr }
 
+// TestCacheStoreAndDriver verifies the facade exposes its configured store and backend identity.
 func TestCacheStoreAndDriver(t *testing.T) {
 	store := &spyStore{driver: cachecore.DriverMemory}
 	c := NewCache(store)
@@ -287,6 +305,7 @@ func TestCacheStoreAndDriver(t *testing.T) {
 	}
 }
 
+// TestCacheReady verifies readiness checks are delegated without altering backend errors.
 func TestCacheReady(t *testing.T) {
 	store := &spyStore{driver: cachecore.DriverMemory}
 	c := NewCache(store)
@@ -301,6 +320,7 @@ func TestCacheReady(t *testing.T) {
 	}
 }
 
+// TestCacheRememberStringUsesResolvedTTL verifies non-positive TTLs resolve to the cache default before storage.
 func TestCacheRememberStringUsesResolvedTTL(t *testing.T) {
 	store := &spyStore{driver: cachecore.DriverMemory}
 	c := NewCacheWithTTL(store, 2*time.Second)
@@ -329,6 +349,7 @@ func TestCacheRememberStringUsesResolvedTTL(t *testing.T) {
 	}
 }
 
+// TestCacheSetUsesProvidedTTL verifies an explicit positive TTL reaches the backend unchanged.
 func TestCacheSetUsesProvidedTTL(t *testing.T) {
 	store := &spyStore{driver: cachecore.DriverMemory}
 	c := NewCacheWithTTL(store, time.Minute)
@@ -342,6 +363,7 @@ func TestCacheSetUsesProvidedTTL(t *testing.T) {
 	}
 }
 
+// TestNewCacheWithTTLDefaultsWhenNonPositive verifies invalid constructor TTLs fall back to the library default.
 func TestNewCacheWithTTLDefaultsWhenNonPositive(t *testing.T) {
 	store := &spyStore{driver: cachecore.DriverMemory}
 	c := NewCacheWithTTL(store, -1)
@@ -355,6 +377,7 @@ func TestNewCacheWithTTLDefaultsWhenNonPositive(t *testing.T) {
 	}
 }
 
+// TestCacheWriteOpsResolveDefaultTTLWhenNonPositive verifies every write helper applies the configured default TTL.
 func TestCacheWriteOpsResolveDefaultTTLWhenNonPositive(t *testing.T) {
 	defaultTTL := 2 * time.Second
 	tests := []struct {
@@ -406,6 +429,7 @@ func TestCacheWriteOpsResolveDefaultTTLWhenNonPositive(t *testing.T) {
 	}
 }
 
+// TestCacheGetStringError verifies string reads preserve backend failures.
 func TestCacheGetStringError(t *testing.T) {
 	expected := errors.New("boom")
 	store := &spyStore{driver: cachecore.DriverMemory, getErr: expected}
@@ -417,6 +441,7 @@ func TestCacheGetStringError(t *testing.T) {
 	}
 }
 
+// TestCacheGetStringSuccess verifies string reads preserve hit state and payload bytes.
 func TestCacheGetStringSuccess(t *testing.T) {
 	store := &spyStore{driver: cachecore.DriverMemory, getOK: true, getBody: []byte("ok")}
 	c := NewCache(store)
@@ -427,6 +452,7 @@ func TestCacheGetStringSuccess(t *testing.T) {
 	}
 }
 
+// TestCacheSetJSONMarshalError verifies encoding failures prevent any backend write.
 func TestCacheSetJSONMarshalError(t *testing.T) {
 	store := &spyStore{driver: cachecore.DriverMemory}
 	c := NewCache(store)
@@ -437,6 +463,7 @@ func TestCacheSetJSONMarshalError(t *testing.T) {
 	}
 }
 
+// TestCachePullDeleteError verifies destructive reads return the value alongside a deletion failure.
 func TestCachePullDeleteError(t *testing.T) {
 	store := &spyStore{driver: cachecore.DriverMemory, getOK: true, getBody: []byte("x"), delErr: expectedErr}
 	c := NewCache(store)
@@ -446,6 +473,7 @@ func TestCachePullDeleteError(t *testing.T) {
 	}
 }
 
+// TestCacheRememberSetError verifies a computed value is not reported successful when persistence fails.
 func TestCacheRememberSetError(t *testing.T) {
 	store := &spyStore{driver: cachecore.DriverMemory, setErr: expectedErr}
 	c := NewCache(store)
@@ -458,6 +486,7 @@ func TestCacheRememberSetError(t *testing.T) {
 	}
 }
 
+// TestCacheRememberGetError verifies lookup failures bypass callbacks and propagate immediately.
 func TestCacheRememberGetError(t *testing.T) {
 	store := &spyStore{driver: cachecore.DriverMemory, getErr: expectedErr}
 	c := NewCache(store)
@@ -467,6 +496,7 @@ func TestCacheRememberGetError(t *testing.T) {
 	}
 }
 
+// TestCacheRememberJSONCallbackError verifies JSON remember preserves callback errors without writing.
 func TestCacheRememberJSONCallbackError(t *testing.T) {
 	store := &spyStore{driver: cachecore.DriverMemory}
 	c := NewCache(store)
@@ -480,6 +510,7 @@ func TestCacheRememberJSONCallbackError(t *testing.T) {
 	}
 }
 
+// TestCacheRememberJSONSetError verifies JSON remember propagates persistence failures after computation.
 func TestCacheRememberJSONSetError(t *testing.T) {
 	store := &spyStore{driver: cachecore.DriverMemory, setErr: expectedErr}
 	c := NewCache(store)
@@ -490,6 +521,7 @@ func TestCacheRememberJSONSetError(t *testing.T) {
 	}
 }
 
+// TestCacheRememberStringCallbackError verifies string remember preserves callback failures.
 func TestCacheRememberStringCallbackError(t *testing.T) {
 	store := &spyStore{driver: cachecore.DriverMemory}
 	c := NewCache(store)
@@ -502,6 +534,7 @@ func TestCacheRememberStringCallbackError(t *testing.T) {
 	}
 }
 
+// TestCacheRememberStringUsesCachedValueWithoutCallback verifies a hit never invokes the fallback callback.
 func TestCacheRememberStringUsesCachedValueWithoutCallback(t *testing.T) {
 	store := &spyStore{driver: cachecore.DriverMemory, getOK: true, getBody: []byte(`"cached"`)}
 	c := NewCache(store)
@@ -516,6 +549,7 @@ func TestCacheRememberStringUsesCachedValueWithoutCallback(t *testing.T) {
 	}
 }
 
+// TestCacheRememberJSONReturnsCachedValue verifies a JSON hit decodes the cached representation without recomputation.
 func TestCacheRememberJSONReturnsCachedValue(t *testing.T) {
 	payload := struct {
 		V string `json:"v"`
@@ -538,6 +572,7 @@ func TestCacheRememberJSONReturnsCachedValue(t *testing.T) {
 	}
 }
 
+// TestCacheRememberJSONNilCallback verifies a miss rejects a nil callback rather than panicking.
 func TestCacheRememberJSONNilCallback(t *testing.T) {
 	store := &spyStore{driver: cachecore.DriverMemory}
 	c := NewCache(store)
@@ -547,6 +582,7 @@ func TestCacheRememberJSONNilCallback(t *testing.T) {
 	}
 }
 
+// TestCacheRememberJSONGetError verifies JSON remember stops at a backend lookup failure.
 func TestCacheRememberJSONGetError(t *testing.T) {
 	store := &spyStore{driver: cachecore.DriverMemory, getOK: true, getBody: []byte("not-json")}
 	c := NewCache(store)
@@ -556,6 +592,7 @@ func TestCacheRememberJSONGetError(t *testing.T) {
 	}
 }
 
+// TestCacheGetStringMissing verifies misses return an empty string with a false hit flag.
 func TestCacheGetStringMissing(t *testing.T) {
 	store := &spyStore{driver: cachecore.DriverMemory, getOK: false}
 	c := NewCache(store)
@@ -569,6 +606,7 @@ func TestCacheGetStringMissing(t *testing.T) {
 	}
 }
 
+// TestCacheGetJSONDecodeError verifies malformed cached JSON is surfaced as a decode failure.
 func TestCacheGetJSONDecodeError(t *testing.T) {
 	store := &spyStore{driver: cachecore.DriverMemory, getOK: true, getBody: []byte("not-json")}
 	c := NewCache(store)
@@ -579,6 +617,7 @@ func TestCacheGetJSONDecodeError(t *testing.T) {
 	}
 }
 
+// TestCachePullMissing verifies destructive reads do not issue deletes for absent keys.
 func TestCachePullMissing(t *testing.T) {
 	store := &spyStore{driver: cachecore.DriverMemory, getOK: false}
 	c := NewCache(store)
@@ -591,6 +630,7 @@ func TestCachePullMissing(t *testing.T) {
 	}
 }
 
+// TestCacheRememberPropagatesCallbackError verifies byte callbacks retain their original failure.
 func TestCacheRememberPropagatesCallbackError(t *testing.T) {
 	store := &spyStore{driver: cachecore.DriverMemory}
 	c := NewCache(store)
@@ -604,6 +644,7 @@ func TestCacheRememberPropagatesCallbackError(t *testing.T) {
 	}
 }
 
+// TestCacheConvenienceWrappers verifies public typed and context wrappers preserve core helper semantics.
 func TestCacheConvenienceWrappers(t *testing.T) {
 	store := NewMemoryStore(context.Background())
 	c := NewCache(store)
@@ -716,6 +757,7 @@ func TestCacheConvenienceWrappers(t *testing.T) {
 	}
 }
 
+// TestRememberJSONWrapperErrors verifies JSON convenience wrappers preserve callback and codec failures.
 func TestRememberJSONWrapperErrors(t *testing.T) {
 	c := NewCache(NewMemoryStore(context.Background()))
 	if _, err := Remember[testPayload](c, "k", time.Second, nil); err == nil {
@@ -731,6 +773,7 @@ func TestRememberJSONWrapperErrors(t *testing.T) {
 	}
 }
 
+// TestRememberConvenienceErrorPaths verifies convenience helpers do not mask backend or callback errors.
 func TestRememberConvenienceErrorPaths(t *testing.T) {
 	c := NewCache(NewMemoryStore(context.Background()))
 
@@ -754,6 +797,7 @@ func TestRememberConvenienceErrorPaths(t *testing.T) {
 	}
 }
 
+// TestRememberValueWithCodecBranches verifies typed remember handles hits, misses, encoding, and decoding consistently.
 func TestRememberValueWithCodecBranches(t *testing.T) {
 	ctx := context.Background()
 
@@ -794,6 +838,7 @@ func TestRememberValueWithCodecBranches(t *testing.T) {
 	}
 }
 
+// TestRememberValueDecodesLegacyJSONPayload verifies typed reads remain compatible with previously stored JSON values.
 func TestRememberValueDecodesLegacyJSONPayload(t *testing.T) {
 	type profile struct {
 		Name string `json:"name"`
@@ -821,6 +866,7 @@ func TestRememberValueDecodesLegacyJSONPayload(t *testing.T) {
 	}
 }
 
+// TestCacheRateLimitAllowsThenDenies verifies requests are admitted through the limit and rejected afterward.
 func TestCacheRateLimitAllowsThenDenies(t *testing.T) {
 	c := NewCache(NewMemoryStore(context.Background()))
 	key := "rl:test:user:1"
@@ -844,6 +890,7 @@ func TestCacheRateLimitAllowsThenDenies(t *testing.T) {
 	}
 }
 
+// TestCacheRateLimitValidatesInput verifies invalid limits and windows fail before touching the store.
 func TestCacheRateLimitValidatesInput(t *testing.T) {
 	c := NewCache(NewMemoryStore(context.Background()))
 
@@ -855,6 +902,7 @@ func TestCacheRateLimitValidatesInput(t *testing.T) {
 	}
 }
 
+// TestCacheRateLimitPropagatesIncrementError verifies counter failures are returned unchanged.
 func TestCacheRateLimitPropagatesIncrementError(t *testing.T) {
 	c := NewCache(&spyStore{driver: cachecore.DriverMemory, incErr: expectedErr})
 	if _, err := c.RateLimit("rl:k", 1, time.Second); !errors.Is(err, expectedErr) {
@@ -862,6 +910,7 @@ func TestCacheRateLimitPropagatesIncrementError(t *testing.T) {
 	}
 }
 
+// TestCacheRateLimitWindowResets verifies a new time bucket restores the request allowance.
 func TestCacheRateLimitWindowResets(t *testing.T) {
 	c := NewCache(NewMemoryStore(context.Background()))
 	key := "rl:test:reset"
@@ -884,6 +933,7 @@ func TestCacheRateLimitWindowResets(t *testing.T) {
 	}
 }
 
+// TestCacheRateLimitMetadata verifies remaining quota and reset timestamps match the active window.
 func TestCacheRateLimitMetadata(t *testing.T) {
 	c := NewCache(NewMemoryStore(context.Background()))
 	key := "rl:remaining:user:1"
@@ -909,6 +959,7 @@ func TestCacheRateLimitMetadata(t *testing.T) {
 	}
 }
 
+// TestCacheRateLimitValidationAndError verifies validation and backend error branches retain their classifications.
 func TestCacheRateLimitValidationAndError(t *testing.T) {
 	c := NewCache(NewMemoryStore(context.Background()))
 	if _, err := c.RateLimit("rl:bad", 0, time.Second); err == nil {
@@ -924,6 +975,7 @@ func TestCacheRateLimitValidationAndError(t *testing.T) {
 	}
 }
 
+// TestCacheBatchSetAndBatchGet verifies batch helpers preserve values and miss information across keys.
 func TestCacheBatchSetAndBatchGet(t *testing.T) {
 	c := NewCache(NewMemoryStore(context.Background()))
 	err := c.BatchSetBytes(map[string][]byte{
@@ -949,6 +1001,7 @@ func TestCacheBatchSetAndBatchGet(t *testing.T) {
 	}
 }
 
+// TestCacheBatchGetPropagatesError verifies a failed lookup aborts the batch with its backend error.
 func TestCacheBatchGetPropagatesError(t *testing.T) {
 	c := NewCache(&spyStore{driver: cachecore.DriverMemory, getErr: expectedErr})
 	if _, err := c.BatchGetBytes("a", "b"); !errors.Is(err, expectedErr) {
@@ -956,6 +1009,7 @@ func TestCacheBatchGetPropagatesError(t *testing.T) {
 	}
 }
 
+// TestCacheBatchSetPropagatesError verifies a failed write aborts the batch with its backend error.
 func TestCacheBatchSetPropagatesError(t *testing.T) {
 	c := NewCache(&spyStore{driver: cachecore.DriverMemory, setErr: expectedErr})
 	if err := c.BatchSetBytes(map[string][]byte{"a": []byte("1")}, time.Second); !errors.Is(err, expectedErr) {
@@ -963,6 +1017,7 @@ func TestCacheBatchSetPropagatesError(t *testing.T) {
 	}
 }
 
+// TestCacheRefreshAheadMissComputesSynchronously verifies an initial miss returns the freshly computed value.
 func TestCacheRefreshAheadMissComputesSynchronously(t *testing.T) {
 	c := NewCache(NewMemoryStore(context.Background()))
 	calls := 0
@@ -975,6 +1030,7 @@ func TestCacheRefreshAheadMissComputesSynchronously(t *testing.T) {
 	}
 }
 
+// TestCacheRefreshAheadHitTriggersAsyncRefresh verifies near-expiry hits return promptly while refreshing in the background.
 func TestCacheRefreshAheadHitTriggersAsyncRefresh(t *testing.T) {
 	c := NewCache(NewMemoryStore(context.Background()))
 	key := "ra:hit"
@@ -1014,6 +1070,7 @@ func TestCacheRefreshAheadHitTriggersAsyncRefresh(t *testing.T) {
 	}
 }
 
+// TestCacheRefreshAheadConcurrentHitTriggersSingleAsyncRefresh verifies concurrent near-expiry hits coalesce refresh work.
 func TestCacheRefreshAheadConcurrentHitTriggersSingleAsyncRefresh(t *testing.T) {
 	c := NewCache(NewMemoryStore(context.Background()))
 	key := "ra:contend"
@@ -1099,6 +1156,7 @@ func TestCacheRefreshAheadConcurrentHitTriggersSingleAsyncRefresh(t *testing.T) 
 
 }
 
+// TestCacheRefreshAheadValidationAndErrors verifies invalid timing, callbacks, and backend failures are surfaced safely.
 func TestCacheRefreshAheadValidationAndErrors(t *testing.T) {
 	c := NewCache(NewMemoryStore(context.Background()))
 	if _, err := c.RefreshAheadBytes("ra:bad", 0, time.Second, func() ([]byte, error) { return []byte("x"), nil }); err == nil {
@@ -1119,6 +1177,7 @@ func TestCacheRefreshAheadValidationAndErrors(t *testing.T) {
 	}
 }
 
+// TestCacheRefreshAheadHitSkipsAsyncRefreshWithoutValidMetadata verifies corrupt or absent expiry metadata cannot trigger refresh work.
 func TestCacheRefreshAheadHitSkipsAsyncRefreshWithoutValidMetadata(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -1170,6 +1229,7 @@ func TestCacheRefreshAheadHitSkipsAsyncRefreshWithoutValidMetadata(t *testing.T)
 	}
 }
 
+// TestRefreshAheadTyped verifies generic values retain refresh-ahead hit and refresh semantics.
 func TestRefreshAheadTyped(t *testing.T) {
 	type summary struct {
 		Text string `json:"text"`
@@ -1184,6 +1244,7 @@ func TestRefreshAheadTyped(t *testing.T) {
 	}
 }
 
+// TestRefreshAheadValueWithCodecErrors verifies typed refresh-ahead preserves codec failures.
 func TestRefreshAheadValueWithCodecErrors(t *testing.T) {
 	c := NewCache(NewMemoryStore(context.Background()))
 	ctx := context.Background()
@@ -1202,6 +1263,7 @@ func TestRefreshAheadValueWithCodecErrors(t *testing.T) {
 	}
 }
 
+// TestCacheTryLockAndUnlock verifies lock ownership can be acquired once and explicitly released.
 func TestCacheTryLockAndUnlock(t *testing.T) {
 	c := NewCache(NewMemoryStore(context.Background()))
 	key := "lock:job:1"
@@ -1223,6 +1285,7 @@ func TestCacheTryLockAndUnlock(t *testing.T) {
 	}
 }
 
+// TestCacheTryLockValidationAndError verifies invalid lock inputs and backend failures are returned before ownership.
 func TestCacheTryLockValidationAndError(t *testing.T) {
 	c := NewCache(NewMemoryStore(context.Background()))
 	if _, err := c.TryLock("lock:bad", 0); err == nil {
@@ -1235,6 +1298,7 @@ func TestCacheTryLockValidationAndError(t *testing.T) {
 	}
 }
 
+// TestCacheLockWaitsAndTimesOut verifies blocking acquisition observes release and caller deadlines.
 func TestCacheLockWaitsAndTimesOut(t *testing.T) {
 	c := NewCache(NewMemoryStore(context.Background()))
 	key := "lock:wait"
@@ -1265,6 +1329,7 @@ func TestCacheLockWaitsAndTimesOut(t *testing.T) {
 	}
 }
 
+// TestCacheTryLockConcurrentContentionSingleWinner verifies atomic acquisition admits exactly one contender.
 func TestCacheTryLockConcurrentContentionSingleWinner(t *testing.T) {
 	c := NewCache(NewMemoryStore(context.Background()))
 	key := "lock:contend:single-winner"
@@ -1300,6 +1365,7 @@ func TestCacheTryLockConcurrentContentionSingleWinner(t *testing.T) {
 	}
 }
 
+// TestCacheLockConcurrentTimeoutContention verifies losing contenders exit when their shared wait budget expires.
 func TestCacheLockConcurrentTimeoutContention(t *testing.T) {
 	c := NewCache(NewMemoryStore(context.Background()))
 	key := "lock:contend:timeout"
@@ -1333,6 +1399,7 @@ func TestCacheLockConcurrentTimeoutContention(t *testing.T) {
 	}
 }
 
+// TestCacheRememberConcurrentMissContention verifies concurrent misses do not corrupt the eventual cached value.
 func TestCacheRememberConcurrentMissContention(t *testing.T) {
 	c := NewCache(NewMemoryStore(context.Background()))
 	ctx := context.Background()
@@ -1383,6 +1450,7 @@ func TestCacheRememberConcurrentMissContention(t *testing.T) {
 	}
 }
 
+// TestCacheRememberStaleFreshHit verifies a fresh entry returns without invoking fallback computation.
 func TestCacheRememberStaleFreshHit(t *testing.T) {
 	c := NewCache(NewMemoryStore(context.Background()))
 	if err := c.SetBytes("stale:fresh", []byte("cached"), time.Minute); err != nil {
@@ -1399,6 +1467,7 @@ func TestCacheRememberStaleFreshHit(t *testing.T) {
 	}
 }
 
+// TestCacheRememberStaleFallsBackOnCallbackError verifies stale data remains available when refresh computation fails.
 func TestCacheRememberStaleFallsBackOnCallbackError(t *testing.T) {
 	c := NewCache(NewMemoryStore(context.Background()))
 	key := "stale:fallback"
@@ -1422,6 +1491,7 @@ func TestCacheRememberStaleFallsBackOnCallbackError(t *testing.T) {
 	}
 }
 
+// TestCacheRememberStaleNoFallbackReturnsError verifies callback errors propagate when no stale value exists.
 func TestCacheRememberStaleNoFallbackReturnsError(t *testing.T) {
 	c := NewCache(NewMemoryStore(context.Background()))
 	expected := errors.New("compute failed")
@@ -1433,6 +1503,7 @@ func TestCacheRememberStaleNoFallbackReturnsError(t *testing.T) {
 	}
 }
 
+// TestCacheRememberStaleNilCallback verifies a miss rejects nil refresh work without panicking.
 func TestCacheRememberStaleNilCallback(t *testing.T) {
 	c := NewCache(NewMemoryStore(context.Background()))
 	if _, _, err := c.RememberStaleBytes("stale:nil", time.Minute, time.Minute, nil); err == nil {
@@ -1440,6 +1511,7 @@ func TestCacheRememberStaleNilCallback(t *testing.T) {
 	}
 }
 
+// TestCacheRememberStaleNonPositiveStaleTTLBehavior verifies non-positive stale windows do not create fallback retention.
 func TestCacheRememberStaleNonPositiveStaleTTLBehavior(t *testing.T) {
 	t.Run("stale ttl falls back to primary ttl when primary ttl is positive", func(t *testing.T) {
 		c := NewCache(NewMemoryStore(context.Background()))
@@ -1498,6 +1570,7 @@ func TestCacheRememberStaleNonPositiveStaleTTLBehavior(t *testing.T) {
 	})
 }
 
+// TestRememberStaleTypedFreshAndFallback verifies typed values work for both fresh hits and stale fallback.
 func TestRememberStaleTypedFreshAndFallback(t *testing.T) {
 	c := NewCache(NewMemoryStore(context.Background()))
 	type profile struct {
@@ -1524,6 +1597,7 @@ func TestRememberStaleTypedFreshAndFallback(t *testing.T) {
 	}
 }
 
+// TestRememberStaleValueWithCodecErrors verifies typed stale helpers preserve encoding and decoding failures.
 func TestRememberStaleValueWithCodecErrors(t *testing.T) {
 	c := NewCache(NewMemoryStore(context.Background()))
 	ctx := context.Background()

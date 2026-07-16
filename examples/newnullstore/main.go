@@ -6,6 +6,7 @@ import (
 	"github.com/goforj/cache"
 )
 
+// main keeps this generated example executable so API drift fails during compilation.
 func main() {
 	// NewNullStore is a no-op store useful for tests where caching should be disabled.
 

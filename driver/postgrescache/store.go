@@ -37,10 +37,7 @@ type Config struct {
 //	fmt.Println(store.Driver()) // sql
 func New(cfg Config) (cachecore.Store, error) {
 	return sqlcore.New(sqlcore.Config{
-		BaseConfig: cachecore.BaseConfig{
-			Prefix:     cfg.Prefix,
-			DefaultTTL: cfg.DefaultTTL,
-		},
+		BaseConfig: cfg.BaseConfig,
 		DriverName: "pgx",
 		DSN:        cfg.DSN,
 		Table:      cfg.Table,

@@ -8,6 +8,7 @@ import (
 	"time"
 )
 
+// main keeps this generated example executable so API drift fails during compilation.
 func main() {
 	// OnCacheOp implements Observer.
 

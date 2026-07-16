@@ -1,6 +1,3 @@
-//go:build ignore
-// +build ignore
-
 package main
 
 import (
@@ -24,11 +21,13 @@ const (
 	testCountEnd   = "<!-- test-count:embed:end -->"
 )
 
+// Counts summarizes executed tests for generated documentation.
 type Counts struct {
 	Unit        int
 	Integration int
 }
 
+// main runs the documentation generator and reports failures as a nonzero process exit.
 func main() {
 	if err := run(); err != nil {
 		fmt.Println("Error:", err)
@@ -37,6 +36,7 @@ func main() {
 	fmt.Println("✔ Test badges updated from executed test runs")
 }
 
+// run executes the generator workflow and returns failures to main.
 func run() error {
 	root, err := findRoot()
 	if err != nil {
@@ -50,7 +50,7 @@ func run() error {
 		return fmt.Errorf("integration top-level tests: %w", err)
 	}
 
-	unitCount, err := countRunEvents(root, nil)
+	unitCount, err := countUnitRunEvents(root)
 	if err != nil {
 		return fmt.Errorf("count unit test runs: %w", err)
 	}
@@ -77,6 +77,49 @@ func run() error {
 	return os.WriteFile(readmePath, []byte(out), 0o644)
 }
 
+// countUnitRunEvents sums independently executed tests across every non-integration module.
+func countUnitRunEvents(root string) (int, error) {
+	moduleDirs, err := unitModuleDirs(root)
+	if err != nil {
+		return 0, err
+	}
+	total := 0
+	for _, moduleDir := range moduleDirs {
+		count, err := countRunEvents(moduleDir, nil)
+		if err != nil {
+			return 0, err
+		}
+		total += count
+	}
+	return total, nil
+}
+
+// unitModuleDirs discovers module boundaries because go test does not cross nested go.mod files.
+func unitModuleDirs(root string) ([]string, error) {
+	dirs := make([]string, 0)
+	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			if path != root && (info.Name() == ".git" || info.Name() == "vendor" || path == filepath.Join(root, "integration")) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if info.Name() == "go.mod" {
+			dirs = append(dirs, filepath.Dir(path))
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	sort.Strings(dirs)
+	return dirs, nil
+}
+
+// countRunEvents executes one module and counts the test run events emitted by the Go tool.
 func countRunEvents(root string, integrationPrefixes map[string]struct{}) (int, error) {
 	args := []string{"test", "./...", "-run", "Test", "-count=1", "-json"}
 	if integrationPrefixes != nil {
@@ -89,6 +132,11 @@ func countRunEvents(root string, integrationPrefixes map[string]struct{}) (int, 
 
 	cmd := exec.Command("go", args...)
 	cmd.Dir = root
+	env, err := testCommandEnv(root)
+	if err != nil {
+		return 0, err
+	}
+	cmd.Env = env
 
 	var out bytes.Buffer
 	cmd.Stdout = &out
@@ -121,6 +169,7 @@ func countRunEvents(root string, integrationPrefixes map[string]struct{}) (int, 
 	return total, nil
 }
 
+// countIntegrationRunEvents executes the Docker-free integration matrix and counts matching tests.
 func countIntegrationRunEvents(integrationDir string, integrationPrefixes map[string]struct{}) (int, error) {
 	runPattern := buildTopLevelRunPattern(integrationPrefixes)
 	if runPattern == "" {
@@ -131,7 +180,11 @@ func countIntegrationRunEvents(integrationDir string, integrationPrefixes map[st
 	cmd := exec.Command("go", args...)
 	cmd.Dir = integrationDir
 	// Keep this badge updater Docker-free by default.
-	cmd.Env = append(os.Environ(), "INTEGRATION_DRIVER=memory,file,null,sqlitecache")
+	env, err := testCommandEnv(integrationDir)
+	if err != nil {
+		return 0, err
+	}
+	cmd.Env = append(env, "INTEGRATION_DRIVER=memory,file,null,sqlitecache")
 
 	var out bytes.Buffer
 	cmd.Stdout = &out
@@ -157,11 +210,42 @@ func countIntegrationRunEvents(integrationDir string, integrationPrefixes map[st
 	return total, nil
 }
 
+// testCommandEnv keeps release checks isolated while allowing pre-tag badge generation through the repository workspace.
+func testCommandEnv(start string) ([]string, error) {
+	goWork := "off"
+	if os.Getenv("CACHE_LOCAL_SIBLINGS") == "1" {
+		dir := start
+		for {
+			candidate := filepath.Join(dir, "go.work")
+			if _, err := os.Stat(candidate); err == nil {
+				goWork = candidate
+				break
+			} else if !os.IsNotExist(err) {
+				return nil, fmt.Errorf("inspect Go workspace %s: %w", candidate, err)
+			}
+			parent := filepath.Dir(dir)
+			if parent == dir {
+				return nil, fmt.Errorf("Go workspace not found above %s", start)
+			}
+			dir = parent
+		}
+	}
+
+	env := make([]string, 0, len(os.Environ())+1)
+	for _, entry := range os.Environ() {
+		if !strings.HasPrefix(entry, "GOWORK=") {
+			env = append(env, entry)
+		}
+	}
+	return append(env, "GOWORK="+goWork), nil
+}
+
 type testEvent struct {
 	Action string `json:"Action"`
 	Test   string `json:"Test"`
 }
 
+// parseJSONEvents derives executed test counts from Go's structured test output.
 func parseJSONEvents(data []byte) []testEvent {
 	scanner := bufio.NewScanner(bytes.NewReader(data))
 	events := make([]testEvent, 0)
@@ -179,6 +263,7 @@ func parseJSONEvents(data []byte) []testEvent {
 	return events
 }
 
+// buildTopLevelRunPattern creates an exact test filter so nested subtests do not skew counts.
 func buildTopLevelRunPattern(names map[string]struct{}) string {
 	if len(names) == 0 {
 		return ""
@@ -192,6 +277,7 @@ func buildTopLevelRunPattern(names map[string]struct{}) string {
 	return "^(" + strings.Join(parts, "|") + ")(/.*)?$"
 }
 
+// integrationTopLevelTests discovers integration entry points for exact event filtering.
 func integrationTopLevelTests(root string) (map[string]struct{}, error) {
 	names := map[string]struct{}{}
 
@@ -241,6 +327,7 @@ func integrationTopLevelTests(root string) (map[string]struct{}, error) {
 	return names, nil
 }
 
+// updateTestsSection replaces README test metrics with counts derived from current source.
 func updateTestsSection(readme string, counts Counts) (string, error) {
 	start := strings.Index(readme, testCountStart)
 	end := strings.Index(readme, testCountEnd)
@@ -264,6 +351,7 @@ func updateTestsSection(readme string, counts Counts) (string, error) {
 	return before + leading + strings.Join(lines, "\n") + "\n" + after, nil
 }
 
+// hasIntegrationBuildTag identifies tests that belong to the opt-in integration suite.
 func hasIntegrationBuildTag(src []byte) bool {
 	lines := strings.Split(string(src), "\n")
 	for _, line := range lines {
@@ -284,6 +372,7 @@ func hasIntegrationBuildTag(src []byte) bool {
 	return false
 }
 
+// findRoot locates the repository root from supported generator working directories.
 func findRoot() (string, error) {
 	wd, _ := os.Getwd()
 	candidates := []string{wd, filepath.Join(wd, ".."), filepath.Join(wd, "..", ".."), filepath.Join(wd, "..", "..", "..")}
@@ -296,11 +385,13 @@ func findRoot() (string, error) {
 	return "", fmt.Errorf("could not find project root from %s", wd)
 }
 
+// fileExists reports whether a candidate project marker is present.
 func fileExists(p string) bool {
 	_, err := os.Stat(p)
 	return err == nil
 }
 
+// _sortedKeys keeps deterministic key ordering available to generator diagnostics.
 func _sortedKeys(m map[string]struct{}) []string {
 	out := make([]string, 0, len(m))
 	for k := range m {

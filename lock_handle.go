@@ -20,7 +20,7 @@ type LockHandle struct {
 	cache *Cache
 	key   string
 	ttl   time.Duration
-	held  atomic.Bool
+	held  *atomic.Bool
 	ctx   context.Context
 }
 
@@ -42,17 +42,20 @@ func (c *Cache) NewLockHandle(key string, ttl time.Duration) *LockHandle {
 		cache: c,
 		key:   key,
 		ttl:   ttl,
+		held:  &atomic.Bool{},
 	}
 }
 
+// WithContext returns a derived handle that shares lock ownership state with l.
 func (l *LockHandle) WithContext(ctx context.Context) *LockHandle {
 	clone := *l
 	clone.ctx = ctx
 	return &clone
 }
 
+// context returns the handle context or the cache context when none was bound.
 func (l *LockHandle) context() context.Context {
-	if l == nil || l.ctx == nil {
+	if l.ctx == nil {
 		return l.cache.context()
 	}
 	return l.ctx
@@ -92,13 +95,13 @@ func (l *LockHandle) Acquire() (bool, error) {
 //		_ = lock.Release()
 //	}
 func (l *LockHandle) Release() error {
-	if !l.held.Load() {
+	if !l.held.CompareAndSwap(true, false) {
 		return nil
 	}
 	if err := l.cache.unlock(l.context(), l.key); err != nil {
+		l.held.Store(true)
 		return err
 	}
-	l.held.Store(false)
 	return nil
 }
 
@@ -124,6 +127,7 @@ func (l *LockHandle) Get(fn func() error) (bool, error) {
 	})
 }
 
+// get shares the single-attempt ownership and release sequence with callback adapters.
 func (l *LockHandle) get(ctx context.Context, fn func(context.Context) error) (bool, error) {
 	locked, err := l.cache.tryLock(ctx, l.key, l.ttl)
 	if err != nil || !locked {
@@ -167,6 +171,7 @@ func (l *LockHandle) Block(timeout, retryInterval time.Duration, fn func() error
 	})
 }
 
+// block shares the retrying ownership and release sequence with callback adapters.
 func (l *LockHandle) block(ctx context.Context, retryInterval time.Duration, fn func(context.Context) error) (bool, error) {
 	locked, err := l.cache.lock(ctx, l.key, l.ttl, retryInterval)
 	if err != nil || !locked {

@@ -7,6 +7,7 @@ import (
 	"github.com/goforj/cache/cachecore"
 )
 
+// main keeps this generated example executable so API drift fails during compilation.
 func main() {
 	// NewNullStoreWithConfig builds a null store with shared wrappers (compression/encryption/limits).
 

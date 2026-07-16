@@ -1,6 +1,3 @@
-//go:build ignore
-// +build ignore
-
 package main
 
 import (
@@ -23,6 +20,7 @@ const (
 	testCountEnd   = "<!-- test-count:embed:end -->"
 )
 
+// main runs the documentation generator and reports failures as a nonzero process exit.
 func main() {
 	if err := run(); err != nil {
 		fmt.Println("Error:", err)
@@ -31,6 +29,7 @@ func main() {
 	fmt.Println("✔ API section updated in README.md")
 }
 
+// run executes the generator workflow and returns failures to main.
 func run() error {
 	root, err := findRoot()
 	if err != nil {
@@ -64,6 +63,7 @@ func run() error {
 // ------------------------------------------------------------
 //
 
+// FuncDoc records an API declaration and the examples attached to it.
 type FuncDoc struct {
 	Key         string
 	Name        string
@@ -76,6 +76,7 @@ type FuncDoc struct {
 	Examples    []Example
 }
 
+// Example records one source example and its generated-program metadata.
 type Example struct {
 	Label string
 	Code  string
@@ -95,6 +96,7 @@ var (
 	exampleHeader  = regexp.MustCompile(`(?i)^\s*Example:\s*(.*)$`)
 )
 
+// parseFuncs collects documented public API declarations from the root and helper packages.
 func parseFuncs(root string) ([]*FuncDoc, error) {
 	funcs, err := parseFuncsInDir(root)
 	if err != nil {
@@ -107,6 +109,7 @@ func parseFuncs(root string) ([]*FuncDoc, error) {
 	return append(funcs, cachefakeFuncs...), nil
 }
 
+// parseFuncsInDir parses one package and records its public functions in source order.
 func parseFuncsInDir(dir string) ([]*FuncDoc, error) {
 	fset := token.NewFileSet()
 
@@ -149,6 +152,9 @@ func parseFuncsInDir(dir string) ([]*FuncDoc, error) {
 			}
 
 			receiver := extractReceiverName(fn)
+			if fn.Recv != nil && !ast.IsExported(receiver) {
+				continue
+			}
 			displayName := fn.Name.Name
 			anchor := strings.ToLower(fn.Name.Name)
 			key := fn.Name.Name
@@ -189,6 +195,7 @@ func parseFuncsInDir(dir string) ([]*FuncDoc, error) {
 	return out, nil
 }
 
+// hasBuildTag excludes source files whose build constraints make generated docs misleading.
 func hasBuildTag(file *ast.File, tag string) bool {
 	want := "//go:build " + tag
 	for _, cg := range file.Comments {
@@ -201,6 +208,7 @@ func hasBuildTag(file *ast.File, tag string) bool {
 	return false
 }
 
+// extractGroup reads the documentation group directive used for stable API sections.
 func extractGroup(group *ast.CommentGroup) string {
 	for _, c := range group.List {
 		line := strings.TrimSpace(strings.TrimPrefix(c.Text, "//"))
@@ -211,6 +219,7 @@ func extractGroup(group *ast.CommentGroup) string {
 	return "Other"
 }
 
+// extractBehavior reads behavior metadata used to organize API documentation.
 func extractBehavior(group *ast.CommentGroup) string {
 	for _, c := range group.List {
 		line := strings.TrimSpace(strings.TrimPrefix(c.Text, "//"))
@@ -221,6 +230,7 @@ func extractBehavior(group *ast.CommentGroup) string {
 	return ""
 }
 
+// extractFluent reads fluent-API metadata used by the README renderer.
 func extractFluent(group *ast.CommentGroup) string {
 	for _, c := range group.List {
 		line := strings.TrimSpace(strings.TrimPrefix(c.Text, "//"))
@@ -231,6 +241,7 @@ func extractFluent(group *ast.CommentGroup) string {
 	return ""
 }
 
+// extractDescription returns reader-facing prose while excluding generator directives.
 func extractDescription(group *ast.CommentGroup) string {
 	var lines []string
 
@@ -254,6 +265,7 @@ func extractDescription(group *ast.CommentGroup) string {
 	return strings.TrimSpace(strings.Join(lines, "\n"))
 }
 
+// extractReceiverName returns the receiver identifier used when rendering method examples.
 func extractReceiverName(fn *ast.FuncDecl) string {
 	if fn.Recv == nil || len(fn.Recv.List) == 0 {
 		return ""
@@ -261,6 +273,7 @@ func extractReceiverName(fn *ast.FuncDecl) string {
 	return receiverTypeName(fn.Recv.List[0].Type)
 }
 
+// receiverTypeName unwraps receiver syntax into the named type used for grouping methods.
 func receiverTypeName(expr ast.Expr) string {
 	switch t := expr.(type) {
 	case *ast.StarExpr:
@@ -278,6 +291,7 @@ func receiverTypeName(expr ast.Expr) string {
 	}
 }
 
+// extractExamples parses documented example blocks and preserves their source order.
 func extractExamples(fset *token.FileSet, fn *ast.FuncDecl) []Example {
 	var out []Example
 	var current []string
@@ -375,6 +389,7 @@ func selectPackage(pkgs map[string]*ast.Package) (string, error) {
 // ------------------------------------------------------------
 //
 
+// renderAPI formats parsed declarations into the generated README API reference.
 func renderAPI(root string, funcs []*FuncDoc) string {
 	const driverConfigsGroup = "Driver Configs"
 	byGroup := map[string][]*FuncDoc{}
@@ -508,6 +523,7 @@ type driverConfigDoc struct {
 	Shared      bool
 }
 
+// driverConfigDocs extracts driver configuration declarations for generated README sections.
 func driverConfigDocs(root string) []driverConfigDoc {
 	docs := []driverConfigDoc{sharedBaseConfigDoc()}
 	for _, src := range driverConfigSources() {
@@ -562,6 +578,7 @@ type driverConfigSource struct {
 	Heading    string
 }
 
+// driverConfigSources lists driver packages in the stable order used by documentation generation.
 func driverConfigSources() []driverConfigSource {
 	return []driverConfigSource{
 		{RelDir: "driver/dynamocache", IndexLabel: "DynamoDB Config", Anchor: "driver-config-dynamocache", Heading: "DynamoDB"},
@@ -575,6 +592,7 @@ func driverConfigSources() []driverConfigSource {
 	}
 }
 
+// sharedBaseConfigDoc supplies the common cache configuration fields inherited by drivers.
 func sharedBaseConfigDoc() driverConfigDoc {
 	return driverConfigDoc{
 		IndexLabel: "Shared BaseConfig",
@@ -586,13 +604,15 @@ func sharedBaseConfigDoc() driverConfigDoc {
 			"",
 			"- `DefaultTTL`: defaults to `5*time.Minute` when zero in all optional drivers",
 			"- `Prefix`: defaults to `\"app\"` when empty in all optional drivers",
-			"- `Compression`: default zero value (`cachecore.CompressionNone`) unless set",
-			"- `MaxValueBytes`: default `0` (no limit) unless set",
-			"- `EncryptionKey`: default `nil` (disabled) unless set",
+			"- `Compression`: gzip writes a versioned CMP1 envelope; the zero value leaves bytes uncompressed",
+			"- `MaxValueBytes`: bounds writes and decoded reads; `0` disables the limit",
+			"- `EncryptionKey`: AES-GCM writes a versioned ENC1 envelope; `nil` disables encryption",
+			"- `Increment` and `Decrement`: bypass shaping so backend-native counters remain atomic",
 		}, "\n"),
 	}
 }
 
+// trimDriverNewLeadLine removes constructor boilerplate duplicated by driver configuration docs.
 func trimDriverNewLeadLine(desc string) string {
 	lines := strings.Split(strings.TrimSpace(desc), "\n")
 	if len(lines) == 0 {
@@ -607,6 +627,7 @@ func trimDriverNewLeadLine(desc string) string {
 	return strings.TrimSpace(strings.Join(lines, "\n"))
 }
 
+// renderDriverConfigIndexRow renders one driver configuration summary row.
 func renderDriverConfigIndexRow(root string) string {
 	docs := driverConfigDocs(root)
 	links := make([]string, 0, len(docs))
@@ -616,6 +637,7 @@ func renderDriverConfigIndexRow(root string) string {
 	return fmt.Sprintf("| **Driver Configs** | %s |\n", strings.Join(links, " · "))
 }
 
+// renderDriverConfigIndex renders the stable table of driver configuration links.
 func renderDriverConfigIndex(root string) string {
 	var buf bytes.Buffer
 
@@ -645,6 +667,7 @@ func renderDriverConfigIndex(root string) string {
 	return buf.String()
 }
 
+// renderName returns the display name for a function or receiver method.
 func renderName(fn *FuncDoc, nameCounts map[string]int) string {
 	if nameCounts[fn.Name] <= 1 {
 		return fn.Name
@@ -652,10 +675,12 @@ func renderName(fn *FuncDoc, nameCounts map[string]int) string {
 	return fn.DisplayName
 }
 
+// renderLabel converts method identifiers into compact documentation labels.
 func renderLabel(fn *FuncDoc, nameCounts map[string]int, hasCtxVariant map[string]bool) string {
 	return renderName(fn, nameCounts)
 }
 
+// isHideableCtxVariant reports whether a context-aware API can be nested beneath its convenience wrapper.
 func isHideableCtxVariant(fn *FuncDoc) bool {
 	if !strings.HasSuffix(fn.Name, "Context") {
 		return false
@@ -667,6 +692,7 @@ func isHideableCtxVariant(fn *FuncDoc) bool {
 	return strings.Contains(desc, "context-aware variant")
 }
 
+// ctxBaseKey maps a context-aware API entry to the base entry used for compact rendering.
 func ctxBaseKey(fn *FuncDoc) (string, bool) {
 	if !strings.HasSuffix(fn.Name, "Context") || !strings.HasSuffix(fn.Key, "Context") {
 		return "", false
@@ -680,6 +706,7 @@ func ctxBaseKey(fn *FuncDoc) (string, bool) {
 // ------------------------------------------------------------
 //
 
+// replaceAPISection updates only the generated API markers in the README.
 func replaceAPISection(readme, api string) (string, error) {
 	start := strings.Index(readme, apiStart)
 	end := strings.Index(readme, apiEnd)
@@ -698,6 +725,7 @@ func replaceAPISection(readme, api string) (string, error) {
 	return out.String(), nil
 }
 
+// TestCounts summarizes unit and integration coverage for README reporting.
 type TestCounts struct {
 	UnitFuncs                 int
 	IntegrationFuncs          int
@@ -705,12 +733,14 @@ type TestCounts struct {
 	IntegrationStaticSubtests int
 }
 
+// ContractMatrix records source-derived coverage dimensions for README reporting.
 type ContractMatrix struct {
 	Drivers           int
 	Cases             int
 	InvariantSubtests int
 }
 
+// countTests derives README test totals directly from source and generated test events.
 func countTests(root string) (TestCounts, error) {
 	var counts TestCounts
 
@@ -770,6 +800,7 @@ func countTests(root string) (TestCounts, error) {
 	return counts, nil
 }
 
+// countLiteralSubtests counts statically declared subtests without executing test code.
 func countLiteralSubtests(file *ast.File) int {
 	count := 0
 	ast.Inspect(file, func(n ast.Node) bool {
@@ -794,6 +825,7 @@ func countLiteralSubtests(file *ast.File) int {
 	return count
 }
 
+// readContractMatrix derives driver and helper coverage counts from contract source tables.
 func readContractMatrix(root string) (ContractMatrix, error) {
 	path := filepath.Join(root, "store_contract_integration_test.go")
 	src, err := os.ReadFile(path)
@@ -842,6 +874,7 @@ func readContractMatrix(root string) (ContractMatrix, error) {
 	return m, nil
 }
 
+// countReturnedCompositeElements counts contract cases returned as composite literals.
 func countReturnedCompositeElements(fn *ast.FuncDecl, elemType string) int {
 	if fn.Body == nil {
 		return 0
@@ -868,6 +901,7 @@ func countReturnedCompositeElements(fn *ast.FuncDecl, elemType string) int {
 	return 0
 }
 
+// countCompositeLitsByType counts returned composite values of a selected AST type.
 func countCompositeLitsByType(body *ast.BlockStmt, typeName string) int {
 	count := 0
 	ast.Inspect(body, func(n ast.Node) bool {
@@ -884,6 +918,7 @@ func countCompositeLitsByType(body *ast.BlockStmt, typeName string) int {
 	return count
 }
 
+// countLiteralSubtestsInBlock walks a function body to count literal t.Run declarations.
 func countLiteralSubtestsInBlock(body *ast.BlockStmt) int {
 	if body == nil {
 		return 0
@@ -911,6 +946,7 @@ func countLiteralSubtestsInBlock(body *ast.BlockStmt) int {
 	return count
 }
 
+// updateTestsSection replaces README test metrics with counts derived from current source.
 func updateTestsSection(readme string, tests TestCounts, matrix ContractMatrix) (string, error) {
 	start := strings.Index(readme, testCountStart)
 	end := strings.Index(readme, testCountEnd)
@@ -938,6 +974,7 @@ func updateTestsSection(readme string, tests TestCounts, matrix ContractMatrix) 
 	return before + badge + after, nil
 }
 
+// hasIntegrationBuildTag identifies tests that belong to the opt-in integration suite.
 func hasIntegrationBuildTag(src []byte) bool {
 	lines := strings.Split(string(src), "\n")
 	for _, line := range lines {
@@ -964,6 +1001,7 @@ func hasIntegrationBuildTag(src []byte) bool {
 // ------------------------------------------------------------
 //
 
+// findRoot locates the repository root from supported generator working directories.
 func findRoot() (string, error) {
 	wd, _ := os.Getwd()
 	for _, c := range []string{wd, filepath.Join(wd, ".."), filepath.Join(wd, "..", ".."), filepath.Join(wd, "..", "..", "..")} {
@@ -975,11 +1013,13 @@ func findRoot() (string, error) {
 	return "", fmt.Errorf("could not find project root")
 }
 
+// fileExists reports whether a candidate project marker is present.
 func fileExists(p string) bool {
 	_, err := os.Stat(p)
 	return err == nil
 }
 
+// normalizeIndent removes shared leading indentation while preserving code shape.
 func normalizeIndent(lines []string) []string {
 	min := -1
 

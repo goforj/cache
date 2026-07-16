@@ -11,6 +11,7 @@ import (
 	"github.com/goforj/cache/driver/postgrescache"
 )
 
+// main keeps this generated example executable so API drift fails during compilation.
 func main() {
 	// Example: postgres via explicit driver config.
 	store, err := postgrescache.New(postgrescache.Config{

@@ -9,6 +9,7 @@ import (
 	"github.com/goforj/cache/cachecore"
 )
 
+// TestGenericTypedWrappers verifies typed cache helpers encode and decode values consistently.
 func TestGenericTypedWrappers(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -47,6 +48,7 @@ func TestGenericTypedWrappers(t *testing.T) {
 	}
 }
 
+// TestGenericRefreshAheadAndRememberStaleWrappers verifies typed stale-value helpers preserve callback values.
 func TestGenericRefreshAheadAndRememberStaleWrappers(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -83,6 +85,7 @@ func TestGenericRefreshAheadAndRememberStaleWrappers(t *testing.T) {
 	}
 }
 
+// TestGenericWrapperErrorBranches verifies typed wrappers propagate store and codec failures.
 func TestGenericWrapperErrorBranches(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -123,6 +126,7 @@ func TestGenericWrapperErrorBranches(t *testing.T) {
 	}
 }
 
+// TestObserverFuncAndErrorStoreDriver verifies function observers and failing stores expose their configured behavior.
 func TestObserverFuncAndErrorStoreDriver(t *testing.T) {
 	t.Parallel()
 
@@ -147,18 +151,20 @@ func TestObserverFuncAndErrorStoreDriver(t *testing.T) {
 	}
 }
 
+// TestEncryptingStoreFlushDelegates verifies encryption leaves whole-store flushing to the wrapped store.
 func TestEncryptingStoreFlushDelegates(t *testing.T) {
 	t.Parallel()
 	base := &spyStore{driver: cachecore.DriverMemory}
-	s, err := newEncryptingStore(base, []byte("0123456789abcdef0123456789abcdef"))
+	s, err := cachecore.WrapStore(base, cachecore.BaseConfig{EncryptionKey: []byte("0123456789abcdef0123456789abcdef")})
 	if err != nil {
-		t.Fatalf("newEncryptingStore failed: %v", err)
+		t.Fatalf("WrapStore failed: %v", err)
 	}
 	if err := s.Flush(context.Background()); err != nil {
 		t.Fatalf("Flush failed: %v", err)
 	}
 }
 
+// TestNewStoreForDriverBranches verifies driver selection succeeds for built-ins and rejects unknown names.
 func TestNewStoreForDriverBranches(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

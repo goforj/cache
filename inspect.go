@@ -2,12 +2,12 @@ package cache
 
 import (
 	"context"
-	"errors"
 
 	"github.com/goforj/cache/cachecore"
 )
 
-var ErrInspectorUnsupported = errors.New("cache: inspector unsupported for this store")
+// ErrInspectorUnsupported reports that a Store cannot browse cache metadata.
+var ErrInspectorUnsupported = cachecore.ErrInspectorUnsupported
 
 // Inspector returns the optional browsing interface for the underlying store.
 // @group Core

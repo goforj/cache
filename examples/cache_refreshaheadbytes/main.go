@@ -7,6 +7,7 @@ import (
 	"time"
 )
 
+// main keeps this generated example executable so API drift fails during compilation.
 func main() {
 	// RefreshAheadBytes returns cached value immediately and refreshes asynchronously when near expiry.
 	// On miss, it computes and stores synchronously.

@@ -1,5 +1,6 @@
 //go:build integration
 
+// Package all exercises the shared cache contract against every integration backend.
 package all
 
 import (
@@ -33,6 +34,7 @@ type storeFactory struct {
 	inspector bool
 }
 
+// TestStoreContract_AllDrivers applies the shared store contract to every selected backend.
 func TestStoreContract_AllDrivers(t *testing.T) {
 	fixtures := integrationFixtures(t)
 
@@ -56,6 +58,7 @@ func TestStoreContract_AllDrivers(t *testing.T) {
 	}
 }
 
+// TestObserverContextPropagation_AllDrivers verifies each backend preserves operation context for observers.
 func TestObserverContextPropagation_AllDrivers(t *testing.T) {
 	fixtures := integrationFixtures(t)
 	if len(fixtures) == 0 {
@@ -99,6 +102,7 @@ func TestObserverContextPropagation_AllDrivers(t *testing.T) {
 	}
 }
 
+// integrationFixtures builds factories for every selected local or container-backed driver.
 func integrationFixtures(t *testing.T) []storeFactory {
 	t.Helper()
 
@@ -343,10 +347,12 @@ func integrationFixtures(t *testing.T) []storeFactory {
 	return fixtures
 }
 
+// integrationDriverEnabled reports whether the normalized driver selector includes a name.
 func integrationDriverEnabled(name string) bool {
 	return selectedIntegrationDrivers()[strings.ToLower(name)]
 }
 
+// retryStoreInit tolerates the brief connection failures that follow container readiness.
 func retryStoreInit(timeout, interval time.Duration, fn func() (cachetest.Store, error)) (cachetest.Store, error) {
 	deadline := time.Now().Add(timeout)
 	var lastErr error
@@ -363,6 +369,7 @@ func retryStoreInit(timeout, interval time.Duration, fn func() (cachetest.Store,
 	}
 }
 
+// selectedIntegrationDrivers expands the integration environment selector into backend aliases.
 func selectedIntegrationDrivers() map[string]bool {
 	selected := map[string]bool{
 		"null":              true,
@@ -406,6 +413,7 @@ func selectedIntegrationDrivers() map[string]bool {
 	return selected
 }
 
+// startRedisContainer launches Redis and returns its externally reachable address.
 func startRedisContainer(t *testing.T, ctx context.Context) (testcontainers.Container, string) {
 	t.Helper()
 
@@ -434,6 +442,7 @@ func startRedisContainer(t *testing.T, ctx context.Context) (testcontainers.Cont
 	return container, net.JoinHostPort(host, port.Port())
 }
 
+// startDynamoContainer launches DynamoDB Local and returns its HTTP endpoint.
 func startDynamoContainer(t *testing.T, ctx context.Context) (testcontainers.Container, string) {
 	t.Helper()
 	req := testcontainers.ContainerRequest{
@@ -461,6 +470,7 @@ func startDynamoContainer(t *testing.T, ctx context.Context) (testcontainers.Con
 	return container, "http://" + net.JoinHostPort(host, port.Port())
 }
 
+// startMemcachedContainer launches Memcached and returns its externally reachable address.
 func startMemcachedContainer(t *testing.T, ctx context.Context) (testcontainers.Container, string) {
 	t.Helper()
 
@@ -489,6 +499,7 @@ func startMemcachedContainer(t *testing.T, ctx context.Context) (testcontainers.
 	return container, net.JoinHostPort(host, port.Port())
 }
 
+// startNATSContainer launches a JetStream-enabled NATS server and returns its address.
 func startNATSContainer(t *testing.T, ctx context.Context) (testcontainers.Container, string) {
 	t.Helper()
 
@@ -518,6 +529,7 @@ func startNATSContainer(t *testing.T, ctx context.Context) (testcontainers.Conta
 	return container, net.JoinHostPort(host, port.Port())
 }
 
+// startPostgresContainer launches PostgreSQL and returns its externally reachable address.
 func startPostgresContainer(t *testing.T, ctx context.Context) (testcontainers.Container, string) {
 	t.Helper()
 	req := testcontainers.ContainerRequest{
@@ -546,6 +558,7 @@ func startPostgresContainer(t *testing.T, ctx context.Context) (testcontainers.C
 	return container, net.JoinHostPort(host, port.Port())
 }
 
+// startMySQLContainer launches MySQL and returns its externally reachable address.
 func startMySQLContainer(t *testing.T, ctx context.Context) (testcontainers.Container, string) {
 	t.Helper()
 	req := testcontainers.ContainerRequest{

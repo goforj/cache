@@ -7,11 +7,14 @@ import (
 	"time"
 )
 
+// main keeps this generated example executable so API drift fails during compilation.
 func main() {
 	// SetJSON encodes value as JSON and writes it to key using background context.
 
 	// Example: set typed JSON
-	type Settings struct { Enabled bool `json:"enabled"` }
+	type Settings struct {
+		Enabled bool `json:"enabled"`
+	}
 	ctx := context.Background()
 	c := cache.NewCache(cache.NewMemoryStore(ctx))
 	err := cache.SetJSON(c, "settings:alerts", Settings{Enabled: true}, time.Minute)

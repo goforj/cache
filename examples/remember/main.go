@@ -7,11 +7,14 @@ import (
 	"time"
 )
 
+// main keeps this generated example executable so API drift fails during compilation.
 func main() {
 	// Remember is the ergonomic, typed remember helper using JSON encoding by default.
 
 	// Example: remember typed value
-	type Profile struct { Name string `json:"name"` }
+	type Profile struct {
+		Name string `json:"name"`
+	}
 	ctx := context.Background()
 	c := cache.NewCache(cache.NewMemoryStore(ctx))
 	profile, err := cache.Remember[Profile](c, "profile:42", time.Minute, func() (Profile, error) {

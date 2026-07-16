@@ -9,6 +9,7 @@ import (
 	"github.com/goforj/cache/driver/rediscache"
 )
 
+// main keeps this generated example executable so API drift fails during compilation.
 func main() {
 	// Example: prefix keys via explicit Redis config.
 	store := rediscache.New(rediscache.Config{

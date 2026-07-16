@@ -10,13 +10,14 @@ cd "$ROOT_DIR"
 OUTPUT_FILE="${COVERAGE_OUTPUT:-coverage.txt}"
 TMP_ROOT="${COVERAGE_TMP_DIR:-/tmp/cache-coverage}"
 GOCACHE_DIR="${GOCACHE_DIR:-/tmp/go-build-cache}"
-UNIT_PKGS="${UNIT_PKGS:-./...}"
-INTEGRATION_PKGS="${INTEGRATION_PKGS:-./...}"
 INTEGRATION_TAGS="${INTEGRATION_TAGS:-integration}"
 INTEGRATION_MODULE_DIR="${INTEGRATION_MODULE_DIR:-integration}"
-INTEGRATION_MODULE_PKGS="${INTEGRATION_MODULE_PKGS:-./root ./all}"
 INTEGRATION_MODULE_COVERPKG="${INTEGRATION_MODULE_COVERPKG:-github.com/goforj/cache,github.com/goforj/cache/cachecore,github.com/goforj/cache/cachetest,github.com/goforj/cache/integration/...}"
 INTEGRATION_MODULE_DRIVERS="${INTEGRATION_MODULE_DRIVERS:-memory,file,null,sqlitecache}"
+
+read -r -a unit_packages <<< "${UNIT_PKGS:-./...}"
+read -r -a integration_packages <<< "${INTEGRATION_PKGS:-./...}"
+read -r -a integration_module_packages <<< "${INTEGRATION_MODULE_PKGS:-./root ./all}"
 
 UNIT_DIR="$TMP_ROOT/unit"
 INT_DIR="$TMP_ROOT/integration"
@@ -28,18 +29,18 @@ mkdir -p "$UNIT_DIR" "$INT_DIR" "$INT_MOD_DIR" "$MERGED_DIR"
 
 echo "==> Unit coverage collection"
 GOCACHE="$GOCACHE_DIR" \
-go test -cover -coverpkg=./... $UNIT_PKGS -args -test.gocoverdir="$UNIT_DIR"
+go test -cover -coverpkg=./... "${unit_packages[@]}" -args -test.gocoverdir="$UNIT_DIR"
 
 echo "==> Integration coverage collection"
 GOCACHE="$GOCACHE_DIR" \
-go test -cover -tags="$INTEGRATION_TAGS" -coverpkg=./... $INTEGRATION_PKGS -args -test.gocoverdir="$INT_DIR"
+go test -cover -tags="$INTEGRATION_TAGS" -coverpkg=./... "${integration_packages[@]}" -args -test.gocoverdir="$INT_DIR"
 
 if [[ -d "$INTEGRATION_MODULE_DIR" ]]; then
   echo "==> Integration module coverage collection ($INTEGRATION_MODULE_DIR)"
   (
     cd "$INTEGRATION_MODULE_DIR"
     GOWORK=off GOCACHE="$GOCACHE_DIR" INTEGRATION_DRIVER="$INTEGRATION_MODULE_DRIVERS" \
-    go test -cover -tags="$INTEGRATION_TAGS" -coverpkg="$INTEGRATION_MODULE_COVERPKG" $INTEGRATION_MODULE_PKGS \
+    go test -cover -tags="$INTEGRATION_TAGS" -coverpkg="$INTEGRATION_MODULE_COVERPKG" "${integration_module_packages[@]}" \
       -args -test.gocoverdir="$INT_MOD_DIR"
   )
 fi

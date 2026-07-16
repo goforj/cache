@@ -80,11 +80,15 @@ func New(cfg Config) cachecore.Store {
 	for _, addr := range addrs {
 		pools[addr] = make(chan *memcachedConn, 16)
 	}
-	return &store{addrs: addrs, defaultTTL: ttl, prefix: prefix, pools: pools}
+	backend := &store{addrs: addrs, defaultTTL: ttl, prefix: prefix, pools: pools}
+	wrapped, _ := cachecore.WrapStore(backend, cfg.BaseConfig)
+	return wrapped
 }
 
+// Driver identifies the backend for diagnostics and capability-specific behavior.
 func (s *store) Driver() cachecore.Driver { return cachecore.DriverMemcached }
 
+// Ready verifies that the backend can serve cache operations.
 func (s *store) Ready(ctx context.Context) error {
 	mc, err := s.acquire(ctx)
 	if err != nil {
@@ -108,6 +112,7 @@ func (s *store) Ready(ctx context.Context) error {
 	return nil
 }
 
+// Get returns an owned copy of a stored value and distinguishes misses from failures.
 func (s *store) Get(ctx context.Context, key string) ([]byte, bool, error) {
 	mc, err := s.acquire(ctx)
 	if err != nil {
@@ -154,6 +159,7 @@ func (s *store) Get(ctx context.Context, key string) ([]byte, bool, error) {
 	return cloneBytes(value), true, nil
 }
 
+// Set stores an owned copy of a value using the requested or default TTL.
 func (s *store) Set(ctx context.Context, key string, value []byte, ttl time.Duration) error {
 	if ttl <= 0 {
 		ttl = s.defaultTTL
@@ -194,6 +200,7 @@ func (s *store) Set(ctx context.Context, key string, value []byte, ttl time.Dura
 	return nil
 }
 
+// Add stores a value only when the key is currently absent.
 func (s *store) Add(ctx context.Context, key string, value []byte, ttl time.Duration) (bool, error) {
 	if ttl <= 0 {
 		ttl = s.defaultTTL
@@ -238,6 +245,7 @@ func (s *store) Add(ctx context.Context, key string, value []byte, ttl time.Dura
 	}
 }
 
+// Increment atomically adds delta while preserving the store's TTL contract.
 func (s *store) Increment(ctx context.Context, key string, delta int64, ttl time.Duration) (int64, error) {
 	if delta < 0 {
 		return s.decrement(ctx, key, -delta, ttl)
@@ -245,6 +253,7 @@ func (s *store) Increment(ctx context.Context, key string, delta int64, ttl time
 	return s.incr(ctx, key, delta, ttl, "incr")
 }
 
+// Decrement atomically subtracts delta while preserving the store's TTL contract.
 func (s *store) Decrement(ctx context.Context, key string, delta int64, ttl time.Duration) (int64, error) {
 	if delta < 0 {
 		return s.Increment(ctx, key, -delta, ttl)
@@ -252,10 +261,12 @@ func (s *store) Decrement(ctx context.Context, key string, delta int64, ttl time
 	return s.decrement(ctx, key, delta, ttl)
 }
 
+// decrement routes Memcached subtraction through the shared counter protocol.
 func (s *store) decrement(ctx context.Context, key string, delta int64, ttl time.Duration) (int64, error) {
 	return s.incr(ctx, key, delta, ttl, "decr")
 }
 
+// incr implements both Memcached counter verbs and refreshes their expiration consistently.
 func (s *store) incr(ctx context.Context, key string, delta int64, ttl time.Duration, verb string) (int64, error) {
 	if ttl <= 0 {
 		ttl = s.defaultTTL
@@ -315,6 +326,7 @@ func (s *store) incr(ctx context.Context, key string, delta int64, ttl time.Dura
 	return val, nil
 }
 
+// Delete removes a key and treats an existing miss as success.
 func (s *store) Delete(ctx context.Context, key string) error {
 	mc, err := s.acquire(ctx)
 	if err != nil {
@@ -333,6 +345,7 @@ func (s *store) Delete(ctx context.Context, key string) error {
 	return nil
 }
 
+// DeleteMany removes every requested key under the store's namespace.
 func (s *store) DeleteMany(ctx context.Context, keys ...string) error {
 	for _, key := range keys {
 		if err := s.Delete(ctx, key); err != nil {
@@ -342,6 +355,7 @@ func (s *store) DeleteMany(ctx context.Context, keys ...string) error {
 	return nil
 }
 
+// Flush removes entries within the store's configured scope.
 func (s *store) Flush(ctx context.Context) error {
 	mc, err := s.acquire(ctx)
 	if err != nil {
@@ -365,6 +379,7 @@ func (s *store) Flush(ctx context.Context) error {
 	return nil
 }
 
+// acquire reuses a healthy Memcached connection or dials a configured peer in round-robin order.
 func (s *store) acquire(ctx context.Context) (*memcachedConn, error) {
 	if len(s.addrs) == 0 {
 		return nil, errors.New("memcached: no addresses configured")
@@ -391,6 +406,7 @@ func (s *store) acquire(ctx context.Context) (*memcachedConn, error) {
 	return nil, fmt.Errorf("memcached dial failed: %s", errs.String())
 }
 
+// release returns a healthy Memcached connection to its pool and closes unusable connections.
 func (s *store) release(mc *memcachedConn, bad bool) {
 	if mc == nil || mc.conn == nil {
 		return
@@ -411,6 +427,7 @@ func (s *store) release(mc *memcachedConn, bad bool) {
 	}
 }
 
+// cacheKey applies the configured namespace before a key reaches the backend.
 func (s *store) cacheKey(key string) string {
 	if s.prefix == "" {
 		return key
@@ -418,6 +435,7 @@ func (s *store) cacheKey(key string) string {
 	return s.prefix + ":" + key
 }
 
+// cloneBytes protects store ownership by returning an independent byte slice.
 func cloneBytes(value []byte) []byte {
 	if value == nil {
 		return nil

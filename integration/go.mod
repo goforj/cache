@@ -4,8 +4,8 @@ go 1.24.4
 
 require (
 	github.com/goforj/cache v0.0.0
-	github.com/goforj/cache/cachecore v0.0.0
-	github.com/goforj/cache/cachetest v0.0.0
+	github.com/goforj/cache/cachecore v0.4.0
+	github.com/goforj/cache/cachetest v0.4.0
 	github.com/goforj/cache/driver/dynamocache v0.0.0
 	github.com/goforj/cache/driver/memcachedcache v0.0.0
 	github.com/goforj/cache/driver/mysqlcache v0.0.0
@@ -54,7 +54,7 @@ require (
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-ole/go-ole v1.2.6 // indirect
 	github.com/go-sql-driver/mysql v1.7.1 // indirect
-	github.com/goforj/cache/driver/sqlcore v0.0.0 // indirect
+	github.com/goforj/cache/driver/sqlcore v0.4.0 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/google/uuid v1.6.0 // indirect

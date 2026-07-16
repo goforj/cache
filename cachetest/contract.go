@@ -160,6 +160,7 @@ func RunStoreContract(t *testing.T, store Store, opts Options) {
 
 }
 
+// waitForMiss polls until backend expiration becomes observable or the contract deadline passes.
 func waitForMiss(ctx context.Context, store Store, key string, wait time.Duration) error {
 	deadline := time.Now().Add(wait)
 	for time.Now().Before(deadline) {
@@ -182,6 +183,7 @@ func waitForMiss(ctx context.Context, store Store, key string, wait time.Duratio
 	return nil
 }
 
+// sanitize converts test names into backend-safe cache key fragments.
 func sanitize(s string) string {
 	s = strings.ReplaceAll(s, "/", "_")
 	s = strings.ReplaceAll(s, " ", "_")

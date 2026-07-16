@@ -7,11 +7,14 @@ import (
 	"time"
 )
 
+// main keeps this generated example executable so API drift fails during compilation.
 func main() {
 	// Get returns a typed value for key using the default codec (JSON) when present.
 
 	// Example: get typed values (struct + string)
-	type Profile struct { Name string `json:"name"` }
+	type Profile struct {
+		Name string `json:"name"`
+	}
 	ctx := context.Background()
 	c := cache.NewCache(cache.NewMemoryStore(ctx))
 	_ = cache.Set(c, "profile:42", Profile{Name: "Ada"}, time.Minute)

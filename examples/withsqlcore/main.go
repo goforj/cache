@@ -12,6 +12,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
+// main keeps this generated example executable so API drift fails during compilation.
 func main() {
 	// Example: advanced shared SQL core config (sqlite shown).
 	store, err := sqlcore.New(sqlcore.Config{

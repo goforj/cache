@@ -10,6 +10,7 @@ import (
 	"time"
 )
 
+// main keeps this generated example executable so API drift fails during compilation.
 func main() {
 	// Acquire attempts to acquire the lock once (non-blocking).
 

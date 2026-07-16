@@ -24,6 +24,7 @@ type stubClient struct {
 	delErr    error
 }
 
+// newStubClient creates an empty in-memory Redis client stub.
 func newStubClient() *stubClient {
 	return &stubClient{
 		store: make(map[string]string),
@@ -31,6 +32,7 @@ func newStubClient() *stubClient {
 	}
 }
 
+// expireIfNeeded removes values whose simulated Redis deadline has passed.
 func (c *stubClient) expireIfNeeded(key string) {
 	if deadline, ok := c.ttl[key]; ok && time.Now().After(deadline) {
 		delete(c.ttl, key)
@@ -38,6 +40,7 @@ func (c *stubClient) expireIfNeeded(key string) {
 	}
 }
 
+// Ping returns PONG or the configured readiness failure.
 func (c *stubClient) Ping(ctx context.Context) *redis.StatusCmd {
 	cmd := redis.NewStatusCmd(ctx)
 	if c.pingErr != nil {
@@ -48,6 +51,7 @@ func (c *stubClient) Ping(ctx context.Context) *redis.StatusCmd {
 	return cmd
 }
 
+// Get returns the live in-memory value or Redis's missing-key sentinel.
 func (c *stubClient) Get(ctx context.Context, key string) *redis.StringCmd {
 	cmd := redis.NewStringCmd(ctx)
 	if c.getErr != nil {
@@ -63,6 +67,7 @@ func (c *stubClient) Get(ctx context.Context, key string) *redis.StringCmd {
 	return cmd
 }
 
+// Set stores a value with the requested simulated expiration.
 func (c *stubClient) Set(ctx context.Context, key string, value interface{}, expiration time.Duration) *redis.StatusCmd {
 	cmd := redis.NewStatusCmd(ctx)
 	if c.setErr != nil {
@@ -80,6 +85,7 @@ func (c *stubClient) Set(ctx context.Context, key string, value interface{}, exp
 	return cmd
 }
 
+// SetNX stores a value only when no live value already exists.
 func (c *stubClient) SetNX(ctx context.Context, key string, value interface{}, expiration time.Duration) *redis.BoolCmd {
 	cmd := redis.NewBoolCmd(ctx)
 	if c.setNXErr != nil {
@@ -100,6 +106,7 @@ func (c *stubClient) SetNX(ctx context.Context, key string, value interface{}, e
 	return cmd
 }
 
+// IncrBy parses and updates the in-memory integer value.
 func (c *stubClient) IncrBy(ctx context.Context, key string, value int64) *redis.IntCmd {
 	cmd := redis.NewIntCmd(ctx)
 	if c.incrErr != nil {
@@ -122,6 +129,7 @@ func (c *stubClient) IncrBy(ctx context.Context, key string, value int64) *redis
 	return cmd
 }
 
+// Expire updates the simulated deadline for an existing value.
 func (c *stubClient) Expire(ctx context.Context, key string, expiration time.Duration) *redis.BoolCmd {
 	cmd := redis.NewBoolCmd(ctx)
 	if c.expireErr != nil {
@@ -138,6 +146,7 @@ func (c *stubClient) Expire(ctx context.Context, key string, expiration time.Dur
 	return cmd
 }
 
+// Del removes live values and reports how many existed.
 func (c *stubClient) Del(ctx context.Context, keys ...string) *redis.IntCmd {
 	cmd := redis.NewIntCmd(ctx)
 	if c.delErr != nil {
@@ -157,6 +166,7 @@ func (c *stubClient) Del(ctx context.Context, keys ...string) *redis.IntCmd {
 	return cmd
 }
 
+// Scan returns live keys matching the prefix pattern used by store flushing.
 func (c *stubClient) Scan(ctx context.Context, cursor uint64, match string, count int64) *redis.ScanCmd {
 	cmd := redis.NewScanCmd(ctx, nil)
 	if c.scanErr != nil {

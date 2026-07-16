@@ -14,8 +14,8 @@
     <a href="https://goreportcard.com/report/github.com/goforj/cache"><img src="https://goreportcard.com/badge/github.com/goforj/cache" alt="Go Report Card"></a>
     <a href="https://codecov.io/gh/goforj/cache"><img src="https://codecov.io/gh/goforj/cache/graph/badge.svg?token=B6ROULLKWU"/></a>
 <!-- test-count:embed:start -->
-    <img src="https://img.shields.io/badge/unit_tests-189-brightgreen" alt="Unit tests (executed count)">
-    <img src="https://img.shields.io/badge/integration_tests-113-blue" alt="Integration tests (executed count)">
+    <img src="https://img.shields.io/badge/unit_tests-354-brightgreen" alt="Unit tests (executed count)">
+    <img src="https://img.shields.io/badge/integration_tests-118-blue" alt="Integration tests (executed count)">
 <!-- test-count:embed:end -->
 </p>
 
@@ -147,8 +147,9 @@ func main() {
 | Core | [github.com/goforj/cache/cachetest](https://github.com/goforj/cache/tree/main/cachetest) | Shared store contract test harness |
 | Optional drivers | [github.com/goforj/cache/driver/*cache](https://github.com/goforj/cache/tree/main/driver) | Backend driver modules |
 | Optional drivers | [github.com/goforj/cache/driver/sqlcore](https://github.com/goforj/cache/tree/main/driver/sqlcore) | Shared SQL implementation for dialect wrappers |
-| Testing and tooling | [github.com/goforj/cache/integration](https://github.com/goforj/cache/tree/main/integration) | Integration suites (root, all) |
-| Testing and tooling | [github.com/goforj/cache/docs](https://github.com/goforj/cache/tree/main/docs) | Docs + benchmark tooling |
+| Repository tooling (not published) | [integration](https://github.com/goforj/cache/tree/main/integration) | Integration suites (root, all) |
+| Repository tooling (not published) | [docs](https://github.com/goforj/cache/tree/main/docs) | Docs + benchmark tooling |
+| Repository tooling (not published) | [examples](https://github.com/goforj/cache/tree/main/examples) | Compile-checked examples generated from API docs |
 
 ## Quick Start
 
@@ -265,6 +266,24 @@ type Config struct {
 See the [API Index](#api-index) `Driver Configs` section for per-driver defaults and compile-checked examples for:
 `rediscache`, `memcachedcache`, `natscache`, `dynamocache`, `sqlitecache`, `postgrescache`, `mysqlcache`, and `sqlcore`.
 
+## Value Shaping And Rollout
+
+Every root and optional driver honors the shared value-shaping fields:
+
+- `CompressionGzip` writes a versioned `CMP1` envelope.
+- `EncryptionKey` writes an AES-GCM `ENC1` envelope and requires a 16, 24, or 32 byte key.
+- `MaxValueBytes` bounds both writes and reads, including decompressed output; zero disables it and negative values are invalid.
+- Backend-native counters remain raw so `Increment` and `Decrement` stay atomic.
+
+When compression and encryption are both enabled, the preserved on-disk/wire format is
+`CMP1(ENC1(plaintext))`: encryption happens first and gzip is the outer envelope. Readers pass
+unmarked legacy values through unchanged, so upgraded applications can read existing raw entries.
+
+Optional drivers before this quality pass accepted these fields but did not apply them. Once an
+upgraded process writes a shaped value, an older process cannot decode it. Upgrade all readers
+together (or stop writes during a rolling upgrade) before enabling shaped writes. See
+[Migration to v0.4](docs/migration-v0.4.md) for the full compatibility checklist.
+
 ## Behavior Semantics
 
 For precise runtime semantics, see [Behavior Semantics](docs/behavior-semantics.md):
@@ -307,6 +326,10 @@ Use `INTEGRATION_DRIVER=sqlitecache` (comma-separated) to select which fixtures 
 ```bash
 bash scripts/test-all-modules.sh
 ```
+
+`scripts/check-quality.sh` runs tidy-diff, vet, and tests independently in every module. CI also
+enforces the 89.5% statement-coverage floor for the root package with `scripts/check-coverage.sh`,
+locking in the quality-pass baseline without pretending every adapter module has identical targets.
 
 ## Benchmarks
 
@@ -357,12 +380,13 @@ Many functions also provide `...Context` variants that accept an explicit `conte
 | Group | Functions |
 |------:|:-----------|
 | **Constructors** | [NewFileStore](#newfilestore) · [NewFileStoreWithConfig](#newfilestorewithconfig) · [NewMemoryStore](#newmemorystore) · [NewMemoryStoreWithConfig](#newmemorystorewithconfig) · [NewNullStore](#newnullstore) · [NewNullStoreWithConfig](#newnullstorewithconfig) |
-| **Core** | [Driver](#cache-driver) · [Inspector](#cache-inspector) · [NewCache](#newcache) · [NewCacheWithTTL](#newcachewithttl) · [Ready](#cache-ready) · [Store](#cache-store) · [WithContext](#cache-withcontext) |
+| **Core** | [Cache.WithContext](#cache-withcontext) · [Driver](#cache-driver) · [Inspector](#cache-inspector) · [NewCache](#newcache) · [NewCacheWithTTL](#newcachewithttl) · [Ready](#cache-ready) · [Store](#cache-store) |
 | **Driver Configs** | [Shared BaseConfig](#driver-configs-shared-baseconfig) · [DynamoDB Config](#driver-config-dynamocache) · [Memcached Config](#driver-config-memcachedcache) · [MySQL Config](#driver-config-mysqlcache) · [NATS Config](#driver-config-natscache) · [Postgres Config](#driver-config-postgrescache) · [Redis Config](#driver-config-rediscache) · [SQL Core Config](#driver-config-sqlcore) · [SQLite Config](#driver-config-sqlitecache) |
 | **Invalidation** | [Delete](#cache-delete) · [DeleteMany](#cache-deletemany) · [Flush](#cache-flush) · [Pull](#pull) · [PullBytes](#cache-pullbytes) |
 | **Locking** | [Acquire](#lockhandle-acquire) · [Block](#lockhandle-block) · [Lock](#cache-lock) · [LockHandle.Get](#lockhandle-get) · [NewLockHandle](#cache-newlockhandle) · [Release](#lockhandle-release) · [TryLock](#cache-trylock) · [Unlock](#cache-unlock) |
 | **Memoization** | [NewMemoStore](#newmemostore) |
 | **Observability** | [OnCacheOp](#observerfunc-oncacheop) · [WithObserver](#cache-withobserver) |
+| **Other** | [LockHandle.WithContext](#lockhandle-withcontext) |
 | **Rate Limiting** | [RateLimit](#cache-ratelimit) |
 | **Read Through** | [Remember](#remember) · [RememberBytes](#cache-rememberbytes) · [RememberStale](#rememberstale) · [RememberStaleBytes](#cache-rememberstalebytes) |
 | **Reads** | [BatchGetBytes](#cache-batchgetbytes) · [Get](#get) · [GetBytes](#cache-getbytes) · [GetJSON](#getjson) · [GetString](#cache-getstring) · [ListPage](#listpage) |
@@ -455,6 +479,10 @@ fmt.Println(store.Driver()) // null
 
 ## Core
 
+### <a id="cache-withcontext"></a>Cache.WithContext
+
+WithContext returns a derived cache handle that binds ctx to subsequent operations.
+
 ### <a id="cache-driver"></a>Driver
 
 Driver reports the underlying store driver.
@@ -473,6 +501,7 @@ fmt.Println(ok, inspector.Capabilities().CanList) // true true
 ### <a id="newcache"></a>NewCache
 
 NewCache creates a cache facade bound to a concrete store.
+NewCache panics when store is nil because a cache cannot operate without its required backend.
 
 ```go
 ctx := context.Background()
@@ -484,6 +513,7 @@ fmt.Println(c.Driver()) // memory
 ### <a id="newcachewithttl"></a>NewCacheWithTTL
 
 NewCacheWithTTL lets callers override the default TTL applied when ttl <= 0.
+NewCacheWithTTL panics when store is nil because accepting invalid wiring would defer failure to the first operation.
 
 ```go
 ctx := context.Background()
@@ -512,10 +542,6 @@ c := cache.NewCache(cache.NewMemoryStore(ctx))
 fmt.Println(c.Store().Driver()) // memory
 ```
 
-### <a id="cache-withcontext"></a>WithContext
-
-WithContext returns a derived cache handle that binds ctx to subsequent operations.
-
 ## <a id="driver-configs"></a>Driver Configs
 
 Optional backend config examples (compile-checked from generated examples and driver `New(...)` docs).
@@ -526,9 +552,10 @@ Shared fields are embedded via `cachecore.BaseConfig` on every driver config:
 
 - `DefaultTTL`: defaults to `5*time.Minute` when zero in all optional drivers
 - `Prefix`: defaults to `"app"` when empty in all optional drivers
-- `Compression`: default zero value (`cachecore.CompressionNone`) unless set
-- `MaxValueBytes`: default `0` (no limit) unless set
-- `EncryptionKey`: default `nil` (disabled) unless set
+- `Compression`: gzip writes a versioned CMP1 envelope; the zero value leaves bytes uncompressed
+- `MaxValueBytes`: bounds writes and decoded reads; `0` disables the limit
+- `EncryptionKey`: AES-GCM writes a versioned ENC1 envelope; `nil` disables encryption
+- `Increment` and `Decrement`: bypass shaping so backend-native counters remain atomic
 
 ### <a id="driver-config-dynamocache"></a>DynamoDB
 
@@ -893,8 +920,11 @@ Behavior:
 - Subsequent Get for the same key returns the memoized clone (no backend call).
 - Any write/delete/flush invalidates the memo entry so local reads stay in sync
 with changes made through this process.
+- Successful mutations advance one bounded process generation. This can prevent an
+unrelated in-flight read from being memoized, but it does not evict unrelated hits.
 - Memo data is per-process only; other processes or external writers will not
 invalidate it. Use only when that staleness window is acceptable.
+- NewMemoStore panics when store is nil because the backing store is required.
 
 ```go
 ctx := context.Background()
@@ -922,19 +952,27 @@ obs.OnCacheOp(context.Background(), cache.CacheOpEvent{Operation: "get", Key: "u
 ### <a id="cache-withobserver"></a>WithObserver
 
 WithObserver attaches an observer to receive operation events.
+WithObserver mutates c for backward compatibility and must be called during construction,
+before c is used concurrently. The observer must be safe for concurrent callbacks.
 
 ```go
 ctx := context.Background()
 c := cache.NewCache(cache.NewMemoryStore(ctx))
-c = c.WithObserver(cache.ObserverFunc(func(ctx context.Context, op, key string, hit bool, err error, dur time.Duration, driver cachecore.Driver) {
+c = c.WithObserver(cache.ObserverFunc(func(ctx context.Context, event cache.CacheOpEvent) {
 	// See docs/production-guide.md for a real metrics recipe.
-	fmt.Println(op, driver, hit, err == nil)
+	fmt.Println(event.Operation, event.Driver, event.Hit, event.Err == nil)
 	_ = ctx
-	_ = key
-	_ = dur
+	_ = event.Key
+	_ = event.Duration
 }))
 _, _, _ = c.GetBytes("profile:42")
 ```
+
+## Other
+
+### <a id="lockhandle-withcontext"></a>LockHandle.WithContext
+
+WithContext returns a derived handle that shares lock ownership state with l.
 
 ## Rate Limiting
 
@@ -1378,8 +1416,12 @@ go run ./docs/readme/main.go
 Executed counts (runs tests and counts real `go test -json` test/subtest starts):
 
 ```bash
-go run ./docs/readme/testcounts/main.go
+CACHE_LOCAL_SIBLINGS=1 go run ./docs/readme/testcounts/main.go
 ```
+
+The local-sibling mode uses `go.work` while a coordinated release is still
+untagged. Omit it to verify the published module boundary after all sibling tags
+are available.
 
 ### Watch mode
 

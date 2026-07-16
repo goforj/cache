@@ -5,6 +5,7 @@ import (
 	"testing"
 )
 
+// main keeps this generated example executable so API drift fails during compilation.
 func main() {
 	// AssertCalled verifies key was touched by op the expected number of times.
 

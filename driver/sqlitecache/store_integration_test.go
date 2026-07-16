@@ -12,6 +12,7 @@ import (
 	"github.com/goforj/cache/cachetest"
 )
 
+// TestStoreContract_IntegrationSQLite applies the integration store contract to SQLite.
 func TestStoreContract_IntegrationSQLite(t *testing.T) {
 	if !sqliteIntegrationEnabled() {
 		t.Skip("sqlite integration test disabled by INTEGRATION_DRIVER")
@@ -33,6 +34,7 @@ func TestStoreContract_IntegrationSQLite(t *testing.T) {
 	})
 }
 
+// sqliteIntegrationEnabled reports whether the integration selector includes SQLite aliases.
 func sqliteIntegrationEnabled() bool {
 	value := strings.TrimSpace(strings.ToLower(os.Getenv("INTEGRATION_DRIVER")))
 	if value == "" || value == "all" {

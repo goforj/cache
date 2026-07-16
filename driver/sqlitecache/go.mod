@@ -3,9 +3,9 @@ module github.com/goforj/cache/driver/sqlitecache
 go 1.24.4
 
 require (
-	github.com/goforj/cache/cachecore v0.0.0
-	github.com/goforj/cache/cachetest v0.0.0
-	github.com/goforj/cache/driver/sqlcore v0.0.0
+	github.com/goforj/cache/cachecore v0.4.0
+	github.com/goforj/cache/cachetest v0.4.0
+	github.com/goforj/cache/driver/sqlcore v0.4.0
 	modernc.org/sqlite v1.27.0
 )
 
@@ -29,9 +29,3 @@ require (
 	modernc.org/strutil v1.1.3 // indirect
 	modernc.org/token v1.0.1 // indirect
 )
-
-replace github.com/goforj/cache/cachecore => ../../cachecore
-
-replace github.com/goforj/cache/cachetest => ../../cachetest
-
-replace github.com/goforj/cache/driver/sqlcore => ../sqlcore

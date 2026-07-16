@@ -4,13 +4,14 @@ import (
 	"fmt"
 	"github.com/goforj/cache/cachecore"
 	"github.com/goforj/cache/driver/sqlcore"
-	"time"
 	_ "modernc.org/sqlite"
+	"time"
 )
 
+// main keeps this generated example executable so API drift fails during compilation.
 func main() {
 	// New builds a SQL-backed cachecore.Store (postgres, mysql, sqlite).
-	// 
+	//
 	// Defaults:
 	// - Table: "cache_entries" when empty
 	// - DefaultTTL: 5*time.Minute when zero

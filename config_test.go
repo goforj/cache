@@ -7,6 +7,7 @@ import (
 	"github.com/goforj/cache/cachecore"
 )
 
+// TestStoreConfigWithDefaults verifies omitted settings receive the documented defaults.
 func TestStoreConfigWithDefaults(t *testing.T) {
 	cfg := (StoreConfig{}).withDefaults()
 
@@ -27,6 +28,7 @@ func TestStoreConfigWithDefaults(t *testing.T) {
 	}
 }
 
+// TestStoreConfigWithDefaultsPreservesExplicitValues verifies defaults do not overwrite caller choices.
 func TestStoreConfigWithDefaultsPreservesExplicitValues(t *testing.T) {
 	cfg := (StoreConfig{
 		BaseConfig: cachecore.BaseConfig{

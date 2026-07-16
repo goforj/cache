@@ -1,0 +1,15 @@
+# classification module-directory
+published .
+published cachecore
+published cachetest
+published driver/dynamocache
+published driver/memcachedcache
+published driver/mysqlcache
+published driver/natscache
+published driver/postgrescache
+published driver/rediscache
+published driver/sqlcore
+published driver/sqlitecache
+tooling docs
+tooling examples
+tooling integration

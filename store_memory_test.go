@@ -7,6 +7,7 @@ import (
 	"time"
 )
 
+// TestMemoryStoreSetGetDelete verifies owned bytes round-trip and are removed deterministically.
 func TestMemoryStoreSetGetDelete(t *testing.T) {
 	store := newMemoryStore(0, 0)
 
@@ -41,6 +42,7 @@ func TestMemoryStoreSetGetDelete(t *testing.T) {
 	}
 }
 
+// TestMemoryStoreHonorsExplicitTTL verifies positive per-write expiration overrides the default.
 func TestMemoryStoreHonorsExplicitTTL(t *testing.T) {
 	store := newMemoryStore(0, 0)
 	if err := store.Set(context.Background(), "ttl-key", []byte("value"), 50*time.Millisecond); err != nil {
@@ -56,6 +58,7 @@ func TestMemoryStoreHonorsExplicitTTL(t *testing.T) {
 	}
 }
 
+// TestMemoryStoreAddAndNumericOperations verifies conditional creation and atomic counter updates.
 func TestMemoryStoreAddAndNumericOperations(t *testing.T) {
 	store := newMemoryStore(0, 0)
 	ctx := context.Background()
@@ -92,6 +95,7 @@ func TestMemoryStoreAddAndNumericOperations(t *testing.T) {
 	}
 }
 
+// TestMemoryStoreDeleteManyAndFlush verifies batch removal and full clearing update in-memory state.
 func TestMemoryStoreDeleteManyAndFlush(t *testing.T) {
 	store := newMemoryStore(0, 0)
 	ctx := context.Background()
@@ -120,6 +124,7 @@ func TestMemoryStoreDeleteManyAndFlush(t *testing.T) {
 	}
 }
 
+// TestMemoryStoreIncrementInvalidNumber verifies counters reject non-integer payloads.
 func TestMemoryStoreIncrementInvalidNumber(t *testing.T) {
 	store := newMemoryStore(0, 0)
 	ctx := context.Background()
@@ -131,6 +136,7 @@ func TestMemoryStoreIncrementInvalidNumber(t *testing.T) {
 	}
 }
 
+// TestMemoryStoreAddUsesDefaultTTLWhenMissing verifies conditional writes inherit the configured expiration.
 func TestMemoryStoreAddUsesDefaultTTLWhenMissing(t *testing.T) {
 	store := newMemoryStore(defaultCacheTTL, 0).(*memoryStore)
 	ctx := context.Background()
@@ -143,6 +149,7 @@ func TestMemoryStoreAddUsesDefaultTTLWhenMissing(t *testing.T) {
 	}
 }
 
+// TestMemoryStoreCleanupIntervalSweeps verifies background cleanup removes expired entries without a read.
 func TestMemoryStoreCleanupIntervalSweeps(t *testing.T) {
 	store := newMemoryStore(5*time.Millisecond, 2*time.Millisecond)
 	ctx := context.Background()
@@ -155,6 +162,7 @@ func TestMemoryStoreCleanupIntervalSweeps(t *testing.T) {
 	}
 }
 
+// TestMemoryStoreReadInt64Variants verifies numeric decoding distinguishes misses, values, and malformed data.
 func TestMemoryStoreReadInt64Variants(t *testing.T) {
 	ms := newMemoryStore(0, 0).(*memoryStore)
 

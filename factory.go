@@ -7,6 +7,7 @@ import (
 	"github.com/goforj/cache/cachecore"
 )
 
+// newStoreForDriver keeps root-backed construction and shared shaping in one fail-closed path.
 func newStoreForDriver(ctx context.Context, driver cachecore.Driver, cfg StoreConfig) cachecore.Store {
 	cfg = cfg.withDefaults()
 	var store cachecore.Store
@@ -30,12 +31,11 @@ func newStoreForDriver(ctx context.Context, driver cachecore.Driver, cfg StoreCo
 	default:
 		return &errorStore{driver: driver, err: errors.New("unknown driver; use explicit root constructor or driver module")}
 	}
-	store = newShapingStore(store, cfg.Compression, cfg.MaxValueBytes)
-	encStore, err := newEncryptingStore(store, cfg.EncryptionKey)
+	wrapped, err := cachecore.WrapStore(store, cfg.BaseConfig)
 	if err != nil {
 		return &errorStore{driver: driver, err: err}
 	}
-	return encStore
+	return wrapped
 }
 
 // NewMemoryStore is a convenience for an in-process store using defaults.

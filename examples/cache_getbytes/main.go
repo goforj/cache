@@ -6,6 +6,7 @@ import (
 	"github.com/goforj/cache"
 )
 
+// main keeps this generated example executable so API drift fails during compilation.
 func main() {
 	// GetBytes returns raw bytes for key when present.
 

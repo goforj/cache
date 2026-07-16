@@ -7,6 +7,7 @@ import (
 	"time"
 )
 
+// main keeps this generated example executable so API drift fails during compilation.
 func main() {
 	// PullBytes returns value and removes it from cache.
 

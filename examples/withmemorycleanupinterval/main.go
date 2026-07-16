@@ -10,6 +10,7 @@ import (
 	"time"
 )
 
+// main keeps this generated example executable so API drift fails during compilation.
 func main() {
 	// Example: custom memory sweep via explicit StoreConfig.
 	ctx := context.Background()

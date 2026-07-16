@@ -8,6 +8,22 @@ Configuration references in this document use the current layout:
 - root store constructors with config (`NewMemoryStoreWithConfig`, `NewFileStoreWithConfig`, `NewNullStoreWithConfig`)
 - optional driver configs that embed `cachecore.BaseConfig` (for example `rediscache.Config`, `natscache.Config`)
 
+## Value Shaping
+
+All root and optional drivers apply `cachecore.BaseConfig` shaping consistently:
+
+- unmarked legacy values pass through unchanged on reads
+- gzip values use the `CMP1` envelope
+- encrypted values use AES-GCM in the `ENC1` envelope
+- combined values persist as `CMP1(ENC1(plaintext))`
+- `MaxValueBytes` applies before writes and during reads, including bounded decompression; zero
+  disables it and negative values fail construction
+- `Increment` and `Decrement` bypass shaping to preserve backend-native atomic counters
+
+Encryption keys must be 16, 24, or 32 bytes. Unsupported compression and invalid keys fail
+construction; constructors without an error return expose the configuration error from `Ready`
+and every Store operation.
+
 ## TTL And Default TTL Matrix
 
 Cache resolves TTL with:

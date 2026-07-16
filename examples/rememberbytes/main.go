@@ -10,6 +10,7 @@ import (
 	"time"
 )
 
+// main keeps this generated example executable so API drift fails during compilation.
 func main() {
 	// RememberBytes returns key value or computes/stores it when missing.
 

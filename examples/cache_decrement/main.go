@@ -7,6 +7,7 @@ import (
 	"time"
 )
 
+// main keeps this generated example executable so API drift fails during compilation.
 func main() {
 	// Decrement decrements a numeric value and returns the result.
 

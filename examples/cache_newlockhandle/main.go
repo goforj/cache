@@ -7,6 +7,7 @@ import (
 	"time"
 )
 
+// main keeps this generated example executable so API drift fails during compilation.
 func main() {
 	// NewLockHandle creates a reusable lock handle for a key/ttl pair.
 

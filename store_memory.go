@@ -18,6 +18,7 @@ type memoryStore struct {
 	mu         sync.Mutex
 }
 
+// newMemoryStore normalizes timing defaults before constructing the third-party in-memory engine.
 func newMemoryStore(defaultTTL, cleanupInterval time.Duration) cachecore.Store {
 	if defaultTTL <= 0 {
 		defaultTTL = defaultCacheTTL
@@ -31,14 +32,17 @@ func newMemoryStore(defaultTTL, cleanupInterval time.Duration) cachecore.Store {
 	}
 }
 
+// Driver identifies the backend for diagnostics and capability-specific behavior.
 func (s *memoryStore) Driver() cachecore.Driver {
 	return cachecore.DriverMemory
 }
 
+// Ready verifies that the backend can serve cache operations.
 func (s *memoryStore) Ready(context.Context) error {
 	return nil
 }
 
+// Get returns an owned copy of a stored value and distinguishes misses from failures.
 func (s *memoryStore) Get(_ context.Context, key string) ([]byte, bool, error) {
 	item, ok := s.cache.Get(key)
 	if !ok {
@@ -53,6 +57,7 @@ func (s *memoryStore) Get(_ context.Context, key string) ([]byte, bool, error) {
 	return clone, true, nil
 }
 
+// Set stores an owned copy of a value using the requested or default TTL.
 func (s *memoryStore) Set(_ context.Context, key string, value []byte, ttl time.Duration) error {
 	if ttl <= 0 {
 		ttl = s.defaultTTL
@@ -63,6 +68,7 @@ func (s *memoryStore) Set(_ context.Context, key string, value []byte, ttl time.
 	return nil
 }
 
+// Add stores a value only when the key is currently absent.
 func (s *memoryStore) Add(_ context.Context, key string, value []byte, ttl time.Duration) (bool, error) {
 	if ttl <= 0 {
 		ttl = s.defaultTTL
@@ -78,6 +84,7 @@ func (s *memoryStore) Add(_ context.Context, key string, value []byte, ttl time.
 	return true, nil
 }
 
+// Increment atomically adds delta while preserving the store's TTL contract.
 func (s *memoryStore) Increment(_ context.Context, key string, delta int64, ttl time.Duration) (int64, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -94,15 +101,18 @@ func (s *memoryStore) Increment(_ context.Context, key string, delta int64, ttl 
 	return next, nil
 }
 
+// Decrement atomically subtracts delta while preserving the store's TTL contract.
 func (s *memoryStore) Decrement(ctx context.Context, key string, delta int64, ttl time.Duration) (int64, error) {
 	return s.Increment(ctx, key, -delta, ttl)
 }
 
+// Delete removes a key and treats an existing miss as success.
 func (s *memoryStore) Delete(_ context.Context, key string) error {
 	s.cache.Delete(key)
 	return nil
 }
 
+// DeleteMany removes every requested key under the store's namespace.
 func (s *memoryStore) DeleteMany(_ context.Context, keys ...string) error {
 	for _, key := range keys {
 		s.cache.Delete(key)
@@ -110,11 +120,13 @@ func (s *memoryStore) DeleteMany(_ context.Context, keys ...string) error {
 	return nil
 }
 
+// Flush removes entries within the store's configured scope.
 func (s *memoryStore) Flush(_ context.Context) error {
 	s.cache.Flush()
 	return nil
 }
 
+// Capabilities reports the optional inspection operations supported by the store.
 func (s *memoryStore) Capabilities() cachecore.InspectorCapabilities {
 	return cachecore.InspectorCapabilities{
 		CanList:   true,
@@ -124,6 +136,7 @@ func (s *memoryStore) Capabilities() cachecore.InspectorCapabilities {
 	}
 }
 
+// ListPage returns a filtered, deterministic page of inspectable cache entries.
 func (s *memoryStore) ListPage(_ context.Context, opts cachecore.ListPageOptions) (cachecore.ListPageResult, error) {
 	items := s.cache.Items()
 	entries := make([]cachecore.CacheEntry, 0, len(items))
@@ -137,7 +150,7 @@ func (s *memoryStore) ListPage(_ context.Context, opts cachecore.ListPageOptions
 		}
 		var expiresAt *int64
 		if item.Expiration > 0 {
-			exp := item.Expiration
+			exp := time.Unix(0, item.Expiration).UnixMilli()
 			expiresAt = &exp
 		}
 		entries = append(entries, cachecore.CacheEntry{
@@ -154,6 +167,7 @@ func (s *memoryStore) ListPage(_ context.Context, opts cachecore.ListPageOptions
 	return cachecore.SliceEntries(filtered, offset, opts.Limit), nil
 }
 
+// readInt64 accepts historical numeric representations while rejecting lossy conversions.
 func (s *memoryStore) readInt64(key string) (int64, bool, error) {
 	body, ok := s.cache.Get(key)
 	if !ok {

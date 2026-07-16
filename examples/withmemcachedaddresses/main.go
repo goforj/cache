@@ -8,6 +8,7 @@ import (
 	"github.com/goforj/cache/driver/memcachedcache"
 )
 
+// main keeps this generated example executable so API drift fails during compilation.
 func main() {
 	// Example: memcached cluster via explicit driver config.
 	store := memcachedcache.New(memcachedcache.Config{

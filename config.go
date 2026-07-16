@@ -14,6 +14,7 @@ const (
 	defaultMemoryCleanupInterval = 10 * time.Minute
 )
 
+// defaultFileDir isolates the convenience file store under the operating system temporary directory.
 func defaultFileDir() string {
 	return filepath.Join(os.TempDir(), "cache-file")
 }
@@ -29,6 +30,7 @@ type StoreConfig struct {
 	FileDir string
 }
 
+// withDefaults returns a normalized copy so caller-owned configuration is never mutated.
 func (c StoreConfig) withDefaults() StoreConfig {
 	if c.DefaultTTL <= 0 {
 		c.DefaultTTL = defaultCacheTTL

@@ -7,11 +7,14 @@ import (
 	"time"
 )
 
+// main keeps this generated example executable so API drift fails during compilation.
 func main() {
 	// Pull returns a typed value for key and removes it, using the default codec (JSON).
 
 	// Example: pull typed value
-	type Token struct { Value string `json:"value"` }
+	type Token struct {
+		Value string `json:"value"`
+	}
 	ctx := context.Background()
 	c := cache.NewCache(cache.NewMemoryStore(ctx))
 	_ = cache.Set(c, "reset:token:42", Token{Value: "abc"}, time.Minute)

@@ -1,3 +1,4 @@
+// Package examples verifies that the generated API examples remain buildable.
 package examples
 
 import (
@@ -13,6 +14,7 @@ import (
 	"testing"
 )
 
+// TestExamplesBuild verifies every generated example compiles with its documented build tags.
 func TestExamplesBuild(t *testing.T) {
 	t.Parallel()
 	examplesDir := "."
@@ -41,6 +43,7 @@ func TestExamplesBuild(t *testing.T) {
 	}
 }
 
+// abs resolves overlay paths because the Go tool requires absolute replacement targets.
 func abs(p string) string {
 	a, err := filepath.Abs(p)
 	if err != nil {
@@ -49,6 +52,7 @@ func abs(p string) string {
 	return a
 }
 
+// buildExampleWithoutTags compiles an example through an overlay after removing environment-specific constraints.
 func buildExampleWithoutTags(exampleDir string) error {
 	orig := filepath.Join(exampleDir, "main.go")
 
@@ -110,6 +114,7 @@ func buildExampleWithoutTags(exampleDir string) error {
 	return nil
 }
 
+// exampleBuildGoMod describes local replacements for every module imported by generated examples.
 func exampleBuildGoMod() string {
 	root := abs("..")
 	sep := string(filepath.Separator)
@@ -151,6 +156,7 @@ func exampleBuildGoMod() string {
 	return strings.Join(lines, "\n")
 }
 
+// stripBuildTags removes leading constraints so compile tests can cover every generated example.
 func stripBuildTags(src []byte) []byte {
 	lines := strings.Split(string(src), "\n")
 

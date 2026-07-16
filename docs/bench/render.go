@@ -1,6 +1,7 @@
 //go:build benchrender
 // +build benchrender
 
+// Package bench renders reproducible cache benchmark documentation.
 package bench
 
 import (
@@ -87,6 +88,7 @@ func RenderBenchmarks() {
 	fmt.Println("✔ Benchmarks dashboard updated")
 }
 
+// runBenchmarks measures each configured backend and returns normalized result rows.
 func runBenchmarks(ctx context.Context) map[string][]benchRow {
 	drivers := []string{"memory", "file", "redis", "memcached", "sql_postgres", "sql_mysql", "sql_sqlite"}
 	ops := map[string]struct {
@@ -183,6 +185,7 @@ func runBenchmarks(ctx context.Context) map[string][]benchRow {
 	return results
 }
 
+// benchOp measures one cache operation while keeping setup work outside the timed region.
 func benchOp(ctx context.Context, c *cache.Cache, fn func(context.Context, *cache.Cache)) (nsPerOp, bytesPerOp, allocsPerOp float64, ops int64) {
 	res := testing.Benchmark(func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
@@ -197,62 +200,77 @@ type benchProfile struct {
 	Level int    `json:"level"`
 }
 
+// doSetBytes executes the byte write measured by the benchmark harness.
 func doSetBytes(ctx context.Context, c *cache.Cache) {
 	_ = c.SetBytes("bench:key", []byte("v"), time.Minute)
 }
 
+// doSetString executes the string write measured by the benchmark harness.
 func doSetString(ctx context.Context, c *cache.Cache) {
 	_ = c.SetString("bench:key", "v", time.Minute)
 }
 
+// doSetTypedString executes the typed string write measured by the benchmark harness.
 func doSetTypedString(ctx context.Context, c *cache.Cache) {
 	_ = cache.Set(c, "bench:key", "v", time.Minute)
 }
 
+// doSetTypedStruct executes the typed struct write measured by the benchmark harness.
 func doSetTypedStruct(ctx context.Context, c *cache.Cache) {
 	_ = cache.Set(c, "bench:key", benchProfile{Name: "Ada", Level: 7}, time.Minute)
 }
 
+// setupGetBytes seeds the byte value required by the timed lookup benchmark.
 func setupGetBytes(ctx context.Context, c *cache.Cache) {
 	_ = c.SetBytes("bench:key", []byte("v"), time.Minute)
 }
 
+// setupGetString seeds the string value required by the timed lookup benchmark.
 func setupGetString(ctx context.Context, c *cache.Cache) {
 	_ = c.SetString("bench:key", "v", time.Minute)
 }
 
+// setupGetTypedString seeds the typed string required by the timed lookup benchmark.
 func setupGetTypedString(ctx context.Context, c *cache.Cache) {
 	_ = cache.Set(c, "bench:key", "v", time.Minute)
 }
 
+// setupGetTypedStruct seeds the typed struct required by the timed lookup benchmark.
 func setupGetTypedStruct(ctx context.Context, c *cache.Cache) {
 	_ = cache.Set(c, "bench:key", benchProfile{Name: "Ada", Level: 7}, time.Minute)
 }
 
+// setupDelete seeds the key required by the timed delete benchmark.
 func setupDelete(ctx context.Context, c *cache.Cache) {
 	_ = c.SetBytes("bench:key", []byte("v"), time.Minute)
 }
 
+// doGetBytes executes the byte lookup measured by the benchmark harness.
 func doGetBytes(ctx context.Context, c *cache.Cache) {
 	_, _, _ = c.GetBytes("bench:key")
 }
 
+// doGetString executes the string lookup measured by the benchmark harness.
 func doGetString(ctx context.Context, c *cache.Cache) {
 	_, _, _ = c.GetString("bench:key")
 }
 
+// doGetTypedString executes the typed string lookup measured by the benchmark harness.
 func doGetTypedString(ctx context.Context, c *cache.Cache) {
 	_, _, _ = cache.Get[string](c, "bench:key")
 }
 
+// doGetTypedStruct executes the typed struct lookup measured by the benchmark harness.
 func doGetTypedStruct(ctx context.Context, c *cache.Cache) {
 	_, _, _ = cache.Get[benchProfile](c, "bench:key")
 }
 
+// doDelete executes the delete operation measured by the benchmark harness.
 func doDelete(ctx context.Context, c *cache.Cache) {
 	_ = c.Delete("bench:key")
 }
 
+// natsBenchURL resolves the optional NATS endpoint used by local benchmark runs.
 func natsBenchURL(ctx context.Context) (string, func(), bool) {
 	if addr := os.Getenv("NATS_URL"); addr != "" {
 		return addr, func() {}, true
@@ -279,6 +297,7 @@ func natsBenchURL(ctx context.Context) (string, func(), bool) {
 	return url, cleanup, true
 }
 
+// renderTable formats benchmark rows as a deterministic Markdown table.
 func renderTable(byOp map[string][]benchRow) string {
 	var buf bytes.Buffer
 	buf.WriteString(benchStart + "\n\n")
@@ -298,6 +317,7 @@ func renderTable(byOp map[string][]benchRow) string {
 	return buf.String()
 }
 
+// writeDashboard writes benchmark tables and charts from one consistent result set.
 func writeDashboard(root string, byOp map[string][]benchRow) error {
 	ops := benchChartOps()
 	byDriver := map[string]map[string]float64{}
@@ -336,6 +356,7 @@ func writeDashboard(root string, byOp map[string][]benchRow) error {
 	})
 }
 
+// orderDrivers arranges benchmark backends in a stable reader-facing order.
 func orderDrivers(drivers []string) []string {
 	order := []string{
 		"memory",
@@ -369,6 +390,7 @@ func orderDrivers(drivers []string) []string {
 	return out
 }
 
+// writeMetricSVG renders one benchmark metric chart as deterministic SVG.
 func writeMetricSVG(root, fileName, title, yUnit, scale string, drivers []string, byOp map[string][]benchRow, valueFn func(benchRow) float64) error {
 	ops := benchChartOps()
 	byDriver := map[string]map[string]float64{}
@@ -383,6 +405,7 @@ func writeMetricSVG(root, fileName, title, yUnit, scale string, drivers []string
 	return writeDashboardSVG(root, fileName, title, yUnit, scale, drivers, byDriver)
 }
 
+// writeDashboardSVG renders the combined benchmark dashboard as deterministic SVG.
 func writeDashboardSVG(root, fileName, title, yUnit, scale string, drivers []string, byDriver map[string]map[string]float64) error {
 	if scale == "split" {
 		return writeDashboardSplitSVG(root, fileName, title, yUnit, drivers, byDriver)
@@ -509,6 +532,7 @@ func writeDashboardSVG(root, fileName, title, yUnit, scale string, drivers []str
 	return os.WriteFile(outPath, svg.Bytes(), 0o644)
 }
 
+// mapValue maps metric values into chart coordinates using the selected scale.
 func mapValue(v float64, scale string) float64 {
 	if scale == "log" {
 		return math.Log10(v + 1)
@@ -516,6 +540,7 @@ func mapValue(v float64, scale string) float64 {
 	return v
 }
 
+// unmapValue reverses chart scaling when drawing axis labels.
 func unmapValue(v float64, scale string) float64 {
 	if scale == "log" {
 		return math.Pow(10, v) - 1
@@ -523,6 +548,7 @@ func unmapValue(v float64, scale string) float64 {
 	return v
 }
 
+// writeDashboardSplitSVG renders per-metric charts for readable documentation layouts.
 func writeDashboardSplitSVG(root, fileName, title, yUnit string, drivers []string, byDriver map[string]map[string]float64) error {
 	const (
 		width       = 1600
@@ -654,6 +680,7 @@ func writeDashboardSplitSVG(root, fileName, title, yUnit string, drivers []strin
 	return os.WriteFile(outPath, svg.Bytes(), 0o644)
 }
 
+// benchChartOps returns the stable operation order shared by benchmark charts.
 func benchChartOps() []string {
 	return []string{
 		"get_bytes",
@@ -668,6 +695,7 @@ func benchChartOps() []string {
 	}
 }
 
+// benchOpLabel converts benchmark operation keys into reader-facing labels.
 func benchOpLabel(op string) string {
 	switch op {
 	case "get_bytes":
@@ -693,6 +721,7 @@ func benchOpLabel(op string) string {
 	}
 }
 
+// benchOpColors assigns stable presentation colors to benchmark operations.
 func benchOpColors() map[string]string {
 	return map[string]string{
 		"get_bytes":        "#4e79a7",
@@ -707,6 +736,7 @@ func benchOpColors() map[string]string {
 	}
 }
 
+// metricPreference declares whether lower or higher values represent better benchmark results.
 func metricPreference(yUnit string) string {
 	switch yUnit {
 	case "N":
@@ -716,6 +746,7 @@ func metricPreference(yUnit string) string {
 	}
 }
 
+// displayDriverName converts internal driver identifiers into documentation labels.
 func displayDriverName(name string) string {
 	switch name {
 	case "sql_sqlite":
@@ -729,6 +760,7 @@ func displayDriverName(name string) string {
 	}
 }
 
+// saveBenchmarkRows persists benchmark data in the stable format consumed by rendering.
 func saveBenchmarkRows(path string, rows map[string][]benchRow) error {
 	body, err := json.MarshalIndent(rows, "", "  ")
 	if err != nil {
@@ -737,6 +769,7 @@ func saveBenchmarkRows(path string, rows map[string][]benchRow) error {
 	return os.WriteFile(path, body, 0o644)
 }
 
+// loadBenchmarkRows reads previously captured benchmark data for deterministic rendering.
 func loadBenchmarkRows(path string) (map[string][]benchRow, error) {
 	body, err := os.ReadFile(path)
 	if err != nil {
@@ -749,6 +782,7 @@ func loadBenchmarkRows(path string) (map[string][]benchRow, error) {
 	return rows, nil
 }
 
+// injectTable replaces the generated benchmark table without disturbing hand-written documentation.
 func injectTable(readme, table string) string {
 	start := strings.Index(readme, benchStart)
 	end := strings.Index(readme, benchEnd)
@@ -765,6 +799,7 @@ func injectTable(readme, table string) string {
 	return out.String()
 }
 
+// buildCache constructs the selected benchmark backend and its cleanup function.
 // Simplified builder: uses env when present, otherwise best-effort testcontainers for redis/memcached/postgres/mysql.
 func buildCache(ctx context.Context, name string, opts ...benchStoreOption) (*cache.Cache, func(), bool) {
 	switch name {
@@ -891,6 +926,7 @@ func buildCache(ctx context.Context, name string, opts ...benchStoreOption) (*ca
 
 // --- container helpers (simplified; duplicated from bench_test) ---
 
+// startRedis launches the local Redis dependency used by benchmark rendering.
 func startRedis(ctx context.Context, opts ...benchStoreOption) (*cache.Cache, func(), error) {
 	req := testcontainers.ContainerRequest{Image: "redis:7-bookworm", ExposedPorts: []string{"6379/tcp"}, WaitingFor: wait.ForListeningPort("6379/tcp").WithStartupTimeout(30 * time.Second)}
 	c, addr, err := startContainer(ctx, req, "6379/tcp")
@@ -914,6 +950,7 @@ func startRedis(ctx context.Context, opts ...benchStoreOption) (*cache.Cache, fu
 	return cache.NewCache(store), cleanup, nil
 }
 
+// startMemcached launches the local Memcached dependency used by benchmark rendering.
 func startMemcached(ctx context.Context, opts ...benchStoreOption) (*cache.Cache, func(), error) {
 	req := testcontainers.ContainerRequest{Image: "memcached:1.6-bookworm", ExposedPorts: []string{"11211/tcp"}, WaitingFor: wait.ForListeningPort("11211/tcp").WithStartupTimeout(30 * time.Second)}
 	c, addr, err := startContainer(ctx, req, "11211/tcp")
@@ -936,6 +973,7 @@ func startMemcached(ctx context.Context, opts ...benchStoreOption) (*cache.Cache
 	return cache.NewCache(store), cleanup, nil
 }
 
+// startDynamo launches the local DynamoDB dependency used by benchmark rendering.
 func startDynamo(ctx context.Context, opts ...benchStoreOption) (*cache.Cache, func(), error) {
 	req := testcontainers.ContainerRequest{Image: "amazon/dynamodb-local:latest", ExposedPorts: []string{"8000/tcp"}, WaitingFor: wait.ForListeningPort("8000/tcp").WithStartupTimeout(45 * time.Second)}
 	c, addr, err := startContainer(ctx, req, "8000/tcp")
@@ -952,6 +990,7 @@ func startDynamo(ctx context.Context, opts ...benchStoreOption) (*cache.Cache, f
 	return cache.NewCache(store), cleanup, nil
 }
 
+// startPostgres launches the local PostgreSQL dependency used by benchmark rendering.
 func startPostgres(ctx context.Context, opts ...benchStoreOption) (*cache.Cache, func(), error) {
 	req := testcontainers.ContainerRequest{Image: "postgres:16-bookworm", Env: map[string]string{"POSTGRES_PASSWORD": "pass", "POSTGRES_USER": "user", "POSTGRES_DB": "app"}, ExposedPorts: []string{"5432/tcp"}, WaitingFor: wait.ForListeningPort("5432/tcp").WithStartupTimeout(60 * time.Second)}
 	c, addr, err := startContainer(ctx, req, "5432/tcp")
@@ -968,6 +1007,7 @@ func startPostgres(ctx context.Context, opts ...benchStoreOption) (*cache.Cache,
 	return cache.NewCache(store), cleanup, nil
 }
 
+// startMySQL launches the local MySQL dependency used by benchmark rendering.
 func startMySQL(ctx context.Context, opts ...benchStoreOption) (*cache.Cache, func(), error) {
 	req := testcontainers.ContainerRequest{
 		Image:        "mysql:8",
@@ -992,6 +1032,7 @@ func startMySQL(ctx context.Context, opts ...benchStoreOption) (*cache.Cache, fu
 	return cache.NewCache(store), cleanup, nil
 }
 
+// startNATS launches the local JetStream dependency used by benchmark rendering.
 func startNATS(ctx context.Context, opts ...benchStoreOption) (*cache.Cache, func(), error) {
 	req := testcontainers.ContainerRequest{
 		Image:        "nats:2",
@@ -1021,6 +1062,7 @@ func startNATS(ctx context.Context, opts ...benchStoreOption) (*cache.Cache, fun
 	return cacheValue, cleanup, nil
 }
 
+// newNATSBenchCache provisions an isolated JetStream bucket for one benchmark run.
 func newNATSBenchCache(ctx context.Context, natsURL string, opts ...benchStoreOption) (*cache.Cache, func(), error) {
 	nc, err := connectNATSWithRetry(natsURL, 5*time.Second)
 	if err != nil {
@@ -1060,6 +1102,7 @@ func newNATSBenchCache(ctx context.Context, natsURL string, opts ...benchStoreOp
 	return cache.NewCache(store), cleanup, nil
 }
 
+// newSQLRenderStore opens and verifies a SQL backend before benchmark measurement.
 func newSQLRenderStore(driverName, dsn string, opts ...benchStoreOption) (cachecore.Store, error) {
 	cfg := sqlcore.Config{
 		DriverName: driverName,
@@ -1086,6 +1129,7 @@ func newSQLRenderStore(driverName, dsn string, opts ...benchStoreOption) (cachec
 	return sqlcore.New(cfg)
 }
 
+// newDynamoRenderStore constructs the benchmark store after its local table is ready.
 func newDynamoRenderStore(ctx context.Context, endpoint string, opts ...benchStoreOption) (cachecore.Store, error) {
 	cfg := dynamocache.Config{
 		Endpoint: endpoint,
@@ -1119,6 +1163,7 @@ func newDynamoRenderStore(ctx context.Context, endpoint string, opts ...benchSto
 	return dynamocache.New(ctx, cfg)
 }
 
+// connectNATSWithRetry tolerates container startup races while respecting the caller's context.
 func connectNATSWithRetry(url string, timeout time.Duration) (*nats.Conn, error) {
 	deadline := time.Now().Add(timeout)
 	var lastErr error
@@ -1136,6 +1181,7 @@ func connectNATSWithRetry(url string, timeout time.Duration) (*nats.Conn, error)
 	return nil, lastErr
 }
 
+// startContainer launches a benchmark dependency and registers reliable cleanup.
 func startContainer(ctx context.Context, req testcontainers.ContainerRequest, port string) (testcontainers.Container, string, error) {
 	c, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{ContainerRequest: req, Started: true})
 	if err != nil {
@@ -1154,6 +1200,7 @@ func startContainer(ctx context.Context, req testcontainers.ContainerRequest, po
 	return c, host + ":" + mapped.Port(), nil
 }
 
+// findRoot locates the repository root from supported generator working directories.
 func findRoot() string {
 	cwd, _ := os.Getwd()
 	for {
@@ -1177,6 +1224,7 @@ func findRoot() string {
 	}
 }
 
+// applyBenchOptions applies local benchmark overrides without changing documented defaults.
 func applyBenchOptions(cfg benchConfig, opts ...benchStoreOption) benchConfig {
 	for _, opt := range opts {
 		cfg = opt(cfg)

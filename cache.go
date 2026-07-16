@@ -22,13 +22,18 @@ type Cache struct {
 // RateLimitStatus contains fixed-window rate limiting metadata.
 // @group Rate Limiting
 type RateLimitStatus struct {
-	Allowed   bool
-	Count     int64
+	// Allowed reports whether Count is within the configured limit.
+	Allowed bool
+	// Count is the current fixed-window count including this request.
+	Count int64
+	// Remaining is the non-negative number of requests left in the window.
 	Remaining int64
-	ResetAt   time.Time
+	// ResetAt is the next fixed-window boundary.
+	ResetAt time.Time
 }
 
 // NewCache creates a cache facade bound to a concrete store.
+// NewCache panics when store is nil because a cache cannot operate without its required backend.
 // @group Core
 //
 // Example: cache from store
@@ -42,6 +47,7 @@ func NewCache(store cachecore.Store) *Cache {
 }
 
 // NewCacheWithTTL lets callers override the default TTL applied when ttl <= 0.
+// NewCacheWithTTL panics when store is nil because accepting invalid wiring would defer failure to the first operation.
 // @group Core
 //
 // Example: cache with custom default TTL
@@ -51,6 +57,9 @@ func NewCache(store cachecore.Store) *Cache {
 //	c := cache.NewCacheWithTTL(s, 2*time.Minute)
 //	fmt.Println(c.Driver(), c != nil) // memory true
 func NewCacheWithTTL(store cachecore.Store, defaultTTL time.Duration) *Cache {
+	if store == nil {
+		panic("cache: store is required")
+	}
 	if defaultTTL <= 0 {
 		defaultTTL = defaultCacheTTL
 	}
@@ -69,18 +78,20 @@ func (c *Cache) WithContext(ctx context.Context) *Cache {
 }
 
 // WithObserver attaches an observer to receive operation events.
+// WithObserver mutates c for backward compatibility and must be called during construction,
+// before c is used concurrently. The observer must be safe for concurrent callbacks.
 // @group Observability
 //
 // Example: attach observer
 //
 //	ctx := context.Background()
 //	c := cache.NewCache(cache.NewMemoryStore(ctx))
-//	c = c.WithObserver(cache.ObserverFunc(func(ctx context.Context, op, key string, hit bool, err error, dur time.Duration, driver cachecore.Driver) {
+//	c = c.WithObserver(cache.ObserverFunc(func(ctx context.Context, event cache.CacheOpEvent) {
 //		// See docs/production-guide.md for a real metrics recipe.
-//		fmt.Println(op, driver, hit, err == nil)
+//		fmt.Println(event.Operation, event.Driver, event.Hit, event.Err == nil)
 //		_ = ctx
-//		_ = key
-//		_ = dur
+//		_ = event.Key
+//		_ = event.Duration
 //	}))
 //	_, _, _ = c.GetBytes("profile:42")
 func (c *Cache) WithObserver(o Observer) *Cache {
@@ -106,6 +117,7 @@ func (c *Cache) Driver() cachecore.Driver {
 	return c.store.Driver()
 }
 
+// context normalizes an unbound handle to Background so every Store call receives a usable context.
 func (c *Cache) context() context.Context {
 	if c == nil || c.ctx == nil {
 		return context.Background()
@@ -125,6 +137,7 @@ func (c *Cache) Ready() error {
 	return c.ready(c.context())
 }
 
+// ready keeps bound-context handling out of the public convenience method.
 func (c *Cache) ready(ctx context.Context) error {
 	return c.store.Ready(ctx)
 }
@@ -144,6 +157,7 @@ func (c *Cache) GetBytes(key string) ([]byte, bool, error) {
 	return c.getBytes(c.context(), key)
 }
 
+// getBytes emits the single read observation shared by direct and composed helpers.
 func (c *Cache) getBytes(ctx context.Context, key string) ([]byte, bool, error) {
 	start := time.Now()
 	body, ok, err := c.store.Get(ctx, key)
@@ -167,6 +181,7 @@ func (c *Cache) BatchGetBytes(keys ...string) (map[string][]byte, error) {
 	return c.batchGetBytes(c.context(), keys...)
 }
 
+// batchGetBytes preserves per-key observation while presenting one batch result.
 func (c *Cache) batchGetBytes(ctx context.Context, keys ...string) (map[string][]byte, error) {
 	out := make(map[string][]byte, len(keys))
 	for _, key := range keys {
@@ -195,6 +210,7 @@ func (c *Cache) GetString(key string) (string, bool, error) {
 	return c.getString(c.context(), key)
 }
 
+// getString adds string-level observation without bypassing the raw read contract.
 func (c *Cache) getString(ctx context.Context, key string) (string, bool, error) {
 	start := time.Now()
 	body, ok, err := c.getBytes(ctx, key)
@@ -222,6 +238,7 @@ func GetJSON[T any](cache *Cache, key string) (T, bool, error) {
 	return getJSON[T](cache.context(), cache, key)
 }
 
+// getJSON keeps JSON decode errors distinct from cache misses for typed callers.
 func getJSON[T any](ctx context.Context, cache *Cache, key string) (T, bool, error) {
 	var zero T
 	start := time.Now()
@@ -256,6 +273,7 @@ func Get[T any](cache *Cache, key string) (T, bool, error) {
 	return getValue[T](cache.context(), cache, key)
 }
 
+// getValue routes generic reads through the default codec without duplicating Store access.
 func getValue[T any](ctx context.Context, cache *Cache, key string) (T, bool, error) {
 	var zero T
 	body, ok, err := cache.getBytes(ctx, key)
@@ -281,6 +299,7 @@ func (c *Cache) SetBytes(key string, value []byte, ttl time.Duration) error {
 	return c.setBytes(c.context(), key, value, ttl)
 }
 
+// setBytes applies the default TTL before emitting the shared write observation.
 func (c *Cache) setBytes(ctx context.Context, key string, value []byte, ttl time.Duration) error {
 	start := time.Now()
 	err := c.store.Set(ctx, key, value, c.resolveTTL(ttl))
@@ -304,6 +323,7 @@ func (c *Cache) BatchSetBytes(values map[string][]byte, ttl time.Duration) error
 	return c.batchSetBytes(c.context(), values, ttl)
 }
 
+// batchSetBytes preserves the Store's per-key semantics and stops at the first failed write.
 func (c *Cache) batchSetBytes(ctx context.Context, values map[string][]byte, ttl time.Duration) error {
 	for key, value := range values {
 		if err := c.setBytes(ctx, key, value, ttl); err != nil {
@@ -334,6 +354,7 @@ func (c *Cache) RefreshAheadBytes(key string, ttl, refreshAhead time.Duration, f
 	})
 }
 
+// refreshAheadBytes owns validation and the synchronous miss path shared by typed and byte helpers.
 func (c *Cache) refreshAheadBytes(ctx context.Context, key string, ttl, refreshAhead time.Duration, fn func(context.Context) ([]byte, error)) ([]byte, error) {
 	if ttl <= 0 {
 		return nil, errors.New("cache refresh ahead requires ttl > 0")
@@ -370,6 +391,7 @@ func (c *Cache) refreshAheadBytes(ctx context.Context, key string, ttl, refreshA
 	return value, nil
 }
 
+// maybeTriggerRefreshAhead starts at most one background refresh for a near-expiry key.
 func (c *Cache) maybeTriggerRefreshAhead(key string, ttl, refreshAhead time.Duration, fn func(context.Context) ([]byte, error)) {
 	metaKey := key + refreshMetaSuffix
 	meta, ok, err := c.getBytes(context.Background(), metaKey)
@@ -401,6 +423,7 @@ func (c *Cache) maybeTriggerRefreshAhead(key string, ttl, refreshAhead time.Dura
 	}()
 }
 
+// setRefreshAheadValue keeps value and expiration metadata on the same TTL horizon.
 func (c *Cache) setRefreshAheadValue(ctx context.Context, key string, value []byte, ttl time.Duration) error {
 	if err := c.setBytes(ctx, key, value, ttl); err != nil {
 		return err
@@ -431,6 +454,7 @@ func RefreshAhead[T any](cache *Cache, key string, ttl, refreshAhead time.Durati
 	})
 }
 
+// refreshAheadValue adapts the context-aware typed loader to the codec-based implementation.
 func refreshAheadValue[T any](ctx context.Context, cache *Cache, key string, ttl, refreshAhead time.Duration, fn func(context.Context) (T, error)) (T, error) {
 	return RefreshAheadValueWithCodec(ctx, cache, key, ttl, refreshAhead, func() (T, error) {
 		if fn == nil {
@@ -477,6 +501,7 @@ func (c *Cache) SetString(key string, value string, ttl time.Duration) error {
 	return c.setString(c.context(), key, value, ttl)
 }
 
+// setString adds string-level observation while retaining raw write semantics.
 func (c *Cache) setString(ctx context.Context, key string, value string, ttl time.Duration) error {
 	start := time.Now()
 	err := c.setBytes(ctx, key, []byte(value), ttl)
@@ -498,6 +523,7 @@ func SetJSON[T any](cache *Cache, key string, value T, ttl time.Duration) error 
 	return setJSON[T](cache.context(), cache, key, value, ttl)
 }
 
+// setJSON observes encoding failures that occur before a Store write is possible.
 func setJSON[T any](ctx context.Context, cache *Cache, key string, value T, ttl time.Duration) error {
 	start := time.Now()
 	body, err := json.Marshal(value)
@@ -525,6 +551,7 @@ func Set[T any](cache *Cache, key string, value T, ttl time.Duration) error {
 	return setValue[T](cache.context(), cache, key, value, ttl)
 }
 
+// setValue routes generic writes through the default codec.
 func setValue[T any](ctx context.Context, cache *Cache, key string, value T, ttl time.Duration) error {
 	body, err := defaultValueCodec[T]().Encode(value)
 	if err != nil {
@@ -546,6 +573,7 @@ func (c *Cache) Add(key string, value []byte, ttl time.Duration) (bool, error) {
 	return c.add(c.context(), key, value, ttl)
 }
 
+// add applies the default TTL and reports whether the conditional write created the key.
 func (c *Cache) add(ctx context.Context, key string, value []byte, ttl time.Duration) (bool, error) {
 	start := time.Now()
 	created, err := c.store.Add(ctx, key, value, c.resolveTTL(ttl))
@@ -566,6 +594,7 @@ func (c *Cache) Increment(key string, delta int64, ttl time.Duration) (int64, er
 	return c.increment(c.context(), key, delta, ttl)
 }
 
+// increment preserves backend-native atomicity while applying the facade TTL policy.
 func (c *Cache) increment(ctx context.Context, key string, delta int64, ttl time.Duration) (int64, error) {
 	start := time.Now()
 	val, err := c.store.Increment(ctx, key, delta, c.resolveTTL(ttl))
@@ -586,6 +615,7 @@ func (c *Cache) Decrement(key string, delta int64, ttl time.Duration) (int64, er
 	return c.decrement(c.context(), key, delta, ttl)
 }
 
+// decrement preserves backend-native atomicity while applying the facade TTL policy.
 func (c *Cache) decrement(ctx context.Context, key string, delta int64, ttl time.Duration) (int64, error) {
 	start := time.Now()
 	val, err := c.store.Decrement(ctx, key, delta, c.resolveTTL(ttl))
@@ -607,6 +637,7 @@ func (c *Cache) RateLimit(key string, limit int64, window time.Duration) (RateLi
 	return c.rateLimit(c.context(), key, limit, window)
 }
 
+// rateLimit derives a fixed-window bucket before using the Store's atomic increment primitive.
 func (c *Cache) rateLimit(ctx context.Context, key string, limit int64, window time.Duration) (RateLimitStatus, error) {
 	if limit <= 0 {
 		return RateLimitStatus{}, errors.New("cache rate limit requires limit > 0")
@@ -648,6 +679,7 @@ func (c *Cache) TryLock(key string, ttl time.Duration) (bool, error) {
 	return c.tryLock(c.context(), key, ttl)
 }
 
+// tryLock relies on Store.Add so lock scope and atomicity match the selected backend.
 func (c *Cache) tryLock(ctx context.Context, key string, ttl time.Duration) (bool, error) {
 	if ttl <= 0 {
 		return false, errors.New("cache try lock requires ttl > 0")
@@ -677,6 +709,7 @@ func (c *Cache) Lock(key string, ttl, timeout time.Duration) (bool, error) {
 	return c.lock(ctx, key, ttl, defaultLockRetryInterval)
 }
 
+// lock retries conditional acquisition until success or context cancellation.
 func (c *Cache) lock(ctx context.Context, key string, ttl, retryInterval time.Duration) (bool, error) {
 	if retryInterval <= 0 {
 		retryInterval = defaultLockRetryInterval
@@ -717,6 +750,7 @@ func (c *Cache) Unlock(key string) error {
 	return c.unlock(c.context(), key)
 }
 
+// unlock derives the same namespaced key as acquisition so release cannot target a different lock.
 func (c *Cache) unlock(ctx context.Context, key string) error {
 	start := time.Now()
 	err := c.store.Delete(ctx, lockPrefix+key)
@@ -738,6 +772,7 @@ func (c *Cache) PullBytes(key string) ([]byte, bool, error) {
 	return c.pullBytes(c.context(), key)
 }
 
+// pullBytes deletes only after a successful hit so misses and read failures remain non-destructive.
 func (c *Cache) pullBytes(ctx context.Context, key string) ([]byte, bool, error) {
 	start := time.Now()
 	body, ok, err := c.getBytes(ctx, key)
@@ -768,6 +803,7 @@ func Pull[T any](cache *Cache, key string) (T, bool, error) {
 	return pullValue[T](cache.context(), cache, key)
 }
 
+// pullValue decodes only after the raw pull has completed successfully.
 func pullValue[T any](ctx context.Context, cache *Cache, key string) (T, bool, error) {
 	var zero T
 	body, ok, err := cache.pullBytes(ctx, key)
@@ -794,6 +830,7 @@ func (c *Cache) Delete(key string) error {
 	return c.delete(c.context(), key)
 }
 
+// delete emits the single invalidation observation shared by direct and composed helpers.
 func (c *Cache) delete(ctx context.Context, key string) error {
 	start := time.Now()
 	err := c.store.Delete(ctx, key)
@@ -813,6 +850,7 @@ func (c *Cache) DeleteMany(keys ...string) error {
 	return c.deleteMany(c.context(), keys...)
 }
 
+// deleteMany emits one logical event per requested key while using the backend batch operation once.
 func (c *Cache) deleteMany(ctx context.Context, keys ...string) error {
 	start := time.Now()
 	err := c.store.DeleteMany(ctx, keys...)
@@ -835,6 +873,7 @@ func (c *Cache) Flush() error {
 	return c.flush(c.context())
 }
 
+// flush observes scoped invalidation without inventing a synthetic cache key.
 func (c *Cache) flush(ctx context.Context) error {
 	start := time.Now()
 	err := c.store.Flush(ctx)
@@ -890,6 +929,7 @@ func (c *Cache) RememberStaleBytes(key string, ttl, staleTTL time.Duration, fn f
 	})
 }
 
+// rememberStaleBytes keeps stale fallback reads behind loader failure so fresh misses do not mask upstream success.
 func (c *Cache) rememberStaleBytes(ctx context.Context, key string, ttl, staleTTL time.Duration, fn func(context.Context) ([]byte, error)) ([]byte, bool, error) {
 	start := time.Now()
 	staleKey := key + staleSuffix
@@ -937,6 +977,7 @@ func (c *Cache) rememberStaleBytes(ctx context.Context, key string, ttl, staleTT
 	return nil, false, err
 }
 
+// rememberBytes implements the shared read-through sequence for byte and typed helpers.
 func (c *Cache) rememberBytes(ctx context.Context, key string, ttl time.Duration, fn func(context.Context) ([]byte, error)) ([]byte, error) {
 	start := time.Now()
 	body, ok, err := c.getBytes(ctx, key)
@@ -1010,6 +1051,7 @@ func Remember[T any](cache *Cache, key string, ttl time.Duration, fn func() (T, 
 	})
 }
 
+// rememberValue adapts a context-aware loader to the default typed codec.
 func rememberValue[T any](ctx context.Context, cache *Cache, key string, ttl time.Duration, fn func(context.Context) (T, error)) (T, error) {
 	return rememberValueWithCodecContext(ctx, cache, key, ttl, func() (T, error) {
 		if fn == nil {
@@ -1022,7 +1064,9 @@ func rememberValue[T any](ctx context.Context, cache *Cache, key string, ttl tim
 
 // ValueCodec defines how to encode/decode typed values for helper operations.
 type ValueCodec[T any] struct {
+	// Encode serializes a typed value for storage.
 	Encode func(T) ([]byte, error)
+	// Decode deserializes stored bytes into a typed value.
 	Decode func([]byte) (T, error)
 }
 
@@ -1038,6 +1082,7 @@ func defaultValueCodec[T any]() ValueCodec[T] {
 	}
 }
 
+// rememberValueWithCodecContext keeps custom serialization on the same read-through sequence.
 func rememberValueWithCodecContext[T any](ctx context.Context, cache *Cache, key string, ttl time.Duration, fn func() (T, error), codec ValueCodec[T]) (T, error) {
 	var zero T
 	body, ok, err := cache.getBytes(ctx, key)
@@ -1064,6 +1109,7 @@ func rememberValueWithCodecContext[T any](ctx context.Context, cache *Cache, key
 	return val, nil
 }
 
+// rememberStaleValueWithCodecContext keeps custom serialization on the byte-level stale fallback contract.
 func rememberStaleValueWithCodecContext[T any](ctx context.Context, cache *Cache, key string, ttl, staleTTL time.Duration, fn func() (T, error), codec ValueCodec[T]) (T, bool, error) {
 	var zero T
 	body, stale, err := cache.rememberStaleBytes(ctx, key, ttl, staleTTL, func(ctx context.Context) ([]byte, error) {
@@ -1086,6 +1132,7 @@ func rememberStaleValueWithCodecContext[T any](ctx context.Context, cache *Cache
 	return out, stale, nil
 }
 
+// rememberStaleValue adapts a context-aware loader to the default stale-value codec.
 func rememberStaleValue[T any](ctx context.Context, cache *Cache, key string, ttl, staleTTL time.Duration, fn func(context.Context) (T, error)) (T, bool, error) {
 	return rememberStaleValueWithCodecContext(ctx, cache, key, ttl, staleTTL, func() (T, error) {
 		if fn == nil {
@@ -1096,6 +1143,7 @@ func rememberStaleValue[T any](ctx context.Context, cache *Cache, key string, tt
 	}, defaultValueCodec[T]())
 }
 
+// resolveTTL gives convenience operations one consistent fallback policy.
 func (c *Cache) resolveTTL(ttl time.Duration) time.Duration {
 	if ttl > 0 {
 		return ttl
@@ -1103,6 +1151,7 @@ func (c *Cache) resolveTTL(ttl time.Duration) time.Duration {
 	return c.defaultTTL
 }
 
+// observe keeps the optional hook off the hot path when no observer is configured.
 func (c *Cache) observe(ctx context.Context, op, key string, hit bool, err error, start time.Time) {
 	if c.observer == nil {
 		return

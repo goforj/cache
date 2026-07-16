@@ -10,6 +10,7 @@ import (
 	"time"
 )
 
+// main keeps this generated example executable so API drift fails during compilation.
 func main() {
 	// Lock waits until the lock is acquired or timeout elapses.
 

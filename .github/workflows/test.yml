@@ -7,6 +7,26 @@ on:
     branches: [ main ]
 
 jobs:
+  quality:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        go-version: ["1.24.x", "stable"]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go-version }}
+
+      - name: Check every module against staged siblings
+        env:
+          CACHE_LOCAL_SIBLINGS: "1"
+        run: scripts/check-quality.sh
+
   unit:
     runs-on: ubuntu-latest
     steps:
@@ -28,6 +48,11 @@ jobs:
 
       - name: Run unit tests
         run: go test ./... -v
+
+      - name: Enforce root coverage floor
+        env:
+          COVERAGE_MIN: "89.5"
+        run: scripts/check-coverage.sh
 
       - name: Verify generated examples compile
         run: |

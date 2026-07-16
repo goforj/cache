@@ -11,6 +11,7 @@ import (
 	"github.com/goforj/cache/driver/mysqlcache"
 )
 
+// main keeps this generated example executable so API drift fails during compilation.
 func main() {
 	// Example: mysql via explicit driver config.
 	store, err := mysqlcache.New(mysqlcache.Config{

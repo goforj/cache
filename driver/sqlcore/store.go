@@ -68,6 +68,9 @@ var sqlIdentPartRE = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 //	}
 //	fmt.Println(store.Driver()) // sql
 func New(cfg Config) (cachecore.Store, error) {
+	if err := cachecore.ValidateBaseConfig(cfg.BaseConfig); err != nil {
+		return nil, err
+	}
 	if cfg.DriverName == "" || cfg.DSN == "" {
 		return nil, errors.New("sql driver requires driver name and dsn")
 	}
@@ -106,15 +109,18 @@ func New(cfg Config) (cachecore.Store, error) {
 	if err := s.prepareStatements(); err != nil {
 		return nil, err
 	}
-	return s, nil
+	return cachecore.WrapStore(s, cfg.BaseConfig)
 }
 
+// Driver identifies the backend for diagnostics and capability-specific behavior.
 func (s *sqlStore) Driver() cachecore.Driver { return cachecore.DriverSQL }
 
+// Ready verifies that the backend can serve cache operations.
 func (s *sqlStore) Ready(ctx context.Context) error {
 	return s.db.PingContext(ctx)
 }
 
+// ensureSchema creates the SQL cache table before statements are prepared.
 func (s *sqlStore) ensureSchema() error {
 	var stmt string
 	switch s.driverName {
@@ -141,6 +147,7 @@ func (s *sqlStore) ensureSchema() error {
 	return err
 }
 
+// Get returns an owned copy of a stored value and distinguishes misses from failures.
 func (s *sqlStore) Get(ctx context.Context, key string) ([]byte, bool, error) {
 	var v []byte
 	var exp int64
@@ -158,6 +165,7 @@ func (s *sqlStore) Get(ctx context.Context, key string) ([]byte, bool, error) {
 	return cloneBytes(v), true, nil
 }
 
+// Set stores an owned copy of a value using the requested or default TTL.
 func (s *sqlStore) Set(ctx context.Context, key string, value []byte, ttl time.Duration) error {
 	if ttl <= 0 {
 		ttl = s.defaultTTL
@@ -167,6 +175,7 @@ func (s *sqlStore) Set(ctx context.Context, key string, value []byte, ttl time.D
 	return err
 }
 
+// Add stores a value only when the key is currently absent.
 func (s *sqlStore) Add(ctx context.Context, key string, value []byte, ttl time.Duration) (bool, error) {
 	if ttl <= 0 {
 		ttl = s.defaultTTL
@@ -194,6 +203,7 @@ func (s *sqlStore) Add(ctx context.Context, key string, value []byte, ttl time.D
 	return true, nil
 }
 
+// Increment atomically adds delta while preserving the store's TTL contract.
 func (s *sqlStore) Increment(ctx context.Context, key string, delta int64, ttl time.Duration) (int64, error) {
 	if ttl <= 0 {
 		ttl = s.defaultTTL
@@ -241,15 +251,18 @@ func (s *sqlStore) Increment(ctx context.Context, key string, delta int64, ttl t
 	return next, nil
 }
 
+// Decrement atomically subtracts delta while preserving the store's TTL contract.
 func (s *sqlStore) Decrement(ctx context.Context, key string, delta int64, ttl time.Duration) (int64, error) {
 	return s.Increment(ctx, key, -delta, ttl)
 }
 
+// Delete removes a key and treats an existing miss as success.
 func (s *sqlStore) Delete(ctx context.Context, key string) error {
 	_, err := s.deleteStmt.ExecContext(ctx, s.cacheKey(key))
 	return err
 }
 
+// DeleteMany removes every requested key under the store's namespace.
 func (s *sqlStore) DeleteMany(ctx context.Context, keys ...string) error {
 	if len(keys) == 0 {
 		return nil
@@ -266,11 +279,13 @@ func (s *sqlStore) DeleteMany(ctx context.Context, keys ...string) error {
 	return err
 }
 
+// Flush removes entries within the store's configured scope.
 func (s *sqlStore) Flush(ctx context.Context) error {
 	_, err := s.flushStmt.ExecContext(ctx)
 	return err
 }
 
+// cacheKey applies the configured namespace before a key reaches the backend.
 func (s *sqlStore) cacheKey(key string) string {
 	if s.prefix == "" {
 		return key
@@ -278,6 +293,7 @@ func (s *sqlStore) cacheKey(key string) string {
 	return s.prefix + ":" + key
 }
 
+// upsertSQL builds the dialect-specific statement used for cache writes.
 func (s *sqlStore) upsertSQL() string {
 	// Placeholders must be positional for postgres/pgx.
 	p1, p2, p3, p4, p5 := s.ph(1), s.ph(2), s.ph(3), s.ph(4), s.ph(5)
@@ -291,26 +307,32 @@ func (s *sqlStore) upsertSQL() string {
 	}
 }
 
+// getSQL builds the scoped lookup statement shared by SQL reads.
 func (s *sqlStore) getSQL() string {
 	return fmt.Sprintf("SELECT v, ea FROM %s WHERE k = %s", s.table, s.ph(1))
 }
 
+// addInsertSQL builds the conditional insert used when a cache key has no row.
 func (s *sqlStore) addInsertSQL() string {
 	return fmt.Sprintf("INSERT INTO %s (k, v, ea) VALUES (%s, %s, %s)", s.table, s.ph(1), s.ph(2), s.ph(3))
 }
 
+// addReuseExpiredSQL builds the conditional update that reclaims an expired cache row.
 func (s *sqlStore) addReuseExpiredSQL() string {
 	return fmt.Sprintf("UPDATE %s SET v = %s, ea = %s WHERE k = %s AND ea < %s", s.table, s.ph(1), s.ph(2), s.ph(3), s.ph(4))
 }
 
+// deleteSQL builds the scoped statement used to remove one cache row.
 func (s *sqlStore) deleteSQL() string {
 	return fmt.Sprintf("DELETE FROM %s WHERE k = %s", s.table, s.ph(1))
 }
 
+// flushSQL builds the statement that clears only the configured cache namespace.
 func (s *sqlStore) flushSQL() string {
 	return fmt.Sprintf("DELETE FROM %s", s.table)
 }
 
+// prepareStatements prepares the store's fixed query set once schema setup succeeds.
 func (s *sqlStore) prepareStatements() error {
 	var err error
 	if s.getStmt, err = s.db.Prepare(s.getSQL()); err != nil {
@@ -334,6 +356,7 @@ func (s *sqlStore) prepareStatements() error {
 	return nil
 }
 
+// ph returns the dialect-specific SQL placeholder for a positional argument.
 func (s *sqlStore) ph(i int) string {
 	if s.driverName == "postgres" || s.driverName == "pgx" {
 		return fmt.Sprintf("$%d", i)
@@ -341,6 +364,7 @@ func (s *sqlStore) ph(i int) string {
 	return "?"
 }
 
+// isDuplicateErr normalizes driver-specific uniqueness failures for conditional SQL adds.
 func isDuplicateErr(err error, driver string) bool {
 	msg := err.Error()
 	switch driver {
@@ -353,6 +377,7 @@ func isDuplicateErr(err error, driver string) bool {
 	}
 }
 
+// validateSQLTableName rejects identifiers that cannot be safely interpolated into fixed statements.
 func validateSQLTableName(name string) error {
 	if strings.TrimSpace(name) == "" {
 		return errors.New("sql table name is required")
@@ -365,6 +390,7 @@ func validateSQLTableName(name string) error {
 	return nil
 }
 
+// cloneBytes protects store ownership by returning an independent byte slice.
 func cloneBytes(value []byte) []byte {
 	if len(value) == 0 {
 		return nil
@@ -374,6 +400,7 @@ func cloneBytes(value []byte) []byte {
 	return out
 }
 
+// Capabilities reports the optional inspection operations supported by the store.
 func (s *sqlStore) Capabilities() cachecore.InspectorCapabilities {
 	return cachecore.InspectorCapabilities{
 		CanList:   true,
@@ -383,6 +410,7 @@ func (s *sqlStore) Capabilities() cachecore.InspectorCapabilities {
 	}
 }
 
+// ListPage returns a filtered, deterministic page of inspectable cache entries.
 func (s *sqlStore) ListPage(ctx context.Context, opts cachecore.ListPageOptions) (cachecore.ListPageResult, error) {
 	limit := cachecore.NormalizeListLimit(opts.Limit)
 	offset, err := cachecore.DecodeOffsetCursor(opts.Cursor)

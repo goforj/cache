@@ -8,6 +8,7 @@ import (
 	"time"
 )
 
+// main keeps this generated example executable so API drift fails during compilation.
 func main() {
 	// NewMemoryStoreWithConfig builds an in-process store using explicit root config.
 

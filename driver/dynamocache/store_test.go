@@ -27,8 +27,18 @@ type dynStub struct {
 	createHits      int
 }
 
+// newDynStub creates an empty in-memory DynamoDB API stub.
 func newDynStub() *dynStub { return &dynStub{items: map[string]map[string]types.AttributeValue{}} }
 
+// TestNewRejectsInvalidShapingBeforeBackendSetup verifies configuration errors do not trigger AWS setup.
+func TestNewRejectsInvalidShapingBeforeBackendSetup(t *testing.T) {
+	store, err := New(context.Background(), Config{BaseConfig: cachecore.BaseConfig{EncryptionKey: []byte("short")}})
+	if !errors.Is(err, cachecore.ErrEncryptionKey) || store != nil {
+		t.Fatalf("New = (%v, %v), want nil and ErrEncryptionKey", store, err)
+	}
+}
+
+// GetItem returns the keyed item or the configured read failure.
 func (d *dynStub) GetItem(_ context.Context, in *dynamodb.GetItemInput, _ ...func(*dynamodb.Options)) (*dynamodb.GetItemOutput, error) {
 	if d.getErr != nil {
 		return nil, d.getErr
@@ -41,6 +51,7 @@ func (d *dynStub) GetItem(_ context.Context, in *dynamodb.GetItemInput, _ ...fun
 	return &dynamodb.GetItemOutput{Item: item}, nil
 }
 
+// PutItem stores items while emulating the conditional expressions used by Add.
 func (d *dynStub) PutItem(_ context.Context, in *dynamodb.PutItemInput, _ ...func(*dynamodb.Options)) (*dynamodb.PutItemOutput, error) {
 	if d.putErr != nil {
 		return nil, d.putErr
@@ -69,12 +80,14 @@ func (d *dynStub) PutItem(_ context.Context, in *dynamodb.PutItemInput, _ ...fun
 	return &dynamodb.PutItemOutput{}, nil
 }
 
+// DeleteItem removes the keyed item from the in-memory table.
 func (d *dynStub) DeleteItem(_ context.Context, in *dynamodb.DeleteItemInput, _ ...func(*dynamodb.Options)) (*dynamodb.DeleteItemOutput, error) {
 	key := in.Key["k"].(*types.AttributeValueMemberS).Value
 	delete(d.items, key)
 	return &dynamodb.DeleteItemOutput{}, nil
 }
 
+// BatchWriteItem records request sizes and applies batched deletions.
 func (d *dynStub) BatchWriteItem(_ context.Context, in *dynamodb.BatchWriteItemInput, _ ...func(*dynamodb.Options)) (*dynamodb.BatchWriteItemOutput, error) {
 	for _, writes := range in.RequestItems {
 		d.batchWriteSizes = append(d.batchWriteSizes, len(writes))
@@ -88,6 +101,7 @@ func (d *dynStub) BatchWriteItem(_ context.Context, in *dynamodb.BatchWriteItemI
 	return &dynamodb.BatchWriteItemOutput{}, nil
 }
 
+// Scan returns item keys or the configured scan failure.
 func (d *dynStub) Scan(_ context.Context, in *dynamodb.ScanInput, _ ...func(*dynamodb.Options)) (*dynamodb.ScanOutput, error) {
 	if d.scanErr != nil {
 		return nil, d.scanErr
@@ -101,6 +115,7 @@ func (d *dynStub) Scan(_ context.Context, in *dynamodb.ScanInput, _ ...func(*dyn
 	return &dynamodb.ScanOutput{Items: items}, nil
 }
 
+// CreateTable records attempts and consumes the configured startup failures.
 func (d *dynStub) CreateTable(context.Context, *dynamodb.CreateTableInput, ...func(*dynamodb.Options)) (*dynamodb.CreateTableOutput, error) {
 	d.createHits++
 	if len(d.createErrs) > 0 {
@@ -114,6 +129,7 @@ func (d *dynStub) CreateTable(context.Context, *dynamodb.CreateTableInput, ...fu
 	return &dynamodb.CreateTableOutput{}, nil
 }
 
+// DescribeTable reports configured startup failures before exposing table existence.
 func (d *dynStub) DescribeTable(context.Context, *dynamodb.DescribeTableInput, ...func(*dynamodb.Options)) (*dynamodb.DescribeTableOutput, error) {
 	d.describeHits++
 	if len(d.describeErrs) > 0 {
@@ -130,6 +146,7 @@ func (d *dynStub) DescribeTable(context.Context, *dynamodb.DescribeTableInput, .
 	return nil, &types.ResourceNotFoundException{}
 }
 
+// TestEnsureDynamoTableRetriesStartupErrors verifies transient emulator failures are retried before table setup fails.
 func TestEnsureDynamoTableRetriesStartupErrors(t *testing.T) {
 	stub := newDynStub()
 	stub.describeErrs = []error{
@@ -149,6 +166,7 @@ func TestEnsureDynamoTableRetriesStartupErrors(t *testing.T) {
 	}
 }
 
+// TestDynamoStoreBasicOperations verifies DynamoDB implements the shared read, write, counter, and delete semantics.
 func TestDynamoStoreBasicOperations(t *testing.T) {
 	stub := newDynStub()
 	store, err := New(context.Background(), Config{
@@ -188,6 +206,7 @@ func TestDynamoStoreBasicOperations(t *testing.T) {
 	}
 }
 
+// TestDynamoStoreAddReusesExpiredKey verifies conditional writes may reclaim logically expired records.
 func TestDynamoStoreAddReusesExpiredKey(t *testing.T) {
 	stub := newDynStub()
 	store, err := New(context.Background(), Config{
@@ -214,6 +233,7 @@ func TestDynamoStoreAddReusesExpiredKey(t *testing.T) {
 	}
 }
 
+// TestDynamoDeleteManyBatchesOverLimit verifies bulk deletes respect DynamoDB's 25-item request limit.
 func TestDynamoDeleteManyBatchesOverLimit(t *testing.T) {
 	stub := newDynStub()
 	store := &dynamoStore{client: stub, table: "tbl", prefix: "p", defaultTTL: time.Minute}
@@ -237,6 +257,7 @@ func TestDynamoDeleteManyBatchesOverLimit(t *testing.T) {
 	}
 }
 
+// TestDynamoEnsureTableCreatesWhenMissing verifies initialization provisions an absent cache table.
 func TestDynamoEnsureTableCreatesWhenMissing(t *testing.T) {
 	stub := newDynStub()
 	if err := ensureDynamoTable(context.Background(), stub, "tbl"); err != nil {
@@ -244,6 +265,7 @@ func TestDynamoEnsureTableCreatesWhenMissing(t *testing.T) {
 	}
 }
 
+// TestDynamoEnsureTableExistsPath verifies initialization avoids creation when the table already exists.
 func TestDynamoEnsureTableExistsPath(t *testing.T) {
 	stub := newDynStub()
 	stub.exists = true
@@ -252,6 +274,7 @@ func TestDynamoEnsureTableExistsPath(t *testing.T) {
 	}
 }
 
+// TestNewDynamoStoreDefaultsTTL verifies omitted expiration uses the driver's documented default.
 func TestNewDynamoStoreDefaultsTTL(t *testing.T) {
 	stub := newDynStub()
 	store, err := New(context.Background(), Config{
@@ -271,6 +294,7 @@ func TestNewDynamoStoreDefaultsTTL(t *testing.T) {
 	}
 }
 
+// TestNewDynamoClientBuilds verifies custom endpoint and region settings produce a usable SDK client.
 func TestNewDynamoClientBuilds(t *testing.T) {
 	client, err := newDynamoClient(context.Background(), Config{
 		Region:   "us-east-1",
@@ -284,6 +308,7 @@ func TestNewDynamoClientBuilds(t *testing.T) {
 	}
 }
 
+// TestDynamoGetExpiredRemoves verifies reads turn expired items into misses and opportunistically delete them.
 func TestDynamoGetExpiredRemoves(t *testing.T) {
 	stub := newDynStub()
 	store, err := New(context.Background(), Config{
@@ -308,6 +333,7 @@ func TestDynamoGetExpiredRemoves(t *testing.T) {
 	}
 }
 
+// TestDynamoGetNonBinaryValue verifies malformed item payloads return a descriptive storage error.
 func TestDynamoGetNonBinaryValue(t *testing.T) {
 	stub := newDynStub()
 	stub.items["p:weird"] = map[string]types.AttributeValue{
@@ -328,6 +354,7 @@ func TestDynamoGetNonBinaryValue(t *testing.T) {
 	}
 }
 
+// TestDynamoDeleteManyEmpty verifies an empty batch avoids an unnecessary service request.
 func TestDynamoDeleteManyEmpty(t *testing.T) {
 	store := &dynamoStore{client: newDynStub(), table: "tbl"}
 	if err := store.DeleteMany(context.Background()); err != nil {
@@ -335,6 +362,7 @@ func TestDynamoDeleteManyEmpty(t *testing.T) {
 	}
 }
 
+// TestDynamoCacheKeyEmptyPrefix verifies unprefixed stores preserve logical keys exactly.
 func TestDynamoCacheKeyEmptyPrefix(t *testing.T) {
 	ds := &dynamoStore{prefix: ""}
 	if ds.cacheKey("k") != "k" {
@@ -342,6 +370,7 @@ func TestDynamoCacheKeyEmptyPrefix(t *testing.T) {
 	}
 }
 
+// TestDynamoFlushRemovesPrefixedKeys verifies flush scans and removes entries in the configured namespace.
 func TestDynamoFlushRemovesPrefixedKeys(t *testing.T) {
 	stub := newDynStub()
 	stub.items["p:a"] = map[string]types.AttributeValue{
@@ -363,6 +392,7 @@ func TestDynamoFlushRemovesPrefixedKeys(t *testing.T) {
 	}
 }
 
+// TestDynamoAddErrorPath verifies non-conditional service failures propagate from Add.
 func TestDynamoAddErrorPath(t *testing.T) {
 	stub := newDynStub()
 	stub.putErr = errors.New("put boom")
@@ -377,6 +407,7 @@ func TestDynamoAddErrorPath(t *testing.T) {
 	}
 }
 
+// TestDynamoFlushScanError verifies scan failures abort namespace flushing.
 func TestDynamoFlushScanError(t *testing.T) {
 	stub := newDynStub()
 	stub.scanErr = errors.New("scan boom")
@@ -389,6 +420,7 @@ func TestDynamoFlushScanError(t *testing.T) {
 	}
 }
 
+// TestDynamoSetAndAddDefaultTTL verifies both write paths persist the resolved default expiration.
 func TestDynamoSetAndAddDefaultTTL(t *testing.T) {
 	stub := newDynStub()
 	store := &dynamoStore{
@@ -405,6 +437,7 @@ func TestDynamoSetAndAddDefaultTTL(t *testing.T) {
 	}
 }
 
+// TestDynamoIncrementNegativeUsesDecrement verifies negative increments follow subtraction semantics.
 func TestDynamoIncrementNegativeUsesDecrement(t *testing.T) {
 	stub := newDynStub()
 	store := &dynamoStore{
@@ -418,6 +451,7 @@ func TestDynamoIncrementNegativeUsesDecrement(t *testing.T) {
 	}
 }
 
+// TestDynamoIncrementNonNumeric verifies counters reject non-integer item values.
 func TestDynamoIncrementNonNumeric(t *testing.T) {
 	stub := newDynStub()
 	stub.items["p:num"] = map[string]types.AttributeValue{
@@ -436,6 +470,7 @@ func TestDynamoIncrementNonNumeric(t *testing.T) {
 	}
 }
 
+// TestDynamoSetErrorPath verifies PutItem failures propagate from unconditional writes.
 func TestDynamoSetErrorPath(t *testing.T) {
 	stub := newDynStub()
 	stub.putErr = errors.New("put fail")
@@ -450,6 +485,7 @@ func TestDynamoSetErrorPath(t *testing.T) {
 	}
 }
 
+// TestDynamoIncrementGetError verifies counters stop when their initial read fails.
 func TestDynamoIncrementGetError(t *testing.T) {
 	stub := newDynStub()
 	stub.getErr = errors.New("get fail")

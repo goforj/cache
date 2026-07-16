@@ -6,13 +6,14 @@ require (
 	github.com/docker/go-connections v0.5.0
 	github.com/go-sql-driver/mysql v1.7.1
 	github.com/goforj/cache v0.0.0
-	github.com/goforj/cache/cachecore v0.0.0
+	github.com/goforj/cache/cachecore v0.4.0
 	github.com/goforj/cache/driver/dynamocache v0.0.0
 	github.com/goforj/cache/driver/memcachedcache v0.0.0
 	github.com/goforj/cache/driver/natscache v0.0.0
 	github.com/goforj/cache/driver/rediscache v0.0.0
-	github.com/goforj/cache/driver/sqlcore v0.0.0
+	github.com/goforj/cache/driver/sqlcore v0.4.0
 	github.com/goforj/cache/driver/sqlitecache v0.0.0
+	github.com/jackc/pgx/v5 v5.5.4
 	github.com/nats-io/nats.go v1.48.0
 	github.com/redis/go-redis/v9 v9.5.1
 	github.com/testcontainers/testcontainers-go v0.31.0
@@ -55,6 +56,9 @@ require (
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/google/uuid v1.6.0 // indirect
+	github.com/jackc/pgpassfile v1.0.0 // indirect
+	github.com/jackc/pgservicefile v0.0.0-20221227161230-091c0ba34f0a // indirect
+	github.com/jackc/puddle/v2 v2.2.1 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/kballard/go-shellquote v0.0.0-20180428030007-95032a82bc51 // indirect
 	github.com/klauspost/compress v1.18.0 // indirect
@@ -88,6 +92,7 @@ require (
 	golang.org/x/mod v0.17.0 // indirect
 	golang.org/x/sync v0.13.0 // indirect
 	golang.org/x/sys v0.32.0 // indirect
+	golang.org/x/text v0.24.0 // indirect
 	golang.org/x/tools v0.21.1-0.20240508182429-e35e4ccd0d2d // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20230731190214-cbb8c96f2d6d // indirect
 	google.golang.org/grpc v1.58.3 // indirect

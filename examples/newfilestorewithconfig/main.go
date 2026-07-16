@@ -7,6 +7,7 @@ import (
 	"github.com/goforj/cache/cachecore"
 )
 
+// main keeps this generated example executable so API drift fails during compilation.
 func main() {
 	// NewFileStoreWithConfig builds a filesystem-backed store using explicit root config.
 

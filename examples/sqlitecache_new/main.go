@@ -7,9 +7,10 @@ import (
 	"time"
 )
 
+// main keeps this generated example executable so API drift fails during compilation.
 func main() {
 	// New builds a sqlite-backed cachecore.Store.
-	// 
+	//
 	// Defaults:
 	// - DefaultTTL: 5*time.Minute when zero
 	// - Prefix: "app" when empty

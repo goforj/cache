@@ -7,11 +7,14 @@ import (
 	"time"
 )
 
+// main keeps this generated example executable so API drift fails during compilation.
 func main() {
 	// RefreshAhead returns a typed value and refreshes asynchronously when near expiry.
 
 	// Example: refresh ahead typed
-	type Summary struct { Text string `json:"text"` }
+	type Summary struct {
+		Text string `json:"text"`
+	}
 	ctx := context.Background()
 	c := cache.NewCache(cache.NewMemoryStore(ctx))
 	s, err := cache.RefreshAhead[Summary](c, "dashboard:summary", time.Minute, 10*time.Second, func() (Summary, error) {

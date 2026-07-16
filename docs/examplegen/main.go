@@ -1,12 +1,10 @@
-//go:build ignore
-// +build ignore
-
 package main
 
 import (
 	"bytes"
 	"fmt"
 	"go/ast"
+	"go/format"
 	"go/parser"
 	"go/token"
 	"os"
@@ -16,6 +14,7 @@ import (
 	"strings"
 )
 
+// main exits nonzero on generation failures so CI cannot accept stale or partial examples.
 func main() {
 	if err := run(); err != nil {
 		fmt.Println("Error:", err)
@@ -24,6 +23,7 @@ func main() {
 	fmt.Println("✔ Examples generated in ./examples/")
 }
 
+// run keeps generator orchestration separate from process exit so tests can exercise failures.
 func run() error {
 	root, err := findRoot()
 	if err != nil {
@@ -77,14 +77,15 @@ func run() error {
 		if err := writeMain(examplesDir, fd, fd.ImportPath); err != nil {
 			return err
 		}
-
-		// Debug / inspection hook (optional)
-		//env.Dump(fd)
+	}
+	if err := ensureMainComments(examplesDir); err != nil {
+		return err
 	}
 
 	return nil
 }
 
+// findRoot accepts maintainer entry points from the repository or docs tree without changing generated paths.
 func findRoot() (string, error) {
 	wd, _ := os.Getwd()
 	for _, c := range []string{wd, filepath.Join(wd, ".."), filepath.Join(wd, "..", ".."), filepath.Join(wd, "..", "..", "..")} {
@@ -96,8 +97,10 @@ func findRoot() (string, error) {
 	return "", fmt.Errorf("could not find project root")
 }
 
+// fileExists treats absent markers as candidate misses while root discovery probes parent directories.
 func fileExists(p string) bool { _, err := os.Stat(p); return err == nil }
 
+// modulePath derives generated imports from the manifest so forks and module-path changes remain buildable.
 func modulePath(root string) (string, error) {
 	data, err := os.ReadFile(filepath.Join(root, "go.mod"))
 	if err != nil {
@@ -114,6 +117,7 @@ func modulePath(root string) (string, error) {
 	return "", fmt.Errorf("module path not found in go.mod")
 }
 
+// collectExamplesFromDir coalesces declarations by slug so each documented API owns one executable directory.
 func collectExamplesFromDir(funcs map[string]*FuncDoc, dir, importPath, slugPrefix string) error {
 	fset := token.NewFileSet()
 	pkgs, err := parser.ParseDir(fset, dir, nil, parser.ParseComments)
@@ -156,12 +160,7 @@ func collectExamplesFromDir(funcs map[string]*FuncDoc, dir, importPath, slugPref
 	return nil
 }
 
-//
-// ------------------------------------------------------------
-// Data models
-// ------------------------------------------------------------
-//
-
+// FuncDoc carries the declaration metadata needed for stable one-directory-per-API output.
 type FuncDoc struct {
 	Name        string
 	Slug        string
@@ -171,6 +170,7 @@ type FuncDoc struct {
 	Examples    []Example
 }
 
+// Example retains source order and labels so regeneration remains deterministic.
 type Example struct {
 	FuncName string
 	File     string
@@ -179,20 +179,20 @@ type Example struct {
 	Code     string
 }
 
-//
-// ------------------------------------------------------------
-// Example extraction
-// ------------------------------------------------------------
-//
-
 var exampleHeader = regexp.MustCompile(`(?i)^\s*Example:\s*(.*)$`)
 var groupHeader = regexp.MustCompile(`(?i)^\s*@group\s+(.+)$`)
+
+const (
+	generatedMainComment       = "// main keeps this generated example executable so API drift fails during compilation."
+	legacyGeneratedMainComment = "// main runs this generated API example as a standalone program."
+)
 
 type docLine struct {
 	text string
 	pos  token.Pos
 }
 
+// extractFuncDocs limits output to exported declarations so generated docs cannot expose package internals.
 func extractFuncDocs(
 	fset *token.FileSet,
 	filename string,
@@ -225,6 +225,7 @@ func extractFuncDocs(
 	return out
 }
 
+// funcSlug includes receiver identity so methods cannot collide with package functions or other receiver types.
 func funcSlug(fn *ast.FuncDecl) string {
 	name := fn.Name.Name
 	if fn.Recv == nil || len(fn.Recv.List) == 0 {
@@ -237,6 +238,7 @@ func funcSlug(fn *ast.FuncDecl) string {
 	return recv + "_" + name
 }
 
+// recvTypeName normalizes pointer and generic receivers so equivalent declarations share a stable slug.
 func recvTypeName(expr ast.Expr) string {
 	switch t := expr.(type) {
 	case *ast.Ident:
@@ -254,6 +256,7 @@ func recvTypeName(expr ast.Expr) string {
 	}
 }
 
+// extractGroup defaults ungrouped declarations consistently so API sections remain stable across regeneration.
 func extractGroup(group *ast.CommentGroup) string {
 	lines := docLines(group)
 
@@ -267,6 +270,7 @@ func extractGroup(group *ast.CommentGroup) string {
 	return "Other"
 }
 
+// extractFuncDescription isolates prose so generated summaries cannot absorb directives or runnable snippets.
 func extractFuncDescription(group *ast.CommentGroup) string {
 	lines := docLines(group)
 	var desc []string
@@ -274,7 +278,7 @@ func extractFuncDescription(group *ast.CommentGroup) string {
 	for _, dl := range lines {
 		trimmed := strings.TrimSpace(dl.text)
 
-		// Stop before Example or @group
+		// Directives and runnable snippets belong in separate generated sections, not the prose summary.
 		if exampleHeader.MatchString(trimmed) || groupHeader.MatchString(trimmed) {
 			break
 		}
@@ -293,6 +297,7 @@ func extractFuncDescription(group *ast.CommentGroup) string {
 	return strings.Join(desc, "\n")
 }
 
+// docLines retains source positions so examples with identical labels still sort by declaration order.
 func docLines(group *ast.CommentGroup) []docLine {
 	var lines []docLine
 
@@ -317,6 +322,7 @@ func docLines(group *ast.CommentGroup) []docLine {
 	return lines
 }
 
+// extractBlocks separates labeled snippets so each documented case can remain independently runnable.
 func extractBlocks(
 	fset *token.FileSet,
 	filename, funcName string,
@@ -372,7 +378,7 @@ func extractBlocks(
 	return out
 }
 
-// selectPackage picks the primary package to document.
+// selectPackage resolves mixed package directories deterministically so test or command packages cannot steal the API index.
 // Strategy:
 //  1. If only one package exists, use it.
 //  2. Prefer the non-"main" package with the most files.
@@ -417,12 +423,7 @@ func selectPackage(pkgs map[string]*ast.Package) (string, error) {
 	return candidates[0].name, nil
 }
 
-//
-// ------------------------------------------------------------
-// Write ./examples/<func>/main.go
-// ------------------------------------------------------------
-//
-
+// writeMain retains explicit opt-out tags so examples requiring external services do not enter default builds.
 func writeMain(base string, fd *FuncDoc, importPath string) error {
 	if len(fd.Examples) == 0 {
 		return nil
@@ -443,6 +444,15 @@ func writeMain(base string, fd *FuncDoc, importPath string) error {
 
 	var buf bytes.Buffer
 
+	target := filepath.Join(dir, "main.go")
+	current, err := os.ReadFile(target)
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	if bytes.HasPrefix(current, []byte("//go:build ignore\n")) {
+		// Existing opt-out tags are retained because some examples require external services.
+		buf.WriteString("//go:build ignore\n// +build ignore\n\n")
+	}
 	buf.WriteString("package main\n\n")
 
 	imports := map[string]bool{
@@ -546,9 +556,9 @@ func writeMain(base string, fd *FuncDoc, importPath string) error {
 		buf.WriteString(")\n\n")
 	}
 
+	buf.WriteString(generatedMainComment + "\n")
 	buf.WriteString("func main() {\n")
 
-	// Description
 	if fd.Description != "" {
 		for _, line := range strings.Split(fd.Description, "\n") {
 			buf.WriteString("\t// " + line + "\n")
@@ -556,7 +566,6 @@ func writeMain(base string, fd *FuncDoc, importPath string) error {
 		buf.WriteString("\n")
 	}
 
-	// Examples
 	for _, ex := range fd.Examples {
 		if ex.Label != "" {
 			buf.WriteString("\t// Example: " + ex.Label + "\n")
@@ -575,5 +584,67 @@ func writeMain(base string, fd *FuncDoc, importPath string) error {
 
 	buf.WriteString("}\n")
 
-	return os.WriteFile(filepath.Join(dir, "main.go"), buf.Bytes(), 0o644)
+	formatted, err := formatGeneratedSource(target, buf.Bytes())
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(target, formatted, 0o644)
+}
+
+// ensureMainComments migrates legacy output so every compile-checked example follows the current comment contract.
+func ensureMainComments(base string) error {
+	entries, err := os.ReadDir(base)
+	if err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		path := filepath.Join(base, entry.Name(), "main.go")
+		contents, err := os.ReadFile(path)
+		if os.IsNotExist(err) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		declaration := []byte("func main() {")
+		updated := bytes.ReplaceAll(contents, []byte(legacyGeneratedMainComment+"\n"), nil)
+		updated = bytes.ReplaceAll(updated, []byte(generatedMainComment+"\n"), nil)
+		updated, err = formatGeneratedSource(path, updated)
+		if err != nil {
+			return err
+		}
+		index := bytes.Index(updated, declaration)
+		if index < 0 {
+			continue
+		}
+		withComment := make([]byte, 0, len(updated)+len(generatedMainComment)+1)
+		withComment = append(withComment, updated[:index]...)
+		withComment = append(withComment, generatedMainComment...)
+		withComment = append(withComment, '\n')
+		withComment = append(withComment, updated[index:]...)
+		updated = withComment
+		formatted, err := formatGeneratedSource(path, updated)
+		if err != nil {
+			return err
+		}
+		if bytes.Equal(contents, formatted) {
+			continue
+		}
+		if err := os.WriteFile(path, formatted, 0o644); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// formatGeneratedSource makes generated examples deterministic and rejects snippets that do not form valid Go source.
+func formatGeneratedSource(target string, source []byte) ([]byte, error) {
+	formatted, err := format.Source(source)
+	if err != nil {
+		return nil, fmt.Errorf("format generated example %s: %w", target, err)
+	}
+	return formatted, nil
 }

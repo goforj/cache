@@ -7,11 +7,14 @@ import (
 	"time"
 )
 
+// main keeps this generated example executable so API drift fails during compilation.
 func main() {
 	// RememberStale returns a typed value with stale fallback semantics using JSON encoding by default.
 
 	// Example: remember stale typed
-	type Profile struct { Name string `json:"name"` }
+	type Profile struct {
+		Name string `json:"name"`
+	}
 	ctx := context.Background()
 	c := cache.NewCache(cache.NewMemoryStore(ctx))
 	profile, usedStale, err := cache.RememberStale[Profile](c, "profile:42", time.Minute, 10*time.Minute, func() (Profile, error) {

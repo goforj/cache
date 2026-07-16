@@ -86,17 +86,21 @@ func New(cfg Config) cachecore.Store {
 	if prefix == "" {
 		prefix = defaultPrefix
 	}
-	return &store{
+	backend := &store{
 		kv:             cfg.KeyValue,
 		defaultTTL:     ttl,
 		prefix:         prefix,
 		scopePrefixStr: "p." + encodeKeyPart(prefix) + ".k.",
 		bucketTTL:      cfg.BucketTTL,
 	}
+	wrapped, _ := cachecore.WrapStore(backend, cfg.BaseConfig)
+	return wrapped
 }
 
+// Driver identifies the backend for diagnostics and capability-specific behavior.
 func (s *store) Driver() cachecore.Driver { return cachecore.DriverNATS }
 
+// Ready verifies that the backend can serve cache operations.
 func (s *store) Ready(_ context.Context) error {
 	if s.kv == nil {
 		return errors.New("nats cache key-value unavailable")
@@ -105,6 +109,7 @@ func (s *store) Ready(_ context.Context) error {
 	return err
 }
 
+// Get returns an owned copy of a stored value and distinguishes misses from failures.
 func (s *store) Get(_ context.Context, key string) ([]byte, bool, error) {
 	if s.kv == nil {
 		return nil, false, errors.New("nats cache key-value unavailable")
@@ -137,6 +142,7 @@ func (s *store) Get(_ context.Context, key string) ([]byte, bool, error) {
 	return cloneBytes(entry.Value()), true, nil
 }
 
+// Set stores an owned copy of a value using the requested or default TTL.
 func (s *store) Set(_ context.Context, key string, value []byte, ttl time.Duration) error {
 	if s.kv == nil {
 		return errors.New("nats cache key-value unavailable")
@@ -157,6 +163,7 @@ func (s *store) Set(_ context.Context, key string, value []byte, ttl time.Durati
 	return err
 }
 
+// Add stores a value only when the key is currently absent.
 func (s *store) Add(ctx context.Context, key string, value []byte, ttl time.Duration) (bool, error) {
 	if s.kv == nil {
 		return false, errors.New("nats cache key-value unavailable")
@@ -187,6 +194,7 @@ func (s *store) Add(ctx context.Context, key string, value []byte, ttl time.Dura
 	return false, err
 }
 
+// Increment atomically adds delta while preserving the store's TTL contract.
 func (s *store) Increment(_ context.Context, key string, delta int64, ttl time.Duration) (int64, error) {
 	if s.kv == nil {
 		return 0, errors.New("nats cache key-value unavailable")
@@ -266,10 +274,12 @@ func (s *store) Increment(_ context.Context, key string, delta int64, ttl time.D
 	return 0, errors.New("nats increment exceeded retry limit")
 }
 
+// Decrement atomically subtracts delta while preserving the store's TTL contract.
 func (s *store) Decrement(ctx context.Context, key string, delta int64, ttl time.Duration) (int64, error) {
 	return s.Increment(ctx, key, -delta, ttl)
 }
 
+// Delete removes a key and treats an existing miss as success.
 func (s *store) Delete(_ context.Context, key string) error {
 	if s.kv == nil {
 		return errors.New("nats cache key-value unavailable")
@@ -281,6 +291,7 @@ func (s *store) Delete(_ context.Context, key string) error {
 	return err
 }
 
+// DeleteMany removes every requested key under the store's namespace.
 func (s *store) DeleteMany(ctx context.Context, keys ...string) error {
 	for _, key := range keys {
 		if err := s.Delete(ctx, key); err != nil {
@@ -290,6 +301,7 @@ func (s *store) DeleteMany(ctx context.Context, keys ...string) error {
 	return nil
 }
 
+// Flush removes entries within the store's configured scope.
 func (s *store) Flush(_ context.Context) error {
 	if s.kv == nil {
 		return errors.New("nats cache key-value unavailable")
@@ -320,12 +332,15 @@ func (s *store) Flush(_ context.Context) error {
 	return nil
 }
 
+// cacheKey applies the configured namespace before a key reaches the backend.
 func (s *store) cacheKey(key string) string {
 	return s.scopePrefixStr + encodeKeyPart(key)
 }
 
+// scopePrefix returns the encoded JetStream subject prefix owned by this store.
 func (s *store) scopePrefix() string { return s.scopePrefixStr }
 
+// Capabilities reports the optional inspection operations supported by the store.
 func (s *store) Capabilities() cachecore.InspectorCapabilities {
 	return cachecore.InspectorCapabilities{
 		CanList:   true,
@@ -335,6 +350,7 @@ func (s *store) Capabilities() cachecore.InspectorCapabilities {
 	}
 }
 
+// ListPage returns a filtered, deterministic page of inspectable cache entries.
 func (s *store) ListPage(_ context.Context, opts cachecore.ListPageOptions) (cachecore.ListPageResult, error) {
 	if s.kv == nil {
 		return cachecore.ListPageResult{}, errors.New("nats cache key-value unavailable")
@@ -389,6 +405,7 @@ func (s *store) ListPage(_ context.Context, opts cachecore.ListPageOptions) (cac
 	return cachecore.SliceEntries(filtered, offset, opts.Limit), nil
 }
 
+// encodeEnvelope stores expiration metadata beside NATS payload bytes in a versioned representation.
 func (s *store) encodeEnvelope(value []byte, ttl time.Duration) ([]byte, error) {
 	if ttl <= 0 {
 		ttl = s.defaultTTL
@@ -401,6 +418,7 @@ func (s *store) encodeEnvelope(value []byte, ttl time.Duration) ([]byte, error) 
 	return body, nil
 }
 
+// decodeEnvelope validates and decodes the stored NATS value and expiration metadata.
 func decodeEnvelope(body []byte) (envelope, bool, error) {
 	if len(body) >= 12 && bytes.Equal(body[:4], natsEnvelopeMagic) {
 		return envelope{
@@ -423,10 +441,12 @@ func decodeEnvelope(body []byte) (envelope, bool, error) {
 	return env, true, nil
 }
 
+// isMiss normalizes JetStream's missing-key errors into the cache miss contract.
 func isMiss(err error) bool {
 	return errors.Is(err, nats.ErrKeyNotFound) || errors.Is(err, nats.ErrKeyDeleted)
 }
 
+// encodeKeyPart makes arbitrary cache key segments safe for JetStream subjects.
 func encodeKeyPart(part string) string {
 	if part == "" {
 		return "_"
@@ -434,6 +454,7 @@ func encodeKeyPart(part string) string {
 	return base64.RawURLEncoding.EncodeToString([]byte(part))
 }
 
+// decodeCacheKey reverses JetStream key encoding and rejects entries outside the configured scope.
 func decodeCacheKey(part string) (string, error) {
 	if part == "_" {
 		return "", nil
@@ -445,6 +466,7 @@ func decodeCacheKey(part string) (string, error) {
 	return string(decoded), nil
 }
 
+// cloneBytes protects store ownership by returning an independent byte slice.
 func cloneBytes(value []byte) []byte {
 	if value == nil {
 		return nil

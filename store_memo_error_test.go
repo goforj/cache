@@ -8,6 +8,7 @@ import (
 	"github.com/goforj/cache/cachecore"
 )
 
+// TestMemoStorePropagatesErrors verifies memoization never converts backend failures into hits or misses.
 func TestMemoStorePropagatesErrors(t *testing.T) {
 	ctx := context.Background()
 	store := NewMemoStore(&errorStore{driver: cachecore.DriverMemory, err: expectedErr})

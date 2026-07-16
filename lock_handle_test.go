@@ -8,6 +8,7 @@ import (
 	"time"
 )
 
+// TestLockHandleAcquireRelease verifies lock handles acquire once and release their key.
 func TestLockHandleAcquireRelease(t *testing.T) {
 	c := NewCache(NewMemoryStore(context.Background()))
 	lock := c.NewLockHandle("lh:acquire", time.Second)
@@ -36,6 +37,40 @@ func TestLockHandleAcquireRelease(t *testing.T) {
 	}
 }
 
+// TestLockHandleWithContextSharesOwnership verifies derived handles cannot leave stale ownership behind.
+func TestLockHandleWithContextSharesOwnership(t *testing.T) {
+	c := NewCache(NewMemoryStore(context.Background()))
+	owner := c.NewLockHandle("lh:derived", time.Second)
+	locked, err := owner.Acquire()
+	if err != nil || !locked {
+		t.Fatalf("expected owner acquire success, locked=%v err=%v", locked, err)
+	}
+
+	derived := owner.WithContext(context.Background())
+	if err := derived.Release(); err != nil {
+		t.Fatalf("derived release failed: %v", err)
+	}
+
+	next := c.NewLockHandle("lh:derived", time.Second)
+	locked, err = next.Acquire()
+	if err != nil || !locked {
+		t.Fatalf("expected next owner acquire success, locked=%v err=%v", locked, err)
+	}
+	if err := owner.Release(); err != nil {
+		t.Fatalf("stale owner release failed: %v", err)
+	}
+
+	contender := c.NewLockHandle("lh:derived", time.Second)
+	locked, err = contender.Acquire()
+	if err != nil || locked {
+		t.Fatalf("stale ownership deleted the next owner's lock, locked=%v err=%v", locked, err)
+	}
+	if err := next.Release(); err != nil {
+		t.Fatalf("next owner release failed: %v", err)
+	}
+}
+
+// TestLockHandleGetAutoReleasesOnSuccessAndError verifies Get releases locks after successful and failed callbacks.
 func TestLockHandleGetAutoReleasesOnSuccessAndError(t *testing.T) {
 	c := NewCache(NewMemoryStore(context.Background()))
 	lock := c.NewLockHandle("lh:get", time.Second)
@@ -69,6 +104,7 @@ func TestLockHandleGetAutoReleasesOnSuccessAndError(t *testing.T) {
 	}
 }
 
+// TestLockHandleBlockWaitsAndTimesOut verifies Block retries acquisition until success or timeout.
 func TestLockHandleBlockWaitsAndTimesOut(t *testing.T) {
 	c := NewCache(NewMemoryStore(context.Background()))
 
@@ -114,6 +150,7 @@ func TestLockHandleBlockWaitsAndTimesOut(t *testing.T) {
 	}
 }
 
+// TestLockHandleContextCancellation verifies canceled contexts stop lock acquisition promptly.
 func TestLockHandleContextCancellation(t *testing.T) {
 	c := NewCache(NewMemoryStore(context.Background()))
 
@@ -150,6 +187,7 @@ func TestLockHandleContextCancellation(t *testing.T) {
 	}
 }
 
+// TestLockHandleNilCallbackValidation verifies lock helpers reject nil callbacks.
 func TestLockHandleNilCallbackValidation(t *testing.T) {
 	c := NewCache(NewMemoryStore(context.Background()))
 
@@ -172,6 +210,7 @@ func TestLockHandleNilCallbackValidation(t *testing.T) {
 	}
 }
 
+// TestLockHandleGetAndBlockReturnFalseWhenNotAcquired verifies callbacks do not run without ownership.
 func TestLockHandleGetAndBlockReturnFalseWhenNotAcquired(t *testing.T) {
 	c := NewCache(NewMemoryStore(context.Background()))
 	holder := c.NewLockHandle("lh:busy", time.Second)
