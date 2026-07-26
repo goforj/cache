@@ -6,7 +6,9 @@ import (
 	"context"
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/rand"
 	"errors"
+	"io"
 	"strconv"
 	"sync"
 	"testing"
@@ -239,6 +241,9 @@ func TestWrapStoreConfigurationFailuresFailClosed(t *testing.T) {
 	if !errors.Is(err, ErrEncryptionKey) {
 		t.Fatalf("configuration error = %v, want ErrEncryptionKey", err)
 	}
+	if store.Driver() != DriverMemory {
+		t.Fatalf("diagnostic Driver() = %q, want %q", store.Driver(), DriverMemory)
+	}
 	ctx := context.Background()
 	checks := []func() error{
 		func() error { return store.Ready(ctx) },
@@ -400,5 +405,199 @@ func TestDecodeValueRejectsCorruptEnvelope(t *testing.T) {
 	}
 	if _, err := decodeValue([]byte("CMP1xpayload"), 0); !errors.Is(err, ErrUnsupportedCodec) {
 		t.Fatalf("unknown envelope error = %v", err)
+	}
+}
+
+// TestWrapStoreRequiresBackend verifies a missing required dependency fails immediately.
+func TestWrapStoreRequiresBackend(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Fatal("WrapStore(nil, ...) did not panic")
+		}
+	}()
+	_, _ = WrapStore(nil, BaseConfig{})
+}
+
+// TestWrapStoreWithoutShapingPreservesBackend verifies the no-op configuration avoids needless wrapping.
+func TestWrapStoreWithoutShapingPreservesBackend(t *testing.T) {
+	base := newShapingTestStore()
+	store, err := WrapStore(base, BaseConfig{})
+	if err != nil {
+		t.Fatalf("WrapStore error = %v", err)
+	}
+	if store != base {
+		t.Fatalf("WrapStore returned %T, want original backend", store)
+	}
+}
+
+// TestValidateBaseConfigAcceptsAESKeySizes verifies every AES key size supported by the contract.
+func TestValidateBaseConfigAcceptsAESKeySizes(t *testing.T) {
+	for _, size := range []int{0, 16, 24, 32} {
+		if err := ValidateBaseConfig(BaseConfig{EncryptionKey: make([]byte, size)}); err != nil {
+			t.Fatalf("key size %d error = %v", size, err)
+		}
+	}
+}
+
+// TestWrapStoreDelegatesOperations exercises wrapper methods that intentionally preserve backend behavior.
+func TestWrapStoreDelegatesOperations(t *testing.T) {
+	configs := []BaseConfig{
+		{Compression: CompressionGzip},
+		{EncryptionKey: []byte("0123456789abcdef")},
+	}
+	for _, cfg := range configs {
+		base := newShapingTestStore()
+		store, err := WrapStore(base, cfg)
+		if err != nil {
+			t.Fatalf("WrapStore(%+v) error = %v", cfg, err)
+		}
+		ctx := context.Background()
+		if store.Driver() != DriverMemory {
+			t.Fatalf("Driver() = %q, want %q", store.Driver(), DriverMemory)
+		}
+		if err := store.Ready(ctx); err != nil {
+			t.Fatalf("Ready() error = %v", err)
+		}
+		if _, ok, err := store.Get(ctx, "missing"); err != nil || ok {
+			t.Fatalf("missing Get() = ok %v, error %v", ok, err)
+		}
+		created, err := store.Add(ctx, "value", []byte("one"), time.Minute)
+		if err != nil || !created {
+			t.Fatalf("first Add() = %v, %v", created, err)
+		}
+		created, err = store.Add(ctx, "value", []byte("two"), time.Minute)
+		if err != nil || created {
+			t.Fatalf("duplicate Add() = %v, %v", created, err)
+		}
+		if _, err := store.Decrement(ctx, "counter", 2, time.Minute); err != nil {
+			t.Fatalf("Decrement() error = %v", err)
+		}
+		if err := store.Delete(ctx, "value"); err != nil {
+			t.Fatalf("Delete() error = %v", err)
+		}
+		if err := store.Set(ctx, "a", []byte("a"), time.Minute); err != nil {
+			t.Fatalf("Set(a) error = %v", err)
+		}
+		if err := store.Set(ctx, "b", []byte("b"), time.Minute); err != nil {
+			t.Fatalf("Set(b) error = %v", err)
+		}
+		if err := store.DeleteMany(ctx, "a", "b"); err != nil {
+			t.Fatalf("DeleteMany() error = %v", err)
+		}
+		if err := store.Flush(ctx); err != nil {
+			t.Fatalf("Flush() error = %v", err)
+		}
+	}
+}
+
+// TestEncryptingStoreDelegatesInspector verifies encryption preserves inspector support.
+func TestEncryptingStoreDelegatesInspector(t *testing.T) {
+	store, err := WrapStore(newShapingTestStore(), BaseConfig{
+		EncryptionKey: []byte("0123456789abcdef"),
+	})
+	if err != nil {
+		t.Fatalf("WrapStore error = %v", err)
+	}
+	inspector := store.(Inspector)
+	if caps := inspector.Capabilities(); !caps.CanList || !caps.CanTTL {
+		t.Fatalf("Capabilities() = %+v", caps)
+	}
+	page, err := inspector.ListPage(context.Background(), ListPageOptions{})
+	if err != nil || len(page.Entries) != 1 {
+		t.Fatalf("ListPage() = %+v, %v", page, err)
+	}
+}
+
+// TestWrappersReportUnsupportedInspector verifies both wrapper layers classify absent browsing support.
+func TestWrappersReportUnsupportedInspector(t *testing.T) {
+	configs := []BaseConfig{
+		{Compression: CompressionGzip},
+		{EncryptionKey: []byte("0123456789abcdef")},
+	}
+	for _, cfg := range configs {
+		store, err := WrapStore(&storeWithoutInspector{Store: newShapingTestStore()}, cfg)
+		if err != nil {
+			t.Fatalf("WrapStore(%+v) error = %v", cfg, err)
+		}
+		inspector := store.(Inspector)
+		if caps := inspector.Capabilities(); caps != (InspectorCapabilities{}) {
+			t.Fatalf("Capabilities() = %+v, want zero value", caps)
+		}
+		if _, err := inspector.ListPage(context.Background(), ListPageOptions{}); !errors.Is(err, ErrInspectorUnsupported) {
+			t.Fatalf("ListPage() error = %v, want ErrInspectorUnsupported", err)
+		}
+	}
+}
+
+// TestEncryptionRejectsMalformedEnvelopes verifies nonce and authentication failures fail closed.
+func TestEncryptionRejectsMalformedEnvelopes(t *testing.T) {
+	store, err := newEncryptingStore(newShapingTestStore(), []byte("0123456789abcdef"))
+	if err != nil {
+		t.Fatalf("newEncryptingStore error = %v", err)
+	}
+	encrypted := store.(*encryptingStore)
+	for _, body := range [][]byte{
+		append(bytes.Clone(encryptionMagic), byte(1), 0),
+		append(bytes.Clone(encryptionMagic), byte(encrypted.aead.NonceSize())),
+		append(append(bytes.Clone(encryptionMagic), byte(encrypted.aead.NonceSize())), make([]byte, encrypted.aead.NonceSize())...),
+	} {
+		if _, err := encrypted.decrypt(body); !errors.Is(err, ErrDecryptFailed) {
+			t.Fatalf("decrypt(%x) error = %v, want ErrDecryptFailed", body, err)
+		}
+	}
+}
+
+// TestEncodeValueRejectsEncodedOversize verifies envelope overhead is included in the size policy.
+func TestEncodeValueRejectsEncodedOversize(t *testing.T) {
+	if _, err := encodeValue(CompressionGzip, 20, []byte("small")); !errors.Is(err, ErrValueTooLarge) {
+		t.Fatalf("encodeValue error = %v, want ErrValueTooLarge", err)
+	}
+	if _, err := encodeValue("unknown", 0, []byte("small")); !errors.Is(err, ErrUnsupportedCodec) {
+		t.Fatalf("unknown codec error = %v, want ErrUnsupportedCodec", err)
+	}
+
+	store, err := WrapStore(newShapingTestStore(), BaseConfig{
+		Compression:   CompressionGzip,
+		MaxValueBytes: 20,
+	})
+	if err != nil {
+		t.Fatalf("WrapStore error = %v", err)
+	}
+	if err := store.Set(context.Background(), "set", []byte("small"), time.Minute); !errors.Is(err, ErrValueTooLarge) {
+		t.Fatalf("Set error = %v, want ErrValueTooLarge", err)
+	}
+	if _, err := store.Add(context.Background(), "add", []byte("small"), time.Minute); !errors.Is(err, ErrValueTooLarge) {
+		t.Fatalf("Add error = %v, want ErrValueTooLarge", err)
+	}
+}
+
+// TestNewEncryptingStoreRejectsInvalidKey verifies direct wrapper construction keeps stable error classification.
+func TestNewEncryptingStoreRejectsInvalidKey(t *testing.T) {
+	if _, err := newEncryptingStore(newShapingTestStore(), []byte("short")); !errors.Is(err, ErrEncryptionKey) {
+		t.Fatalf("newEncryptingStore error = %v, want ErrEncryptionKey", err)
+	}
+}
+
+// errorReader makes the cryptographic randomness failure path deterministic.
+type errorReader struct{}
+
+// Read reports a sentinel failure without producing random bytes.
+func (errorReader) Read([]byte) (int, error) {
+	return 0, io.ErrUnexpectedEOF
+}
+
+// TestEncryptPropagatesRandomnessFailure verifies encryption never writes with a partial nonce.
+func TestEncryptPropagatesRandomnessFailure(t *testing.T) {
+	store, err := newEncryptingStore(newShapingTestStore(), []byte("0123456789abcdef"))
+	if err != nil {
+		t.Fatalf("newEncryptingStore error = %v", err)
+	}
+	original := rand.Reader
+	rand.Reader = errorReader{}
+	t.Cleanup(func() {
+		rand.Reader = original
+	})
+	if _, err := store.(*encryptingStore).encrypt([]byte("value")); !errors.Is(err, io.ErrUnexpectedEOF) {
+		t.Fatalf("encrypt error = %v, want io.ErrUnexpectedEOF", err)
 	}
 }
