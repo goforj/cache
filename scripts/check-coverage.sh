@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 GOCACHE_DIR="${GOCACHE:-/tmp/gocache}"
 GOMODCACHE_DIR="${GOMODCACHE:-/tmp/gomodcache}"
-COVERAGE_MIN="${COVERAGE_MIN:-89.5}"
+COVERAGE_MIN="${COVERAGE_MIN:-97.0}"
 PROFILE="$(mktemp /tmp/cache-root-coverage.XXXXXX)"
 trap 'rm -f "$PROFILE"' EXIT
 

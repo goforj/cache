@@ -51,7 +51,7 @@ jobs:
 
       - name: Enforce root coverage floor
         env:
-          COVERAGE_MIN: "89.5"
+          COVERAGE_MIN: "97.0"
         run: scripts/check-coverage.sh
 
       - name: Verify generated examples compile

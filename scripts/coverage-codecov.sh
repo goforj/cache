@@ -20,16 +20,36 @@ read -r -a integration_packages <<< "${INTEGRATION_PKGS:-./...}"
 read -r -a integration_module_packages <<< "${INTEGRATION_MODULE_PKGS:-./root ./all}"
 
 UNIT_DIR="$TMP_ROOT/unit"
+CORE_UNIT_DIR="$TMP_ROOT/cachecore-unit"
+CACHETEST_UNIT_DIR="$TMP_ROOT/cachetest-unit"
 INT_DIR="$TMP_ROOT/integration"
 INT_MOD_DIR="$TMP_ROOT/integration-module"
 MERGED_DIR="$TMP_ROOT/merged"
 
 rm -rf "$TMP_ROOT"
-mkdir -p "$UNIT_DIR" "$INT_DIR" "$INT_MOD_DIR" "$MERGED_DIR"
+mkdir -p "$UNIT_DIR" "$CORE_UNIT_DIR" "$CACHETEST_UNIT_DIR" "$INT_DIR" "$INT_MOD_DIR" "$MERGED_DIR"
 
 echo "==> Unit coverage collection"
 GOCACHE="$GOCACHE_DIR" \
 go test -cover -coverpkg=./... "${unit_packages[@]}" -args -test.gocoverdir="$UNIT_DIR"
+
+if [[ -d "cachecore" ]]; then
+  echo "==> Cachecore unit coverage collection"
+  (
+    cd cachecore
+    GOWORK=off GOCACHE="$GOCACHE_DIR" \
+    go test -cover -coverpkg=./... ./... -args -test.gocoverdir="$CORE_UNIT_DIR"
+  )
+fi
+
+if [[ -d "cachetest" ]]; then
+  echo "==> Cachetest unit coverage collection"
+  (
+    cd cachetest
+    GOWORK=off GOCACHE="$GOCACHE_DIR" \
+    go test -cover -coverpkg=./... ./... -args -test.gocoverdir="$CACHETEST_UNIT_DIR"
+  )
+fi
 
 echo "==> Integration coverage collection"
 GOCACHE="$GOCACHE_DIR" \
@@ -46,7 +66,7 @@ if [[ -d "$INTEGRATION_MODULE_DIR" ]]; then
 fi
 
 echo "==> Merging coverage data"
-MERGE_INPUTS="$UNIT_DIR,$INT_DIR"
+MERGE_INPUTS="$UNIT_DIR,$CORE_UNIT_DIR,$CACHETEST_UNIT_DIR,$INT_DIR"
 if [[ -d "$INT_MOD_DIR" ]]; then
   MERGE_INPUTS="$MERGE_INPUTS,$INT_MOD_DIR"
 fi
