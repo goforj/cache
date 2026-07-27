@@ -1,128 +1,128 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="1600" height="690" viewBox="0 0 1600 690">
-<rect width="100%" height="100%" fill="#111827"/>
-<text x="800" y="44" text-anchor="middle" fill="#f9fafb" font-size="34" font-family="Arial, sans-serif">Cache Benchmark Allocations (allocs/op)</text>
-<text x="800" y="84" text-anchor="middle" fill="#9ca3af" font-size="30" font-family="Arial, sans-serif">Grouped by operation, linear y-scale, lower is better</text>
-<line x1="180" y1="560" x2="1400" y2="560" stroke="#374151" stroke-width="1"/>
-<text x="170" y="570" text-anchor="end" fill="#d1d5db" font-size="30" font-family="Arial, sans-serif">0</text>
-<line x1="180" y1="466" x2="1400" y2="466" stroke="#374151" stroke-width="1"/>
-<text x="170" y="476" text-anchor="end" fill="#d1d5db" font-size="30" font-family="Arial, sans-serif">10</text>
-<line x1="180" y1="372" x2="1400" y2="372" stroke="#374151" stroke-width="1"/>
-<text x="170" y="382" text-anchor="end" fill="#d1d5db" font-size="30" font-family="Arial, sans-serif">20</text>
-<line x1="180" y1="278" x2="1400" y2="278" stroke="#374151" stroke-width="1"/>
-<text x="170" y="288" text-anchor="end" fill="#d1d5db" font-size="30" font-family="Arial, sans-serif">30</text>
-<line x1="180" y1="184" x2="1400" y2="184" stroke="#374151" stroke-width="1"/>
-<text x="170" y="194" text-anchor="end" fill="#d1d5db" font-size="30" font-family="Arial, sans-serif">40</text>
-<line x1="180" y1="90" x2="1400" y2="90" stroke="#374151" stroke-width="1"/>
-<text x="170" y="100" text-anchor="end" fill="#d1d5db" font-size="30" font-family="Arial, sans-serif">50</text>
-<line x1="180" y1="560" x2="1400" y2="560" stroke="#e5e7eb" stroke-width="2"/>
-<line x1="180" y1="560" x2="180" y2="90" stroke="#e5e7eb" stroke-width="2"/>
-<rect x="192" y="551" width="7" height="9" fill="#4e79a7"/>
-<rect x="205" y="551" width="7" height="9" fill="#6ea6d8"/>
-<rect x="218" y="533" width="7" height="27" fill="#9fc5e8"/>
-<rect x="231" y="495" width="7" height="65" fill="#cfe2f3"/>
-<rect x="244" y="533" width="7" height="27" fill="#59a14f"/>
-<rect x="257" y="533" width="7" height="27" fill="#7bc96f"/>
-<rect x="270" y="523" width="7" height="37" fill="#a8d08d"/>
-<rect x="283" y="523" width="7" height="37" fill="#c6e0b4"/>
-<rect x="296" y="560" width="7" height="0" fill="#e15759"/>
-<text x="247" y="642" text-anchor="middle" fill="#d1d5db" font-size="30" font-family="Arial, sans-serif">memory</text>
-<rect x="327" y="477" width="7" height="83" fill="#4e79a7"/>
-<rect x="340" y="477" width="7" height="83" fill="#6ea6d8"/>
-<rect x="353" y="458" width="7" height="102" fill="#9fc5e8"/>
-<rect x="366" y="421" width="7" height="139" fill="#cfe2f3"/>
-<rect x="379" y="421" width="7" height="139" fill="#59a14f"/>
-<rect x="392" y="421" width="7" height="139" fill="#7bc96f"/>
-<rect x="405" y="412" width="7" height="148" fill="#a8d08d"/>
-<rect x="418" y="412" width="7" height="148" fill="#c6e0b4"/>
-<rect x="431" y="495" width="7" height="65" fill="#e15759"/>
-<text x="382" y="642" text-anchor="middle" fill="#d1d5db" font-size="30" font-family="Arial, sans-serif">file</text>
-<rect x="462" y="198" width="7" height="362" fill="#4e79a7"/>
-<rect x="475" y="198" width="7" height="362" fill="#6ea6d8"/>
-<rect x="488" y="180" width="7" height="380" fill="#9fc5e8"/>
-<rect x="501" y="143" width="7" height="417" fill="#cfe2f3"/>
-<rect x="514" y="291" width="7" height="269" fill="#59a14f"/>
-<rect x="527" y="291" width="7" height="269" fill="#7bc96f"/>
-<rect x="540" y="282" width="7" height="278" fill="#a8d08d"/>
-<rect x="553" y="282" width="7" height="278" fill="#c6e0b4"/>
-<rect x="566" y="356" width="7" height="204" fill="#e15759"/>
-<text x="517" y="642" text-anchor="middle" fill="#d1d5db" font-size="30" font-family="Arial, sans-serif">sqlite</text>
-<rect x="597" y="263" width="7" height="297" fill="#4e79a7"/>
-<rect x="610" y="263" width="7" height="297" fill="#6ea6d8"/>
-<rect x="623" y="245" width="7" height="315" fill="#9fc5e8"/>
-<rect x="636" y="208" width="7" height="352" fill="#cfe2f3"/>
-<rect x="649" y="440" width="7" height="120" fill="#59a14f"/>
-<rect x="662" y="440" width="7" height="120" fill="#7bc96f"/>
-<rect x="675" y="430" width="7" height="130" fill="#a8d08d"/>
-<rect x="688" y="430" width="7" height="130" fill="#c6e0b4"/>
-<rect x="701" y="486" width="7" height="74" fill="#e15759"/>
-<text x="652" y="642" text-anchor="middle" fill="#d1d5db" font-size="30" font-family="Arial, sans-serif">postgres</text>
-<rect x="732" y="319" width="7" height="241" fill="#4e79a7"/>
-<rect x="745" y="319" width="7" height="241" fill="#6ea6d8"/>
-<rect x="758" y="300" width="7" height="260" fill="#9fc5e8"/>
-<rect x="771" y="263" width="7" height="297" fill="#cfe2f3"/>
-<rect x="784" y="421" width="7" height="139" fill="#59a14f"/>
-<rect x="797" y="421" width="7" height="139" fill="#7bc96f"/>
-<rect x="810" y="412" width="7" height="148" fill="#a8d08d"/>
-<rect x="823" y="412" width="7" height="148" fill="#c6e0b4"/>
-<rect x="836" y="468" width="7" height="92" fill="#e15759"/>
-<text x="787" y="642" text-anchor="middle" fill="#d1d5db" font-size="30" font-family="Arial, sans-serif">mysql</text>
-<rect x="867" y="486" width="7" height="74" fill="#4e79a7"/>
-<rect x="880" y="486" width="7" height="74" fill="#6ea6d8"/>
-<rect x="893" y="468" width="7" height="92" fill="#9fc5e8"/>
-<rect x="906" y="430" width="7" height="130" fill="#cfe2f3"/>
-<rect x="919" y="468" width="7" height="92" fill="#59a14f"/>
-<rect x="932" y="468" width="7" height="92" fill="#7bc96f"/>
-<rect x="945" y="458" width="7" height="102" fill="#a8d08d"/>
-<rect x="958" y="458" width="7" height="102" fill="#c6e0b4"/>
-<rect x="971" y="486" width="7" height="74" fill="#e15759"/>
-<text x="922" y="642" text-anchor="middle" fill="#d1d5db" font-size="30" font-family="Arial, sans-serif">redis</text>
-<rect x="1002" y="477" width="7" height="83" fill="#4e79a7"/>
-<rect x="1015" y="477" width="7" height="83" fill="#6ea6d8"/>
-<rect x="1028" y="458" width="7" height="102" fill="#9fc5e8"/>
-<rect x="1041" y="421" width="7" height="139" fill="#cfe2f3"/>
-<rect x="1054" y="505" width="7" height="55" fill="#59a14f"/>
-<rect x="1067" y="505" width="7" height="55" fill="#7bc96f"/>
-<rect x="1080" y="495" width="7" height="65" fill="#a8d08d"/>
-<rect x="1093" y="495" width="7" height="65" fill="#c6e0b4"/>
-<rect x="1106" y="523" width="7" height="37" fill="#e15759"/>
-<text x="1057" y="642" text-anchor="middle" fill="#d1d5db" font-size="30" font-family="Arial, sans-serif">memcached</text>
-<rect x="1137" y="189" width="7" height="371" fill="#4e79a7"/>
-<rect x="1150" y="189" width="7" height="371" fill="#6ea6d8"/>
-<rect x="1163" y="170" width="7" height="390" fill="#9fc5e8"/>
-<rect x="1176" y="133" width="7" height="427" fill="#cfe2f3"/>
-<rect x="1189" y="347" width="7" height="213" fill="#59a14f"/>
-<rect x="1202" y="347" width="7" height="213" fill="#7bc96f"/>
-<rect x="1215" y="338" width="7" height="222" fill="#a8d08d"/>
-<rect x="1228" y="338" width="7" height="222" fill="#c6e0b4"/>
-<rect x="1241" y="328" width="7" height="232" fill="#e15759"/>
-<text x="1192" y="642" text-anchor="middle" fill="#d1d5db" font-size="30" font-family="Arial, sans-serif">nats</text>
-<rect x="1272" y="189" width="7" height="371" fill="#4e79a7"/>
-<rect x="1285" y="189" width="7" height="371" fill="#6ea6d8"/>
-<rect x="1298" y="170" width="7" height="390" fill="#9fc5e8"/>
-<rect x="1311" y="133" width="7" height="427" fill="#cfe2f3"/>
-<rect x="1324" y="347" width="7" height="213" fill="#59a14f"/>
-<rect x="1337" y="347" width="7" height="213" fill="#7bc96f"/>
-<rect x="1350" y="338" width="7" height="222" fill="#a8d08d"/>
-<rect x="1363" y="338" width="7" height="222" fill="#c6e0b4"/>
-<rect x="1376" y="328" width="7" height="232" fill="#e15759"/>
-<text x="1327" y="642" text-anchor="middle" fill="#d1d5db" font-size="30" font-family="Arial, sans-serif">nats_bucket_ttl</text>
-<rect x="1420" y="81" width="20" height="20" fill="#4e79a7"/>
-<text x="1450" y="96" fill="#f3f4f6" font-size="28" font-family="Arial, sans-serif">GetBytes</text>
-<rect x="1420" y="113" width="20" height="20" fill="#6ea6d8"/>
-<text x="1450" y="128" fill="#f3f4f6" font-size="28" font-family="Arial, sans-serif">GetString</text>
-<rect x="1420" y="145" width="20" height="20" fill="#9fc5e8"/>
-<text x="1450" y="160" fill="#f3f4f6" font-size="28" font-family="Arial, sans-serif">Get[string]</text>
-<rect x="1420" y="177" width="20" height="20" fill="#cfe2f3"/>
-<text x="1450" y="192" fill="#f3f4f6" font-size="28" font-family="Arial, sans-serif">Get[T]</text>
-<rect x="1420" y="209" width="20" height="20" fill="#59a14f"/>
-<text x="1450" y="224" fill="#f3f4f6" font-size="28" font-family="Arial, sans-serif">SetBytes</text>
-<rect x="1420" y="241" width="20" height="20" fill="#7bc96f"/>
-<text x="1450" y="256" fill="#f3f4f6" font-size="28" font-family="Arial, sans-serif">SetString</text>
-<rect x="1420" y="273" width="20" height="20" fill="#a8d08d"/>
-<text x="1450" y="288" fill="#f3f4f6" font-size="28" font-family="Arial, sans-serif">Set[string]</text>
-<rect x="1420" y="305" width="20" height="20" fill="#c6e0b4"/>
-<text x="1450" y="320" fill="#f3f4f6" font-size="28" font-family="Arial, sans-serif">Set[T]</text>
-<rect x="1420" y="337" width="20" height="20" fill="#e15759"/>
-<text x="1450" y="352" fill="#f3f4f6" font-size="28" font-family="Arial, sans-serif">Delete</text>
+<rect width="100%" height="100%" rx="8" fill="#1A1620"/>
+<text x="800" y="44" text-anchor="middle" fill="#FFFFFF" font-size="34" font-weight="700" letter-spacing="-1.2" font-family="Space Grotesk, Inter, system-ui, sans-serif">Cache Benchmark Allocations (allocs/op)</text>
+<text x="800" y="84" text-anchor="middle" fill="#A9A1B3" font-size="30" font-family="Inter, system-ui, sans-serif">Grouped by operation, linear y-scale, lower is better</text>
+<line x1="180" y1="560" x2="1400" y2="560" stroke="#2A2333" stroke-width="1"/>
+<text x="170" y="570" text-anchor="end" fill="#746C80" font-size="30" font-family="JetBrains Mono, ui-monospace, monospace">0</text>
+<line x1="180" y1="466" x2="1400" y2="466" stroke="#2A2333" stroke-width="1"/>
+<text x="170" y="476" text-anchor="end" fill="#746C80" font-size="30" font-family="JetBrains Mono, ui-monospace, monospace">10</text>
+<line x1="180" y1="372" x2="1400" y2="372" stroke="#2A2333" stroke-width="1"/>
+<text x="170" y="382" text-anchor="end" fill="#746C80" font-size="30" font-family="JetBrains Mono, ui-monospace, monospace">20</text>
+<line x1="180" y1="278" x2="1400" y2="278" stroke="#2A2333" stroke-width="1"/>
+<text x="170" y="288" text-anchor="end" fill="#746C80" font-size="30" font-family="JetBrains Mono, ui-monospace, monospace">30</text>
+<line x1="180" y1="184" x2="1400" y2="184" stroke="#2A2333" stroke-width="1"/>
+<text x="170" y="194" text-anchor="end" fill="#746C80" font-size="30" font-family="JetBrains Mono, ui-monospace, monospace">40</text>
+<line x1="180" y1="90" x2="1400" y2="90" stroke="#2A2333" stroke-width="1"/>
+<text x="170" y="100" text-anchor="end" fill="#746C80" font-size="30" font-family="JetBrains Mono, ui-monospace, monospace">50</text>
+<line x1="180" y1="560" x2="1400" y2="560" stroke="#3D3349" stroke-width="2"/>
+<line x1="180" y1="560" x2="180" y2="90" stroke="#3D3349" stroke-width="2"/>
+<rect x="192" y="551" width="7" height="9" fill="#FF5E3A"/>
+<rect x="205" y="551" width="7" height="9" fill="#FF8257"/>
+<rect x="218" y="533" width="7" height="27" fill="#FFC24D"/>
+<rect x="231" y="495" width="7" height="65" fill="#FFD37A"/>
+<rect x="244" y="533" width="7" height="27" fill="#5FCFA8"/>
+<rect x="257" y="533" width="7" height="27" fill="#7D6EE7"/>
+<rect x="270" y="523" width="7" height="37" fill="#B58AE8"/>
+<rect x="283" y="523" width="7" height="37" fill="#A9A1B3"/>
+<rect x="296" y="560" width="7" height="0" fill="#FF6B85"/>
+<text x="247" y="642" text-anchor="middle" fill="#A9A1B3" font-size="30" font-family="Inter, system-ui, sans-serif">memory</text>
+<rect x="327" y="477" width="7" height="83" fill="#FF5E3A"/>
+<rect x="340" y="477" width="7" height="83" fill="#FF8257"/>
+<rect x="353" y="458" width="7" height="102" fill="#FFC24D"/>
+<rect x="366" y="421" width="7" height="139" fill="#FFD37A"/>
+<rect x="379" y="421" width="7" height="139" fill="#5FCFA8"/>
+<rect x="392" y="421" width="7" height="139" fill="#7D6EE7"/>
+<rect x="405" y="412" width="7" height="148" fill="#B58AE8"/>
+<rect x="418" y="412" width="7" height="148" fill="#A9A1B3"/>
+<rect x="431" y="495" width="7" height="65" fill="#FF6B85"/>
+<text x="382" y="642" text-anchor="middle" fill="#A9A1B3" font-size="30" font-family="Inter, system-ui, sans-serif">file</text>
+<rect x="462" y="198" width="7" height="362" fill="#FF5E3A"/>
+<rect x="475" y="198" width="7" height="362" fill="#FF8257"/>
+<rect x="488" y="180" width="7" height="380" fill="#FFC24D"/>
+<rect x="501" y="143" width="7" height="417" fill="#FFD37A"/>
+<rect x="514" y="291" width="7" height="269" fill="#5FCFA8"/>
+<rect x="527" y="291" width="7" height="269" fill="#7D6EE7"/>
+<rect x="540" y="282" width="7" height="278" fill="#B58AE8"/>
+<rect x="553" y="282" width="7" height="278" fill="#A9A1B3"/>
+<rect x="566" y="356" width="7" height="204" fill="#FF6B85"/>
+<text x="517" y="642" text-anchor="middle" fill="#A9A1B3" font-size="30" font-family="Inter, system-ui, sans-serif">sqlite</text>
+<rect x="597" y="263" width="7" height="297" fill="#FF5E3A"/>
+<rect x="610" y="263" width="7" height="297" fill="#FF8257"/>
+<rect x="623" y="245" width="7" height="315" fill="#FFC24D"/>
+<rect x="636" y="208" width="7" height="352" fill="#FFD37A"/>
+<rect x="649" y="440" width="7" height="120" fill="#5FCFA8"/>
+<rect x="662" y="440" width="7" height="120" fill="#7D6EE7"/>
+<rect x="675" y="430" width="7" height="130" fill="#B58AE8"/>
+<rect x="688" y="430" width="7" height="130" fill="#A9A1B3"/>
+<rect x="701" y="486" width="7" height="74" fill="#FF6B85"/>
+<text x="652" y="642" text-anchor="middle" fill="#A9A1B3" font-size="30" font-family="Inter, system-ui, sans-serif">postgres</text>
+<rect x="732" y="319" width="7" height="241" fill="#FF5E3A"/>
+<rect x="745" y="319" width="7" height="241" fill="#FF8257"/>
+<rect x="758" y="300" width="7" height="260" fill="#FFC24D"/>
+<rect x="771" y="263" width="7" height="297" fill="#FFD37A"/>
+<rect x="784" y="421" width="7" height="139" fill="#5FCFA8"/>
+<rect x="797" y="421" width="7" height="139" fill="#7D6EE7"/>
+<rect x="810" y="412" width="7" height="148" fill="#B58AE8"/>
+<rect x="823" y="412" width="7" height="148" fill="#A9A1B3"/>
+<rect x="836" y="468" width="7" height="92" fill="#FF6B85"/>
+<text x="787" y="642" text-anchor="middle" fill="#A9A1B3" font-size="30" font-family="Inter, system-ui, sans-serif">mysql</text>
+<rect x="867" y="486" width="7" height="74" fill="#FF5E3A"/>
+<rect x="880" y="486" width="7" height="74" fill="#FF8257"/>
+<rect x="893" y="468" width="7" height="92" fill="#FFC24D"/>
+<rect x="906" y="430" width="7" height="130" fill="#FFD37A"/>
+<rect x="919" y="468" width="7" height="92" fill="#5FCFA8"/>
+<rect x="932" y="468" width="7" height="92" fill="#7D6EE7"/>
+<rect x="945" y="458" width="7" height="102" fill="#B58AE8"/>
+<rect x="958" y="458" width="7" height="102" fill="#A9A1B3"/>
+<rect x="971" y="486" width="7" height="74" fill="#FF6B85"/>
+<text x="922" y="642" text-anchor="middle" fill="#A9A1B3" font-size="30" font-family="Inter, system-ui, sans-serif">redis</text>
+<rect x="1002" y="477" width="7" height="83" fill="#FF5E3A"/>
+<rect x="1015" y="477" width="7" height="83" fill="#FF8257"/>
+<rect x="1028" y="458" width="7" height="102" fill="#FFC24D"/>
+<rect x="1041" y="421" width="7" height="139" fill="#FFD37A"/>
+<rect x="1054" y="505" width="7" height="55" fill="#5FCFA8"/>
+<rect x="1067" y="505" width="7" height="55" fill="#7D6EE7"/>
+<rect x="1080" y="495" width="7" height="65" fill="#B58AE8"/>
+<rect x="1093" y="495" width="7" height="65" fill="#A9A1B3"/>
+<rect x="1106" y="523" width="7" height="37" fill="#FF6B85"/>
+<text x="1057" y="642" text-anchor="middle" fill="#A9A1B3" font-size="30" font-family="Inter, system-ui, sans-serif">memcached</text>
+<rect x="1137" y="189" width="7" height="371" fill="#FF5E3A"/>
+<rect x="1150" y="189" width="7" height="371" fill="#FF8257"/>
+<rect x="1163" y="170" width="7" height="390" fill="#FFC24D"/>
+<rect x="1176" y="133" width="7" height="427" fill="#FFD37A"/>
+<rect x="1189" y="347" width="7" height="213" fill="#5FCFA8"/>
+<rect x="1202" y="347" width="7" height="213" fill="#7D6EE7"/>
+<rect x="1215" y="338" width="7" height="222" fill="#B58AE8"/>
+<rect x="1228" y="338" width="7" height="222" fill="#A9A1B3"/>
+<rect x="1241" y="328" width="7" height="232" fill="#FF6B85"/>
+<text x="1192" y="642" text-anchor="middle" fill="#A9A1B3" font-size="30" font-family="Inter, system-ui, sans-serif">nats</text>
+<rect x="1272" y="189" width="7" height="371" fill="#FF5E3A"/>
+<rect x="1285" y="189" width="7" height="371" fill="#FF8257"/>
+<rect x="1298" y="170" width="7" height="390" fill="#FFC24D"/>
+<rect x="1311" y="133" width="7" height="427" fill="#FFD37A"/>
+<rect x="1324" y="347" width="7" height="213" fill="#5FCFA8"/>
+<rect x="1337" y="347" width="7" height="213" fill="#7D6EE7"/>
+<rect x="1350" y="338" width="7" height="222" fill="#B58AE8"/>
+<rect x="1363" y="338" width="7" height="222" fill="#A9A1B3"/>
+<rect x="1376" y="328" width="7" height="232" fill="#FF6B85"/>
+<text x="1327" y="642" text-anchor="middle" fill="#A9A1B3" font-size="30" font-family="Inter, system-ui, sans-serif">nats_bucket_ttl</text>
+<rect x="1420" y="81" width="20" height="20" rx="5" fill="#FF5E3A"/>
+<text x="1450" y="96" fill="#A9A1B3" font-size="28" font-family="Inter, system-ui, sans-serif">GetBytes</text>
+<rect x="1420" y="113" width="20" height="20" rx="5" fill="#FF8257"/>
+<text x="1450" y="128" fill="#A9A1B3" font-size="28" font-family="Inter, system-ui, sans-serif">GetString</text>
+<rect x="1420" y="145" width="20" height="20" rx="5" fill="#FFC24D"/>
+<text x="1450" y="160" fill="#A9A1B3" font-size="28" font-family="Inter, system-ui, sans-serif">Get[string]</text>
+<rect x="1420" y="177" width="20" height="20" rx="5" fill="#FFD37A"/>
+<text x="1450" y="192" fill="#A9A1B3" font-size="28" font-family="Inter, system-ui, sans-serif">Get[T]</text>
+<rect x="1420" y="209" width="20" height="20" rx="5" fill="#5FCFA8"/>
+<text x="1450" y="224" fill="#A9A1B3" font-size="28" font-family="Inter, system-ui, sans-serif">SetBytes</text>
+<rect x="1420" y="241" width="20" height="20" rx="5" fill="#7D6EE7"/>
+<text x="1450" y="256" fill="#A9A1B3" font-size="28" font-family="Inter, system-ui, sans-serif">SetString</text>
+<rect x="1420" y="273" width="20" height="20" rx="5" fill="#B58AE8"/>
+<text x="1450" y="288" fill="#A9A1B3" font-size="28" font-family="Inter, system-ui, sans-serif">Set[string]</text>
+<rect x="1420" y="305" width="20" height="20" rx="5" fill="#A9A1B3"/>
+<text x="1450" y="320" fill="#A9A1B3" font-size="28" font-family="Inter, system-ui, sans-serif">Set[T]</text>
+<rect x="1420" y="337" width="20" height="20" rx="5" fill="#FF6B85"/>
+<text x="1450" y="352" fill="#A9A1B3" font-size="28" font-family="Inter, system-ui, sans-serif">Delete</text>
 </svg>
