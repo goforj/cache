@@ -1061,9 +1061,16 @@ func TestCacheRefreshAheadHitTriggersAsyncRefresh(t *testing.T) {
 		t.Fatalf("expected async refresh callback to run")
 	}
 
-	body2, ok, err := c.GetBytes(key)
-	if err != nil || !ok || string(body2) != "v2" {
-		t.Fatalf("expected refreshed value, ok=%v body=%q err=%v", ok, string(body2), err)
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		body2, ok, err := c.GetBytes(key)
+		if err == nil && ok && string(body2) == "v2" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("expected refreshed value, ok=%v body=%q err=%v", ok, string(body2), err)
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 	if calls < 2 {
 		t.Fatalf("expected refresh callback to run twice total, calls=%d", calls)

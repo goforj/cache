@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./docs/images/logo.png?v=1" width="300" alt="cache logo">
+  <img src="https://raw.githubusercontent.com/goforj/cache/main/docs/images/logo.png" width="300" alt="cache logo">
 </p>
 
 <p align="center">
