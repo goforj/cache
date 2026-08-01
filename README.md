@@ -1392,7 +1392,11 @@ fmt.Println(c.SetString("user:42:name", "Ada", time.Minute) == nil) // true
 
 Default integration runs cover the contract suite above. Fault/recovery restart tests run automatically when the selected integration suite includes container-backed fixtures.
 
-## Contributing (README updates)
+## Development
+
+Use `make test` for root-module tests, `make vet` for static checks, `make generate` to refresh generated documentation, and `make test-integration` for the separate integration module. Pass a driver such as `make test-integration sqlitecache` to narrow the matrix. Integration tests may require local services. Driver, docs, examples, and integration directories are independent Go modules; test each changed module from its directory.
+
+### README updates
 
 README content is a mix of generated sections and manual sections.
 
@@ -1427,7 +1431,7 @@ are available.
 ### Watch mode
 
 ```bash
-./docs/watcher.sh
+make docs-watch
 ```
 
 Notes:
