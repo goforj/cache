@@ -1431,7 +1431,7 @@ are available.
 ### Watch mode
 
 ```bash
-./docs/watcher.sh
+make docs-watch
 ```
 
 Notes:
