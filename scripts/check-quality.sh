@@ -5,6 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 GOCACHE_DIR="${GOCACHE:-/tmp/gocache}"
 GOMODCACHE_DIR="${GOMODCACHE:-/tmp/gomodcache}"
 LOCAL_SIBLINGS="${CACHE_LOCAL_SIBLINGS:-0}"
+GO_VERSION_FILTER="${CACHE_GO_VERSION_FILTER:-}"
 MANIFEST_FILE="$ROOT_DIR/scripts/module-manifest.txt"
 
 if [[ "$LOCAL_SIBLINGS" != "0" ]] && [[ "$LOCAL_SIBLINGS" != "1" ]]; then
@@ -63,6 +64,10 @@ while IFS= read -r module_file; do
   else
     module_manifest_dir="$module_label"
   fi
+  go_version="$(awk '$1 == "go" { print $2; exit }' "$module_file")"
+  if [[ -n "$GO_VERSION_FILTER" ]] && [[ "$go_version" != "$GO_VERSION_FILTER" ]]; then
+    continue
+  fi
   echo "==> quality $module_label"
   (
     cd "$module_dir"
@@ -73,7 +78,6 @@ while IFS= read -r module_file; do
       create_local_modfile "$module_dir" "$module_manifest_dir"
       modfile_args=("-modfile=$temp_mod")
     fi
-    go_version="$(awk '$1 == "go" { print $2; exit }' go.mod)"
     GOWORK=off GOCACHE="$GOCACHE_DIR" GOMODCACHE="$GOMODCACHE_DIR" go mod tidy -diff -go="$go_version" "${modfile_args[@]}"
     packages="$(GOWORK=off GOCACHE="$GOCACHE_DIR" GOMODCACHE="$GOMODCACHE_DIR" go list "${modfile_args[@]}" ./...)"
     if [[ -n "$packages" ]]; then
