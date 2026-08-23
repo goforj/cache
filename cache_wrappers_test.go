@@ -88,6 +88,22 @@ func TestGenericMethodSurface(t *testing.T) {
 	}
 }
 
+// TestGenericMethodNilCallbacks verifies receiver methods reject missing cache loaders without panicking.
+func TestGenericMethodNilCallbacks(t *testing.T) {
+	t.Parallel()
+	c := NewCache(NewMemoryStore(context.Background()))
+
+	if _, err := c.RefreshAhead[int]("method:nil:refresh", time.Minute, time.Second, nil); err == nil {
+		t.Fatal("expected RefreshAhead to reject a nil callback")
+	}
+	if _, err := c.Remember[int]("method:nil:remember", time.Minute, nil); err == nil {
+		t.Fatal("expected Remember to reject a nil callback")
+	}
+	if _, _, err := c.RememberStale[int]("method:nil:stale", time.Minute, 2*time.Minute, nil); err == nil {
+		t.Fatal("expected RememberStale to reject a nil callback")
+	}
+}
+
 // TestGenericMethodsDeliverBoundContext verifies typed methods use the context attached to their receiver.
 func TestGenericMethodsDeliverBoundContext(t *testing.T) {
 	type contextKey struct{}
