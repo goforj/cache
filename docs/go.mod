@@ -1,6 +1,6 @@
 module github.com/goforj/cache/docs
 
-go 1.24.4
+go 1.27.0
 
 require (
 	github.com/docker/go-connections v0.5.0

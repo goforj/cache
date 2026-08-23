@@ -3,11 +3,144 @@ package cache
 import (
 	"context"
 	"errors"
+	"strconv"
 	"testing"
 	"time"
 
 	"github.com/goforj/cache/cachecore"
 )
+
+// TestGenericMethodSurface verifies every Go 1.27 method form preserves the typed helper behavior.
+func TestGenericMethodSurface(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	c := NewCache(NewMemoryStore(ctx))
+
+	type payload struct {
+		Name string `json:"name"`
+	}
+
+	// Method expressions and values are important for dependency injection and callback composition.
+	set := (*Cache).Set[payload]
+	get := c.Get[payload]
+	_ = (*Cache).SetJSON[payload]
+	_ = (*Cache).GetJSON[payload]
+	_ = (*Cache).RefreshAhead[payload]
+	_ = (*Cache).RefreshAheadValueWithCodec[int]
+	_ = (*Cache).Pull[payload]
+	_ = (*Cache).Remember[payload]
+	_ = (*Cache).RememberStale[payload]
+
+	if err := set(c, "method:get", payload{Name: "Ada"}, time.Minute); err != nil {
+		t.Fatalf("Set method expression failed: %v", err)
+	}
+	got, ok, err := get("method:get")
+	if err != nil || !ok || got.Name != "Ada" {
+		t.Fatalf("Get method value failed: ok=%v got=%+v err=%v", ok, got, err)
+	}
+
+	if err := c.SetJSON("method:json", payload{Name: "Grace"}, time.Minute); err != nil {
+		t.Fatalf("SetJSON method failed: %v", err)
+	}
+	got, ok, err = c.GetJSON[payload]("method:json")
+	if err != nil || !ok || got.Name != "Grace" {
+		t.Fatalf("GetJSON method failed: ok=%v got=%+v err=%v", ok, got, err)
+	}
+
+	if err := c.Set("method:pull", payload{Name: "Linus"}, time.Minute); err != nil {
+		t.Fatalf("seed Pull method: %v", err)
+	}
+	got, ok, err = c.Pull[payload]("method:pull")
+	if err != nil || !ok || got.Name != "Linus" {
+		t.Fatalf("Pull method failed: ok=%v got=%+v err=%v", ok, got, err)
+	}
+
+	remembered, err := c.Remember("method:remember", time.Minute, func() (payload, error) {
+		return payload{Name: "Margaret"}, nil
+	})
+	if err != nil || remembered.Name != "Margaret" {
+		t.Fatalf("Remember method failed: got=%+v err=%v", remembered, err)
+	}
+
+	stale, usedStale, err := c.RememberStale("method:stale", time.Minute, 2*time.Minute, func() (payload, error) {
+		return payload{Name: "Barbara"}, nil
+	})
+	if err != nil || usedStale || stale.Name != "Barbara" {
+		t.Fatalf("RememberStale method failed: stale=%v got=%+v err=%v", usedStale, stale, err)
+	}
+
+	refreshed, err := c.RefreshAhead("method:refresh", time.Minute, 10*time.Second, func() (payload, error) {
+		return payload{Name: "Edsger"}, nil
+	})
+	if err != nil || refreshed.Name != "Edsger" {
+		t.Fatalf("RefreshAhead method failed: got=%+v err=%v", refreshed, err)
+	}
+
+	codec := ValueCodec[int]{
+		Encode: func(value int) ([]byte, error) { return []byte(strconv.Itoa(value)), nil },
+		Decode: func(body []byte) (int, error) { return strconv.Atoi(string(body)) },
+	}
+	custom, err := c.RefreshAheadValueWithCodec("method:codec", time.Minute, 10*time.Second, func() (int, error) {
+		return 27, nil
+	}, codec)
+	if err != nil || custom != 27 {
+		t.Fatalf("RefreshAheadValueWithCodec method failed: got=%d err=%v", custom, err)
+	}
+}
+
+// TestGenericMethodNilCallbacks verifies receiver methods reject missing cache loaders without panicking.
+func TestGenericMethodNilCallbacks(t *testing.T) {
+	t.Parallel()
+	c := NewCache(NewMemoryStore(context.Background()))
+
+	if _, err := c.RefreshAhead[int]("method:nil:refresh", time.Minute, time.Second, nil); err == nil {
+		t.Fatal("expected RefreshAhead to reject a nil callback")
+	}
+	if _, err := c.Remember[int]("method:nil:remember", time.Minute, nil); err == nil {
+		t.Fatal("expected Remember to reject a nil callback")
+	}
+	if _, _, err := c.RememberStale[int]("method:nil:stale", time.Minute, 2*time.Minute, nil); err == nil {
+		t.Fatal("expected RememberStale to reject a nil callback")
+	}
+}
+
+// TestGenericMethodsDeliverBoundContext verifies typed methods use the context attached to their receiver.
+func TestGenericMethodsDeliverBoundContext(t *testing.T) {
+	type contextKey struct{}
+	ctx := context.WithValue(context.Background(), contextKey{}, "bound")
+	var observed []context.Context
+	c := NewCache(NewMemoryStore(context.Background())).WithObserver(ObserverFunc(func(got context.Context, _ CacheOpEvent) {
+		observed = append(observed, got)
+	}))
+
+	if err := c.WithContext(ctx).Set("context:key", "value", time.Minute); err != nil {
+		t.Fatalf("Set with bound context failed: %v", err)
+	}
+	if len(observed) == 0 {
+		t.Fatal("expected observer calls")
+	}
+	for _, got := range observed {
+		if got.Value(contextKey{}) != "bound" {
+			t.Fatalf("observer received unbound context: %v", got)
+		}
+	}
+
+	observed = nil
+	codec := ValueCodec[int]{
+		Encode: func(value int) ([]byte, error) { return []byte(strconv.Itoa(value)), nil },
+		Decode: func(body []byte) (int, error) { return strconv.Atoi(string(body)) },
+	}
+	if _, err := RefreshAheadValueWithCodec(nil, c, "context:nil", time.Minute, time.Second, func() (int, error) {
+		return 1, nil
+	}, codec); err != nil {
+		t.Fatalf("compatibility function with nil context failed: %v", err)
+	}
+	for _, got := range observed {
+		if got == nil {
+			t.Fatal("observer received a nil normalized context")
+		}
+	}
+}
 
 // TestGenericTypedWrappers verifies typed cache helpers encode and decode values consistently.
 func TestGenericTypedWrappers(t *testing.T) {

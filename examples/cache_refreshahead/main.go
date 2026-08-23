@@ -17,7 +17,7 @@ func main() {
 	}
 	ctx := context.Background()
 	c := cache.NewCache(cache.NewMemoryStore(ctx))
-	s, err := cache.RefreshAhead[Summary](c, "dashboard:summary", time.Minute, 10*time.Second, func() (Summary, error) {
+	s, err := c.RefreshAhead("dashboard:summary", time.Minute, 10*time.Second, func() (Summary, error) {
 		return Summary{Text: "ok"}, nil
 	})
 	fmt.Println(err == nil, s.Text) // true ok

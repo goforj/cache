@@ -12,10 +12,15 @@ import (
 
 // main keeps this generated example executable so API drift fails during compilation.
 func main() {
-	// Set writes raw bytes to key.
+	// Set encodes value with the default codec (JSON) and writes it to key.
 
-	// Example: set bytes with ttl
+	// Example: set typed values (struct + string)
+	type Settings struct {
+		Enabled bool `json:"enabled"`
+	}
 	ctx := context.Background()
 	c := cache.NewCache(cache.NewMemoryStore(ctx))
-	fmt.Println(c.SetBytes("token", []byte("abc"), time.Minute) == nil) // true
+	err := c.Set("settings:alerts", Settings{Enabled: true}, time.Minute)
+	err2 := c.Set("settings:mode", "dark", time.Minute)
+	fmt.Println(err == nil, err2 == nil) // true true
 }

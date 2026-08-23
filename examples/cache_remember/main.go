@@ -9,15 +9,16 @@ import (
 
 // main keeps this generated example executable so API drift fails during compilation.
 func main() {
-	// GetJSON decodes a JSON value into T when key exists, using background context.
+	// Remember is the ergonomic, typed remember helper using JSON encoding by default.
 
-	// Example: get typed JSON
+	// Example: remember typed value
 	type Profile struct {
 		Name string `json:"name"`
 	}
 	ctx := context.Background()
 	c := cache.NewCache(cache.NewMemoryStore(ctx))
-	_ = cache.SetJSON(c, "profile:42", Profile{Name: "Ada"}, time.Minute)
-	profile, ok, err := cache.GetJSON[Profile](c, "profile:42")
-	fmt.Println(err == nil, ok, profile.Name) // true true Ada
+	profile, err := c.Remember("profile:42", time.Minute, func() (Profile, error) {
+		return Profile{Name: "Ada"}, nil
+	})
+	fmt.Println(err == nil, profile.Name) // true Ada
 }

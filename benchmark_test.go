@@ -8,6 +8,59 @@ import (
 	"github.com/goforj/cache/cachecore"
 )
 
+// benchmarkPayload keeps typed helper measurements representative of small application values.
+type benchmarkPayload struct {
+	Name string `json:"name"`
+}
+
+// BenchmarkCacheGetTyped compares the compatibility function and receiver method read paths.
+func BenchmarkCacheGetTyped(b *testing.B) {
+	c := NewCache(NewMemoryStore(context.Background()))
+	if err := c.Set("key", benchmarkPayload{Name: "Ada"}, time.Hour); err != nil {
+		b.Fatalf("seed cache: %v", err)
+	}
+
+	b.Run("Function", func(b *testing.B) {
+		b.ReportAllocs()
+		for range b.N {
+			if _, ok, err := Get[benchmarkPayload](c, "key"); err != nil || !ok {
+				b.Fatalf("Get: ok=%v err=%v", ok, err)
+			}
+		}
+	})
+	b.Run("Method", func(b *testing.B) {
+		b.ReportAllocs()
+		for range b.N {
+			if _, ok, err := c.Get[benchmarkPayload]("key"); err != nil || !ok {
+				b.Fatalf("Get: ok=%v err=%v", ok, err)
+			}
+		}
+	})
+}
+
+// BenchmarkCacheSetTyped compares the compatibility function and receiver method write paths.
+func BenchmarkCacheSetTyped(b *testing.B) {
+	c := NewCache(NewMemoryStore(context.Background()))
+	value := benchmarkPayload{Name: "Ada"}
+
+	b.Run("Function", func(b *testing.B) {
+		b.ReportAllocs()
+		for range b.N {
+			if err := Set(c, "key", value, time.Hour); err != nil {
+				b.Fatalf("Set: %v", err)
+			}
+		}
+	})
+	b.Run("Method", func(b *testing.B) {
+		b.ReportAllocs()
+		for range b.N {
+			if err := c.Set("key", value, time.Hour); err != nil {
+				b.Fatalf("Set: %v", err)
+			}
+		}
+	})
+}
+
 // BenchmarkCacheGetBytes measures the primary facade read path without observers.
 func BenchmarkCacheGetBytes(b *testing.B) {
 	cache := NewCache(NewMemoryStore(context.Background()))

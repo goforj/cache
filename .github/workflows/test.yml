@@ -12,7 +12,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        go-version: ["1.24.x", "stable"]
+        go-version: ["1.27.x", "stable"]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -25,6 +25,22 @@ jobs:
       - name: Check every module against staged siblings
         env:
           CACHE_LOCAL_SIBLINGS: "1"
+        run: scripts/check-quality.sh
+
+  legacy-module-floor:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.24.4"
+
+      - name: Check modules that retain the Go 1.24.4 floor
+        env:
+          CACHE_GO_VERSION_FILTER: "1.24.4"
         run: scripts/check-quality.sh
 
   unit:
