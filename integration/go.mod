@@ -1,6 +1,6 @@
 module github.com/goforj/cache/integration
 
-go 1.24.4
+go 1.27.0
 
 require (
 	github.com/goforj/cache v0.0.0

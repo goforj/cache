@@ -9,7 +9,7 @@ import (
 
 // main keeps this generated example executable so API drift fails during compilation.
 func main() {
-	// SetJSON encodes value as JSON and writes it to key using background context.
+	// SetJSON encodes value as JSON and writes it to key.
 
 	// Example: set typed JSON
 	type Settings struct {
@@ -17,6 +17,6 @@ func main() {
 	}
 	ctx := context.Background()
 	c := cache.NewCache(cache.NewMemoryStore(ctx))
-	err := cache.SetJSON(c, "settings:alerts", Settings{Enabled: true}, time.Minute)
+	err := c.SetJSON("settings:alerts", Settings{Enabled: true}, time.Minute)
 	fmt.Println(err == nil) // true
 }

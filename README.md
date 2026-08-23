@@ -9,11 +9,11 @@
 <p align="center">
     <a href="https://pkg.go.dev/github.com/goforj/cache"><img src="https://pkg.go.dev/badge/github.com/goforj/cache.svg" alt="Go Reference"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
-    <a href="https://golang.org"><img src="https://img.shields.io/badge/go-1.24+-blue?logo=go" alt="Go version"></a>
+    <a href="https://golang.org"><img src="https://img.shields.io/badge/go-1.27+-blue?logo=go" alt="Go version"></a>
     <img src="https://img.shields.io/github/v/tag/goforj/cache?label=version&sort=semver" alt="Latest tag">
     <a href="https://codecov.io/gh/goforj/cache"><img src="https://codecov.io/gh/goforj/cache/graph/badge.svg?token=B6ROULLKWU"/></a>
 <!-- test-count:embed:start -->
-    <img src="https://img.shields.io/badge/unit_tests-391-brightgreen" alt="Unit tests (executed count)">
+    <img src="https://img.shields.io/badge/unit_tests-388-brightgreen" alt="Unit tests (executed count)">
     <img src="https://img.shields.io/badge/integration_tests-118-blue" alt="Integration tests (executed count)">
 <!-- test-count:embed:end -->
 </p>
@@ -27,6 +27,8 @@ An explicit cache abstraction with a minimal Store interface and ergonomic Cache
 ```bash
 go get github.com/goforj/cache
 ```
+
+The generic method API requires Go 1.27 or newer. Projects on older Go releases can pin the v0.4 release line.
 
 Optional backends are separate modules. Install only what you use:
 
@@ -383,17 +385,17 @@ Many functions also provide `...Context` variants that accept an explicit `conte
 | **Constructors** | [NewFileStore](#newfilestore) · [NewFileStoreWithConfig](#newfilestorewithconfig) · [NewMemoryStore](#newmemorystore) · [NewMemoryStoreWithConfig](#newmemorystorewithconfig) · [NewNullStore](#newnullstore) · [NewNullStoreWithConfig](#newnullstorewithconfig) |
 | **Core** | [Cache.WithContext](#cache-withcontext) · [Driver](#cache-driver) · [Inspector](#cache-inspector) · [NewCache](#newcache) · [NewCacheWithTTL](#newcachewithttl) · [Ready](#cache-ready) · [Store](#cache-store) |
 | **Driver Configs** | [Shared BaseConfig](#driver-configs-shared-baseconfig) · [DynamoDB Config](#driver-config-dynamocache) · [Memcached Config](#driver-config-memcachedcache) · [MySQL Config](#driver-config-mysqlcache) · [NATS Config](#driver-config-natscache) · [Postgres Config](#driver-config-postgrescache) · [Redis Config](#driver-config-rediscache) · [SQL Core Config](#driver-config-sqlcore) · [SQLite Config](#driver-config-sqlitecache) |
-| **Invalidation** | [Delete](#cache-delete) · [DeleteMany](#cache-deletemany) · [Flush](#cache-flush) · [Pull](#pull) · [PullBytes](#cache-pullbytes) |
+| **Invalidation** | [Cache.Pull](#cache-pull) · [Delete](#cache-delete) · [DeleteMany](#cache-deletemany) · [Flush](#cache-flush) · [Pull](#pull) · [PullBytes](#cache-pullbytes) |
 | **Locking** | [Acquire](#lockhandle-acquire) · [Block](#lockhandle-block) · [Lock](#cache-lock) · [LockHandle.Get](#lockhandle-get) · [NewLockHandle](#cache-newlockhandle) · [Release](#lockhandle-release) · [TryLock](#cache-trylock) · [Unlock](#cache-unlock) |
 | **Memoization** | [NewMemoStore](#newmemostore) |
 | **Observability** | [OnCacheOp](#observerfunc-oncacheop) · [WithObserver](#cache-withobserver) |
 | **Other** | [LockHandle.WithContext](#lockhandle-withcontext) |
 | **Rate Limiting** | [RateLimit](#cache-ratelimit) |
-| **Read Through** | [Remember](#remember) · [RememberBytes](#cache-rememberbytes) · [RememberStale](#rememberstale) · [RememberStaleBytes](#cache-rememberstalebytes) |
-| **Reads** | [BatchGetBytes](#cache-batchgetbytes) · [Get](#get) · [GetBytes](#cache-getbytes) · [GetJSON](#getjson) · [GetString](#cache-getstring) · [ListPage](#listpage) |
-| **Refresh Ahead** | [RefreshAhead](#refreshahead) · [RefreshAheadBytes](#cache-refreshaheadbytes) · [RefreshAheadValueWithCodec](#refreshaheadvaluewithcodec) |
+| **Read Through** | [Cache.Remember](#cache-remember) · [Cache.RememberStale](#cache-rememberstale) · [Remember](#remember) · [RememberBytes](#cache-rememberbytes) · [RememberStale](#rememberstale) · [RememberStaleBytes](#cache-rememberstalebytes) |
+| **Reads** | [BatchGetBytes](#cache-batchgetbytes) · [Cache.Get](#cache-get) · [Cache.GetJSON](#cache-getjson) · [Get](#get) · [GetBytes](#cache-getbytes) · [GetJSON](#getjson) · [GetString](#cache-getstring) · [ListPage](#listpage) |
+| **Refresh Ahead** | [Cache.RefreshAhead](#cache-refreshahead) · [Cache.RefreshAheadValueWithCodec](#cache-refreshaheadvaluewithcodec) · [RefreshAhead](#refreshahead) · [RefreshAheadBytes](#cache-refreshaheadbytes) · [RefreshAheadValueWithCodec](#refreshaheadvaluewithcodec) |
 | **Testing Helpers** | [AssertCalled](#fake-assertcalled) · [AssertNotCalled](#fake-assertnotcalled) · [AssertTotal](#fake-asserttotal) · [Cache](#fake-cache) · [Count](#fake-count) · [New](#new) · [Reset](#fake-reset) · [Total](#fake-total) |
-| **Writes** | [Add](#cache-add) · [BatchSetBytes](#cache-batchsetbytes) · [Decrement](#cache-decrement) · [Increment](#cache-increment) · [Set](#set) · [SetBytes](#cache-setbytes) · [SetJSON](#setjson) · [SetString](#cache-setstring) |
+| **Writes** | [Add](#cache-add) · [BatchSetBytes](#cache-batchsetbytes) · [Cache.Set](#cache-set) · [Cache.SetJSON](#cache-setjson) · [Decrement](#cache-decrement) · [Increment](#cache-increment) · [Set](#set) · [SetBytes](#cache-setbytes) · [SetJSON](#setjson) · [SetString](#cache-setstring) |
 
 
 _Examples assume `ctx := context.Background()` and `c := cache.NewCache(cache.NewMemoryStore(ctx))` unless shown otherwise._
@@ -740,6 +742,19 @@ fmt.Println(store.Driver()) // sql
 
 ## Invalidation
 
+### <a id="cache-pull"></a>Cache.Pull
+
+Pull returns a typed value for key and removes it, using the default codec (JSON).
+
+```go
+type Token struct { Value string `json:"value"` }
+ctx := context.Background()
+c := cache.NewCache(cache.NewMemoryStore(ctx))
+_ = c.Set("reset:token:42", Token{Value: "abc"}, time.Minute)
+tok, ok, err := c.Pull[Token]("reset:token:42")
+fmt.Println(err == nil, ok, tok.Value) // true true abc
+```
+
 ### <a id="cache-delete"></a>Delete
 
 Delete removes a single key.
@@ -775,15 +790,7 @@ fmt.Println(c.Flush() == nil) // true
 ### <a id="pull"></a>Pull
 
 Pull returns a typed value for key and removes it, using the default codec (JSON).
-
-```go
-type Token struct { Value string `json:"value"` }
-ctx := context.Background()
-c := cache.NewCache(cache.NewMemoryStore(ctx))
-_ = cache.Set(c, "reset:token:42", Token{Value: "abc"}, time.Minute)
-tok, ok, err := cache.Pull[Token](c, "reset:token:42")
-fmt.Println(err == nil, ok, tok.Value) // true true abc
-```
+It remains available for compatibility; new code can use Cache.Pull.
 
 ### <a id="cache-pullbytes"></a>PullBytes
 
@@ -991,7 +998,7 @@ fmt.Println(err == nil, res.Allowed, res.Count, res.Remaining, !res.ResetAt.IsZe
 
 ## Read Through
 
-### <a id="remember"></a>Remember
+### <a id="cache-remember"></a>Cache.Remember
 
 Remember is the ergonomic, typed remember helper using JSON encoding by default.
 
@@ -999,11 +1006,30 @@ Remember is the ergonomic, typed remember helper using JSON encoding by default.
 type Profile struct { Name string `json:"name"` }
 ctx := context.Background()
 c := cache.NewCache(cache.NewMemoryStore(ctx))
-profile, err := cache.Remember[Profile](c, "profile:42", time.Minute, func() (Profile, error) {
+profile, err := c.Remember("profile:42", time.Minute, func() (Profile, error) {
 	return Profile{Name: "Ada"}, nil
 })
 fmt.Println(err == nil, profile.Name) // true Ada
 ```
+
+### <a id="cache-rememberstale"></a>Cache.RememberStale
+
+RememberStale returns a typed value with stale fallback semantics using JSON encoding by default.
+
+```go
+type Profile struct { Name string `json:"name"` }
+ctx := context.Background()
+c := cache.NewCache(cache.NewMemoryStore(ctx))
+profile, usedStale, err := c.RememberStale("profile:42", time.Minute, 10*time.Minute, func() (Profile, error) {
+	return Profile{Name: "Ada"}, nil
+})
+fmt.Println(err == nil, usedStale, profile.Name) // true false Ada
+```
+
+### <a id="remember"></a>Remember
+
+Remember is the ergonomic, typed remember helper using JSON encoding by default.
+It remains available for compatibility; new code can use Cache.Remember.
 
 ### <a id="cache-rememberbytes"></a>RememberBytes
 
@@ -1021,16 +1047,7 @@ fmt.Println(err == nil, string(data)) // true payload
 ### <a id="rememberstale"></a>RememberStale
 
 RememberStale returns a typed value with stale fallback semantics using JSON encoding by default.
-
-```go
-type Profile struct { Name string `json:"name"` }
-ctx := context.Background()
-c := cache.NewCache(cache.NewMemoryStore(ctx))
-profile, usedStale, err := cache.RememberStale[Profile](c, "profile:42", time.Minute, 10*time.Minute, func() (Profile, error) {
-	return Profile{Name: "Ada"}, nil
-})
-fmt.Println(err == nil, usedStale, profile.Name) // true false Ada
-```
+It remains available for compatibility; new code can use Cache.RememberStale.
 
 ### <a id="cache-rememberstalebytes"></a>RememberStaleBytes
 
@@ -1063,7 +1080,7 @@ values, err := c.BatchGetBytes("a", "b", "missing")
 fmt.Println(err == nil, string(values["a"]), string(values["b"])) // true 1 2
 ```
 
-### <a id="get"></a>Get
+### <a id="cache-get"></a>Cache.Get
 
 Get returns a typed value for key using the default codec (JSON) when present.
 
@@ -1071,12 +1088,30 @@ Get returns a typed value for key using the default codec (JSON) when present.
 type Profile struct { Name string `json:"name"` }
 ctx := context.Background()
 c := cache.NewCache(cache.NewMemoryStore(ctx))
-_ = cache.Set(c, "profile:42", Profile{Name: "Ada"}, time.Minute)
-_ = cache.Set(c, "settings:mode", "dark", time.Minute)
-profile, ok, err := cache.Get[Profile](c, "profile:42")
-mode, ok2, err2 := cache.Get[string](c, "settings:mode")
+_ = c.Set("profile:42", Profile{Name: "Ada"}, time.Minute)
+_ = c.Set("settings:mode", "dark", time.Minute)
+profile, ok, err := c.Get[Profile]("profile:42")
+mode, ok2, err2 := c.Get[string]("settings:mode")
 fmt.Println(err == nil, ok, profile.Name, err2 == nil, ok2, mode) // true true Ada true true dark
 ```
+
+### <a id="cache-getjson"></a>Cache.GetJSON
+
+GetJSON decodes a JSON value into T when key exists.
+
+```go
+type Profile struct { Name string `json:"name"` }
+ctx := context.Background()
+c := cache.NewCache(cache.NewMemoryStore(ctx))
+_ = c.SetJSON("profile:42", Profile{Name: "Ada"}, time.Minute)
+profile, ok, err := c.GetJSON[Profile]("profile:42")
+fmt.Println(err == nil, ok, profile.Name) // true true Ada
+```
+
+### <a id="get"></a>Get
+
+Get returns a typed value for key using the default codec (JSON) when present.
+It remains available for compatibility; new code can use Cache.Get.
 
 ### <a id="cache-getbytes"></a>GetBytes
 
@@ -1093,16 +1128,8 @@ fmt.Println(ok, string(value)) // true Ada
 
 ### <a id="getjson"></a>GetJSON
 
-GetJSON decodes a JSON value into T when key exists, using background context.
-
-```go
-type Profile struct { Name string `json:"name"` }
-ctx := context.Background()
-c := cache.NewCache(cache.NewMemoryStore(ctx))
-_ = cache.SetJSON(c, "profile:42", Profile{Name: "Ada"}, time.Minute)
-profile, ok, err := cache.GetJSON[Profile](c, "profile:42")
-fmt.Println(err == nil, ok, profile.Name) // true true Ada
-```
+GetJSON decodes a JSON value into T when key exists.
+It remains available for compatibility; new code can use Cache.GetJSON.
 
 ### <a id="cache-getstring"></a>GetString
 
@@ -1134,7 +1161,7 @@ fmt.Println(len(page.Entries), page.Entries[0].Key) // 2 profile:1
 
 ## Refresh Ahead
 
-### <a id="refreshahead"></a>RefreshAhead
+### <a id="cache-refreshahead"></a>Cache.RefreshAhead
 
 RefreshAhead returns a typed value and refreshes asynchronously when near expiry.
 
@@ -1142,11 +1169,20 @@ RefreshAhead returns a typed value and refreshes asynchronously when near expiry
 type Summary struct { Text string `json:"text"` }
 ctx := context.Background()
 c := cache.NewCache(cache.NewMemoryStore(ctx))
-s, err := cache.RefreshAhead[Summary](c, "dashboard:summary", time.Minute, 10*time.Second, func() (Summary, error) {
+s, err := c.RefreshAhead("dashboard:summary", time.Minute, 10*time.Second, func() (Summary, error) {
 	return Summary{Text: "ok"}, nil
 })
 fmt.Println(err == nil, s.Text) // true ok
 ```
+
+### <a id="cache-refreshaheadvaluewithcodec"></a>Cache.RefreshAheadValueWithCodec
+
+RefreshAheadValueWithCodec allows custom encoding/decoding for typed refresh-ahead operations.
+
+### <a id="refreshahead"></a>RefreshAhead
+
+RefreshAhead returns a typed value and refreshes asynchronously when near expiry.
+It remains available for compatibility; new code can use Cache.RefreshAhead.
 
 ### <a id="cache-refreshaheadbytes"></a>RefreshAheadBytes
 
@@ -1165,6 +1201,7 @@ fmt.Println(err == nil, len(body) > 0) // true true
 ### <a id="refreshaheadvaluewithcodec"></a>RefreshAheadValueWithCodec
 
 RefreshAheadValueWithCodec allows custom encoding/decoding for typed refresh-ahead operations.
+It remains available for compatibility; new code can use Cache.RefreshAheadValueWithCodec.
 
 ## Testing Helpers
 
@@ -1285,6 +1322,31 @@ err := c.BatchSetBytes(map[string][]byte{
 fmt.Println(err == nil) // true
 ```
 
+### <a id="cache-set"></a>Cache.Set
+
+Set encodes value with the default codec (JSON) and writes it to key.
+
+```go
+type Settings struct { Enabled bool `json:"enabled"` }
+ctx := context.Background()
+c := cache.NewCache(cache.NewMemoryStore(ctx))
+err := c.Set("settings:alerts", Settings{Enabled: true}, time.Minute)
+err2 := c.Set("settings:mode", "dark", time.Minute)
+fmt.Println(err == nil, err2 == nil) // true true
+```
+
+### <a id="cache-setjson"></a>Cache.SetJSON
+
+SetJSON encodes value as JSON and writes it to key.
+
+```go
+type Settings struct { Enabled bool `json:"enabled"` }
+ctx := context.Background()
+c := cache.NewCache(cache.NewMemoryStore(ctx))
+err := c.SetJSON("settings:alerts", Settings{Enabled: true}, time.Minute)
+fmt.Println(err == nil) // true
+```
+
 ### <a id="cache-decrement"></a>Decrement
 
 Decrement decrements a numeric value and returns the result.
@@ -1310,15 +1372,7 @@ fmt.Println(val) // 1
 ### <a id="set"></a>Set
 
 Set encodes value with the default codec (JSON) and writes it to key.
-
-```go
-type Settings struct { Enabled bool `json:"enabled"` }
-ctx := context.Background()
-c := cache.NewCache(cache.NewMemoryStore(ctx))
-err := cache.Set(c, "settings:alerts", Settings{Enabled: true}, time.Minute)
-err2 := cache.Set(c, "settings:mode", "dark", time.Minute)
-fmt.Println(err == nil, err2 == nil) // true true
-```
+It remains available for compatibility; new code can use Cache.Set.
 
 ### <a id="cache-setbytes"></a>SetBytes
 
@@ -1332,15 +1386,8 @@ fmt.Println(c.SetBytes("token", []byte("abc"), time.Minute) == nil) // true
 
 ### <a id="setjson"></a>SetJSON
 
-SetJSON encodes value as JSON and writes it to key using background context.
-
-```go
-type Settings struct { Enabled bool `json:"enabled"` }
-ctx := context.Background()
-c := cache.NewCache(cache.NewMemoryStore(ctx))
-err := cache.SetJSON(c, "settings:alerts", Settings{Enabled: true}, time.Minute)
-fmt.Println(err == nil) // true
-```
+SetJSON encodes value as JSON and writes it to key.
+It remains available for compatibility; new code can use Cache.SetJSON.
 
 ### <a id="cache-setstring"></a>SetString
 

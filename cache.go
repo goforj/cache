@@ -223,7 +223,7 @@ func (c *Cache) getString(ctx context.Context, key string) (string, bool, error)
 	return val, true, nil
 }
 
-// GetJSON decodes a JSON value into T when key exists, using background context.
+// GetJSON decodes a JSON value into T when key exists.
 // @group Reads
 //
 // Example: get typed JSON
@@ -231,9 +231,16 @@ func (c *Cache) getString(ctx context.Context, key string) (string, bool, error)
 //	type Profile struct { Name string `json:"name"` }
 //	ctx := context.Background()
 //	c := cache.NewCache(cache.NewMemoryStore(ctx))
-//	_ = cache.SetJSON(c, "profile:42", Profile{Name: "Ada"}, time.Minute)
-//	profile, ok, err := cache.GetJSON[Profile](c, "profile:42")
+//	_ = c.SetJSON("profile:42", Profile{Name: "Ada"}, time.Minute)
+//	profile, ok, err := c.GetJSON[Profile]("profile:42")
 //	fmt.Println(err == nil, ok, profile.Name) // true true Ada
+func (c *Cache) GetJSON[T any](key string) (T, bool, error) {
+	return getJSON[T](c.context(), c, key)
+}
+
+// GetJSON decodes a JSON value into T when key exists.
+// It remains available for compatibility; new code can use Cache.GetJSON.
+// @group Reads
 func GetJSON[T any](cache *Cache, key string) (T, bool, error) {
 	return getJSON[T](cache.context(), cache, key)
 }
@@ -264,11 +271,18 @@ func getJSON[T any](ctx context.Context, cache *Cache, key string) (T, bool, err
 //	type Profile struct { Name string `json:"name"` }
 //	ctx := context.Background()
 //	c := cache.NewCache(cache.NewMemoryStore(ctx))
-//	_ = cache.Set(c, "profile:42", Profile{Name: "Ada"}, time.Minute)
-//	_ = cache.Set(c, "settings:mode", "dark", time.Minute)
-//	profile, ok, err := cache.Get[Profile](c, "profile:42")
-//	mode, ok2, err2 := cache.Get[string](c, "settings:mode")
+//	_ = c.Set("profile:42", Profile{Name: "Ada"}, time.Minute)
+//	_ = c.Set("settings:mode", "dark", time.Minute)
+//	profile, ok, err := c.Get[Profile]("profile:42")
+//	mode, ok2, err2 := c.Get[string]("settings:mode")
 //	fmt.Println(err == nil, ok, profile.Name, err2 == nil, ok2, mode) // true true Ada true true dark
+func (c *Cache) Get[T any](key string) (T, bool, error) {
+	return getValue[T](c.context(), c, key)
+}
+
+// Get returns a typed value for key using the default codec (JSON) when present.
+// It remains available for compatibility; new code can use Cache.Get.
+// @group Reads
 func Get[T any](cache *Cache, key string) (T, bool, error) {
 	return getValue[T](cache.context(), cache, key)
 }
@@ -440,10 +454,23 @@ func (c *Cache) setRefreshAheadValue(ctx context.Context, key string, value []by
 //	type Summary struct { Text string `json:"text"` }
 //	ctx := context.Background()
 //	c := cache.NewCache(cache.NewMemoryStore(ctx))
-//	s, err := cache.RefreshAhead[Summary](c, "dashboard:summary", time.Minute, 10*time.Second, func() (Summary, error) {
+//	s, err := c.RefreshAhead("dashboard:summary", time.Minute, 10*time.Second, func() (Summary, error) {
 //		return Summary{Text: "ok"}, nil
 //	})
 //	fmt.Println(err == nil, s.Text) // true ok
+func (c *Cache) RefreshAhead[T any](key string, ttl, refreshAhead time.Duration, fn func() (T, error)) (T, error) {
+	return refreshAheadValue[T](c.context(), c, key, ttl, refreshAhead, func(ctx context.Context) (T, error) {
+		if fn == nil {
+			var zero T
+			return zero, errors.New("cache refresh ahead requires a callback")
+		}
+		return fn()
+	})
+}
+
+// RefreshAhead returns a typed value and refreshes asynchronously when near expiry.
+// It remains available for compatibility; new code can use Cache.RefreshAhead.
+// @group Refresh Ahead
 func RefreshAhead[T any](cache *Cache, key string, ttl, refreshAhead time.Duration, fn func() (T, error)) (T, error) {
 	return refreshAheadValue[T](cache.context(), cache, key, ttl, refreshAhead, func(ctx context.Context) (T, error) {
 		if fn == nil {
@@ -456,7 +483,7 @@ func RefreshAhead[T any](cache *Cache, key string, ttl, refreshAhead time.Durati
 
 // refreshAheadValue adapts the context-aware typed loader to the codec-based implementation.
 func refreshAheadValue[T any](ctx context.Context, cache *Cache, key string, ttl, refreshAhead time.Duration, fn func(context.Context) (T, error)) (T, error) {
-	return RefreshAheadValueWithCodec(ctx, cache, key, ttl, refreshAhead, func() (T, error) {
+	return refreshAheadValueWithCodec(ctx, cache, key, ttl, refreshAhead, func() (T, error) {
 		if fn == nil {
 			var zero T
 			return zero, errors.New("cache refresh ahead requires a callback")
@@ -467,7 +494,22 @@ func refreshAheadValue[T any](ctx context.Context, cache *Cache, key string, ttl
 
 // RefreshAheadValueWithCodec allows custom encoding/decoding for typed refresh-ahead operations.
 // @group Refresh Ahead
+func (c *Cache) RefreshAheadValueWithCodec[T any](key string, ttl, refreshAhead time.Duration, fn func() (T, error), codec ValueCodec[T]) (T, error) {
+	return refreshAheadValueWithCodec(c.context(), c, key, ttl, refreshAhead, fn, codec)
+}
+
+// RefreshAheadValueWithCodec allows custom encoding/decoding for typed refresh-ahead operations.
+// It remains available for compatibility; new code can use Cache.RefreshAheadValueWithCodec.
+// @group Refresh Ahead
 func RefreshAheadValueWithCodec[T any](ctx context.Context, cache *Cache, key string, ttl, refreshAhead time.Duration, fn func() (T, error), codec ValueCodec[T]) (T, error) {
+	return refreshAheadValueWithCodec(ctx, cache, key, ttl, refreshAhead, fn, codec)
+}
+
+// refreshAheadValueWithCodec keeps explicit and bound contexts on one typed refresh path.
+func refreshAheadValueWithCodec[T any](ctx context.Context, cache *Cache, key string, ttl, refreshAhead time.Duration, fn func() (T, error), codec ValueCodec[T]) (T, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	var zero T
 	body, err := cache.refreshAheadBytes(ctx, key, ttl, refreshAhead, func(ctx context.Context) ([]byte, error) {
 		if fn == nil {
@@ -509,7 +551,7 @@ func (c *Cache) setString(ctx context.Context, key string, value string, ttl tim
 	return err
 }
 
-// SetJSON encodes value as JSON and writes it to key using background context.
+// SetJSON encodes value as JSON and writes it to key.
 // @group Writes
 //
 // Example: set typed JSON
@@ -517,8 +559,15 @@ func (c *Cache) setString(ctx context.Context, key string, value string, ttl tim
 //	type Settings struct { Enabled bool `json:"enabled"` }
 //	ctx := context.Background()
 //	c := cache.NewCache(cache.NewMemoryStore(ctx))
-//	err := cache.SetJSON(c, "settings:alerts", Settings{Enabled: true}, time.Minute)
+//	err := c.SetJSON("settings:alerts", Settings{Enabled: true}, time.Minute)
 //	fmt.Println(err == nil) // true
+func (c *Cache) SetJSON[T any](key string, value T, ttl time.Duration) error {
+	return setJSON[T](c.context(), c, key, value, ttl)
+}
+
+// SetJSON encodes value as JSON and writes it to key.
+// It remains available for compatibility; new code can use Cache.SetJSON.
+// @group Writes
 func SetJSON[T any](cache *Cache, key string, value T, ttl time.Duration) error {
 	return setJSON[T](cache.context(), cache, key, value, ttl)
 }
@@ -544,9 +593,16 @@ func setJSON[T any](ctx context.Context, cache *Cache, key string, value T, ttl 
 //	type Settings struct { Enabled bool `json:"enabled"` }
 //	ctx := context.Background()
 //	c := cache.NewCache(cache.NewMemoryStore(ctx))
-//	err := cache.Set(c, "settings:alerts", Settings{Enabled: true}, time.Minute)
-//	err2 := cache.Set(c, "settings:mode", "dark", time.Minute)
+//	err := c.Set("settings:alerts", Settings{Enabled: true}, time.Minute)
+//	err2 := c.Set("settings:mode", "dark", time.Minute)
 //	fmt.Println(err == nil, err2 == nil) // true true
+func (c *Cache) Set[T any](key string, value T, ttl time.Duration) error {
+	return setValue[T](c.context(), c, key, value, ttl)
+}
+
+// Set encodes value with the default codec (JSON) and writes it to key.
+// It remains available for compatibility; new code can use Cache.Set.
+// @group Writes
 func Set[T any](cache *Cache, key string, value T, ttl time.Duration) error {
 	return setValue[T](cache.context(), cache, key, value, ttl)
 }
@@ -796,9 +852,16 @@ func (c *Cache) pullBytes(ctx context.Context, key string) ([]byte, bool, error)
 //	type Token struct { Value string `json:"value"` }
 //	ctx := context.Background()
 //	c := cache.NewCache(cache.NewMemoryStore(ctx))
-//	_ = cache.Set(c, "reset:token:42", Token{Value: "abc"}, time.Minute)
-//	tok, ok, err := cache.Pull[Token](c, "reset:token:42")
+//	_ = c.Set("reset:token:42", Token{Value: "abc"}, time.Minute)
+//	tok, ok, err := c.Pull[Token]("reset:token:42")
 //	fmt.Println(err == nil, ok, tok.Value) // true true abc
+func (c *Cache) Pull[T any](key string) (T, bool, error) {
+	return pullValue[T](c.context(), c, key)
+}
+
+// Pull returns a typed value for key and removes it, using the default codec (JSON).
+// It remains available for compatibility; new code can use Cache.Pull.
+// @group Invalidation
 func Pull[T any](cache *Cache, key string) (T, bool, error) {
 	return pullValue[T](cache.context(), cache, key)
 }
@@ -1015,10 +1078,23 @@ func (c *Cache) rememberBytes(ctx context.Context, key string, ttl time.Duration
 //	type Profile struct { Name string `json:"name"` }
 //	ctx := context.Background()
 //	c := cache.NewCache(cache.NewMemoryStore(ctx))
-//	profile, usedStale, err := cache.RememberStale[Profile](c, "profile:42", time.Minute, 10*time.Minute, func() (Profile, error) {
+//	profile, usedStale, err := c.RememberStale("profile:42", time.Minute, 10*time.Minute, func() (Profile, error) {
 //		return Profile{Name: "Ada"}, nil
 //	})
 //	fmt.Println(err == nil, usedStale, profile.Name) // true false Ada
+func (c *Cache) RememberStale[T any](key string, ttl, staleTTL time.Duration, fn func() (T, error)) (T, bool, error) {
+	return rememberStaleValue[T](c.context(), c, key, ttl, staleTTL, func(ctx context.Context) (T, error) {
+		if fn == nil {
+			var zero T
+			return zero, errors.New("cache remember stale requires a callback")
+		}
+		return fn()
+	})
+}
+
+// RememberStale returns a typed value with stale fallback semantics using JSON encoding by default.
+// It remains available for compatibility; new code can use Cache.RememberStale.
+// @group Read Through
 func RememberStale[T any](cache *Cache, key string, ttl, staleTTL time.Duration, fn func() (T, error)) (T, bool, error) {
 	return rememberStaleValue[T](cache.context(), cache, key, ttl, staleTTL, func(ctx context.Context) (T, error) {
 		if fn == nil {
@@ -1037,10 +1113,23 @@ func RememberStale[T any](cache *Cache, key string, ttl, staleTTL time.Duration,
 //	type Profile struct { Name string `json:"name"` }
 //	ctx := context.Background()
 //	c := cache.NewCache(cache.NewMemoryStore(ctx))
-//	profile, err := cache.Remember[Profile](c, "profile:42", time.Minute, func() (Profile, error) {
+//	profile, err := c.Remember("profile:42", time.Minute, func() (Profile, error) {
 //		return Profile{Name: "Ada"}, nil
 //	})
 //	fmt.Println(err == nil, profile.Name) // true Ada
+func (c *Cache) Remember[T any](key string, ttl time.Duration, fn func() (T, error)) (T, error) {
+	return rememberValue[T](c.context(), c, key, ttl, func(context.Context) (T, error) {
+		if fn == nil {
+			var zero T
+			return zero, errors.New("cache remember requires a callback")
+		}
+		return fn()
+	})
+}
+
+// Remember is the ergonomic, typed remember helper using JSON encoding by default.
+// It remains available for compatibility; new code can use Cache.Remember.
+// @group Read Through
 func Remember[T any](cache *Cache, key string, ttl time.Duration, fn func() (T, error)) (T, error) {
 	return rememberValue[T](cache.context(), cache, key, ttl, func(context.Context) (T, error) {
 		if fn == nil {

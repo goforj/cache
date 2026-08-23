@@ -244,7 +244,7 @@ func TestContextCancellation_RefreshAheadAndRememberHelpersDoNotInvokeCallbacks(
 			run: func(t *testing.T, c *Cache, ctx context.Context) {
 				t.Helper()
 				called := false
-				_, err := Remember[string](c.WithContext(ctx), "rs", time.Minute, func() (string, error) {
+				_, err := c.WithContext(ctx).Remember("rs", time.Minute, func() (string, error) {
 					called = true
 					return "v", nil
 				})
@@ -263,7 +263,7 @@ func TestContextCancellation_RefreshAheadAndRememberHelpersDoNotInvokeCallbacks(
 				t.Helper()
 				called := false
 				type payload struct{ Name string }
-				_, err := Remember[payload](c.WithContext(ctx), "rj", time.Minute, func() (payload, error) {
+				_, err := c.WithContext(ctx).Remember("rj", time.Minute, func() (payload, error) {
 					called = true
 					return payload{Name: "Ada"}, nil
 				})
@@ -281,7 +281,7 @@ func TestContextCancellation_RefreshAheadAndRememberHelpersDoNotInvokeCallbacks(
 			run: func(t *testing.T, c *Cache, ctx context.Context) {
 				t.Helper()
 				called := false
-				_, _, err := RememberStale[map[string]string](c.WithContext(ctx), "rst", time.Minute, 2*time.Minute, func() (map[string]string, error) {
+				_, _, err := c.WithContext(ctx).RememberStale("rst", time.Minute, 2*time.Minute, func() (map[string]string, error) {
 					called = true
 					return map[string]string{"name": "Ada"}, nil
 				})
@@ -299,7 +299,7 @@ func TestContextCancellation_RefreshAheadAndRememberHelpersDoNotInvokeCallbacks(
 			run: func(t *testing.T, c *Cache, ctx context.Context) {
 				t.Helper()
 				type payload struct{ Name string }
-				_, ok, err := GetJSON[payload](c.WithContext(ctx), "gj")
+				_, ok, err := c.WithContext(ctx).GetJSON[payload]("gj")
 				if ok {
 					t.Fatalf("expected miss on canceled get json")
 				}
@@ -314,7 +314,7 @@ func TestContextCancellation_RefreshAheadAndRememberHelpersDoNotInvokeCallbacks(
 			run: func(t *testing.T, c *Cache, ctx context.Context) {
 				t.Helper()
 				type payload struct{ Name string }
-				err := SetJSON(c.WithContext(ctx), "sj", payload{Name: "Ada"}, time.Minute)
+				err := c.WithContext(ctx).SetJSON("sj", payload{Name: "Ada"}, time.Minute)
 				if err != context.DeadlineExceeded {
 					t.Fatalf("expected deadline exceeded, got %v", err)
 				}
@@ -350,7 +350,7 @@ func TestContextCancellation_RememberJSONDoesNotDecodeOrSetAfterCanceledGet(t *t
 
 	type payload struct{ Name string }
 	called := false
-	_, err := Remember[payload](c.WithContext(ctx), "json-cancel", time.Minute, func() (payload, error) {
+	_, err := c.WithContext(ctx).Remember("json-cancel", time.Minute, func() (payload, error) {
 		called = true
 		return payload{Name: "Ada"}, nil
 	})
