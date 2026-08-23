@@ -1179,6 +1179,20 @@ fmt.Println(err == nil, s.Text) // true ok
 
 RefreshAheadValueWithCodec allows custom encoding/decoding for typed refresh-ahead operations.
 
+```go
+ctx := context.Background()
+c := cache.NewCache(cache.NewMemoryStore(ctx))
+codec := cache.ValueCodec[string]{
+	Encode: func(value string) ([]byte, error) { return []byte(value), nil },
+	Decode: func(body []byte) (string, error) { return string(body), nil },
+}
+value, err := c.RefreshAheadValueWithCodec("status", time.Minute, 10*time.Second, func() (string, error) {
+	return "ready", nil
+}, codec)
+fmt.Println(err == nil, value)
+// true ready
+```
+
 ### <a id="refreshahead"></a>RefreshAhead
 
 RefreshAhead returns a typed value and refreshes asynchronously when near expiry.

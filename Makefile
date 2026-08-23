@@ -17,6 +17,7 @@ vet: ##@analysis Run Go vet.
 
 ##@documentation
 generate: ##@documentation Regenerate the documentation.
+	go -C docs run ./examplegen
 	go -C docs run ./readme
 
 docs-watch: ##@documentation Watch source changes and regenerate documentation.

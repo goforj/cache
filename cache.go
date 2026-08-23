@@ -494,6 +494,20 @@ func refreshAheadValue[T any](ctx context.Context, cache *Cache, key string, ttl
 
 // RefreshAheadValueWithCodec allows custom encoding/decoding for typed refresh-ahead operations.
 // @group Refresh Ahead
+//
+// Example: refresh ahead with a custom codec
+//
+//	ctx := context.Background()
+//	c := cache.NewCache(cache.NewMemoryStore(ctx))
+//	codec := cache.ValueCodec[string]{
+//		Encode: func(value string) ([]byte, error) { return []byte(value), nil },
+//		Decode: func(body []byte) (string, error) { return string(body), nil },
+//	}
+//	value, err := c.RefreshAheadValueWithCodec("status", time.Minute, 10*time.Second, func() (string, error) {
+//		return "ready", nil
+//	}, codec)
+//	fmt.Println(err == nil, value)
+//	// true ready
 func (c *Cache) RefreshAheadValueWithCodec[T any](key string, ttl, refreshAhead time.Duration, fn func() (T, error), codec ValueCodec[T]) (T, error) {
 	return refreshAheadValueWithCodec(c.context(), c, key, ttl, refreshAhead, fn, codec)
 }
