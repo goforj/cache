@@ -1,6 +1,7 @@
 package dynamocache
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -83,6 +84,14 @@ func (d *dynStub) PutItem(_ context.Context, in *dynamodb.PutItemInput, _ ...fun
 // DeleteItem removes the keyed item from the in-memory table.
 func (d *dynStub) DeleteItem(_ context.Context, in *dynamodb.DeleteItemInput, _ ...func(*dynamodb.Options)) (*dynamodb.DeleteItemOutput, error) {
 	key := in.Key["k"].(*types.AttributeValueMemberS).Value
+	if in.ConditionExpression != nil {
+		item, exists := d.items[key]
+		owner, ownerOK := in.ExpressionAttributeValues[":owner"].(*types.AttributeValueMemberB)
+		value, valueOK := item["v"].(*types.AttributeValueMemberB)
+		if !exists || !ownerOK || !valueOK || !bytes.Equal(owner.Value, value.Value) {
+			return nil, &types.ConditionalCheckFailedException{}
+		}
+	}
 	delete(d.items, key)
 	return &dynamodb.DeleteItemOutput{}, nil
 }
@@ -230,6 +239,23 @@ func TestDynamoStoreAddReusesExpiredKey(t *testing.T) {
 	body, ok, err := store.Get(ctx, "k")
 	if err != nil || !ok || string(body) != "new" {
 		t.Fatalf("expected replaced expired value, ok=%v body=%q err=%v", ok, string(body), err)
+	}
+}
+
+// TestLockReleaseRequiresCurrentOwner verifies DynamoDB conditions protect successor lock values.
+func TestLockReleaseRequiresCurrentOwner(t *testing.T) {
+	stub := newDynStub()
+	store := &dynamoStore{client: stub, table: "tbl", prefix: "p", defaultTTL: time.Minute}
+	ctx := context.Background()
+	owner := []byte("owner")
+	if acquired, err := store.LockAcquire(ctx, "lock:key", owner, time.Minute); err != nil || !acquired {
+		t.Fatalf("LockAcquire() = %v, %v", acquired, err)
+	}
+	if released, err := store.LockRelease(ctx, "lock:key", []byte("stale")); err != nil || released {
+		t.Fatalf("stale LockRelease() = %v, %v", released, err)
+	}
+	if released, err := store.LockRelease(ctx, "lock:key", owner); err != nil || !released {
+		t.Fatalf("owner LockRelease() = %v, %v", released, err)
 	}
 }
 

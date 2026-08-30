@@ -108,6 +108,35 @@ func (s *memoStore) Add(ctx context.Context, key string, value []byte, ttl time.
 	return created, nil
 }
 
+// LockAcquire delegates ownership-sensitive writes without memoizing lock state.
+func (s *memoStore) LockAcquire(ctx context.Context, key string, owner []byte, ttl time.Duration) (bool, error) {
+	store, ok := s.store.(lockStore)
+	if !ok {
+		return s.Add(ctx, key, owner, ttl)
+	}
+	created, err := store.LockAcquire(ctx, key, owner, ttl)
+	if err == nil && created {
+		s.forget(key)
+	}
+	return created, err
+}
+
+// LockRelease delegates atomic owner comparison and invalidates a released memo entry.
+func (s *memoStore) LockRelease(ctx context.Context, key string, owner []byte) (bool, error) {
+	store, ok := s.store.(lockStore)
+	if !ok {
+		if err := s.Delete(ctx, key); err != nil {
+			return false, err
+		}
+		return true, nil
+	}
+	released, err := store.LockRelease(ctx, key, owner)
+	if err == nil && released {
+		s.forget(key)
+	}
+	return released, err
+}
+
 // Increment atomically adds delta while preserving the store's TTL contract.
 func (s *memoStore) Increment(ctx context.Context, key string, delta int64, ttl time.Duration) (int64, error) {
 	value, err := s.store.Increment(ctx, key, delta, ttl)

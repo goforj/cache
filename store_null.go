@@ -33,6 +33,16 @@ func (s *nullStore) Add(context.Context, string, []byte, time.Duration) (bool, e
 	return true, nil
 }
 
+// LockAcquire preserves the null store's successful no-op contract.
+func (s *nullStore) LockAcquire(context.Context, string, []byte, time.Duration) (bool, error) {
+	return true, nil
+}
+
+// LockRelease preserves the null store's successful no-op contract.
+func (s *nullStore) LockRelease(context.Context, string, []byte) (bool, error) {
+	return true, nil
+}
+
 // Increment atomically adds delta while preserving the store's TTL contract.
 func (s *nullStore) Increment(context.Context, string, int64, time.Duration) (int64, error) {
 	return 0, nil

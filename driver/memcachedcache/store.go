@@ -17,8 +17,9 @@ import (
 )
 
 const (
-	defaultTTL    = 5 * time.Minute
-	defaultPrefix = "app"
+	defaultTTL                = 5 * time.Minute
+	defaultPrefix             = "app"
+	expiredMemcachedTimestamp = 30*24*60*60 + 1
 )
 
 var dialMemcached = func(ctx context.Context, network, addr string) (net.Conn, error) {
@@ -243,6 +244,77 @@ func (s *store) Add(ctx context.Context, key string, value []byte, ttl time.Dura
 		bad = true
 		return false, fmt.Errorf("memcached add failed: %s", strings.TrimSpace(line))
 	}
+}
+
+// LockAcquire atomically records owner when key is absent.
+func (s *store) LockAcquire(ctx context.Context, key string, owner []byte, ttl time.Duration) (bool, error) {
+	return s.Add(ctx, key, owner, ttl)
+}
+
+// LockRelease uses one Memcached CAS to expire only the current owner's value.
+func (s *store) LockRelease(ctx context.Context, key string, owner []byte) (bool, error) {
+	mc, err := s.acquire(ctx)
+	if err != nil {
+		return false, err
+	}
+	bad := false
+	defer func() { s.release(mc, bad) }()
+	full := s.cacheKey(key)
+	if _, err := fmt.Fprintf(mc.conn, "gets %s\r\n", full); err != nil {
+		bad = true
+		return false, err
+	}
+	line, err := mc.reader.ReadString('\n')
+	if err != nil {
+		bad = true
+		return false, err
+	}
+	if line == "END\r\n" {
+		return false, nil
+	}
+	fields := strings.Fields(strings.TrimSpace(line))
+	if len(fields) != 5 || fields[0] != "VALUE" {
+		bad = true
+		return false, fmt.Errorf("unexpected response: %s", strings.TrimSpace(line))
+	}
+	bytesLen, err := strconv.Atoi(fields[3])
+	if err != nil {
+		bad = true
+		return false, fmt.Errorf("parse length: %w", err)
+	}
+	value := make([]byte, bytesLen)
+	if _, err := io.ReadFull(mc.reader, value); err != nil {
+		bad = true
+		return false, err
+	}
+	if _, err := mc.reader.ReadString('\n'); err != nil {
+		bad = true
+		return false, err
+	}
+	if _, err := mc.reader.ReadString('\n'); err != nil {
+		bad = true
+		return false, err
+	}
+	if !bytes.Equal(value, owner) {
+		return false, nil
+	}
+	if _, err := fmt.Fprintf(mc.conn, "cas %s 0 %d 0 %s\r\n\r\n", full, expiredMemcachedTimestamp, fields[4]); err != nil {
+		bad = true
+		return false, err
+	}
+	line, err = mc.reader.ReadString('\n')
+	if err != nil {
+		bad = true
+		return false, err
+	}
+	if strings.HasPrefix(line, "EXISTS") || strings.HasPrefix(line, "NOT_FOUND") {
+		return false, nil
+	}
+	if !strings.HasPrefix(line, "STORED") {
+		bad = true
+		return false, fmt.Errorf("memcached lock release failed: %s", strings.TrimSpace(line))
+	}
+	return true, nil
 }
 
 // Increment atomically adds delta while preserving the store's TTL contract.

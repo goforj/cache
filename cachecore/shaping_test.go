@@ -21,6 +21,36 @@ type shapingTestStore struct {
 	values map[string][]byte
 }
 
+// lockCapableShapingStore models a backend whose lock operations require owner comparison.
+type lockCapableShapingStore struct {
+	*shapingTestStore
+}
+
+// LockAcquire records the opaque owner without applying value shaping.
+func (s *lockCapableShapingStore) LockAcquire(ctx context.Context, key string, owner []byte, ttl time.Duration) (bool, error) {
+	return s.Add(ctx, key, owner, ttl)
+}
+
+// LockRelease removes the lock only when its stored owner still matches.
+func (s *lockCapableShapingStore) LockRelease(ctx context.Context, key string, owner []byte) (bool, error) {
+	stored, ok, err := s.Get(ctx, key)
+	if err != nil || !ok || !bytes.Equal(stored, owner) {
+		return false, err
+	}
+	return true, s.Delete(ctx, key)
+}
+
+// deleteErrorShapingStore hides optional lock support and makes fallback deletion fail.
+type deleteErrorShapingStore struct {
+	Store
+	err error
+}
+
+// Delete reports the configured failure so wrapper error propagation is observable.
+func (s *deleteErrorShapingStore) Delete(context.Context, string) error {
+	return s.err
+}
+
 // newShapingTestStore constructs an empty observable backend.
 func newShapingTestStore() *shapingTestStore {
 	return &shapingTestStore{values: make(map[string][]byte)}
@@ -245,11 +275,14 @@ func TestWrapStoreConfigurationFailuresFailClosed(t *testing.T) {
 		t.Fatalf("diagnostic Driver() = %q, want %q", store.Driver(), DriverMemory)
 	}
 	ctx := context.Background()
+	locks := store.(lockStore)
 	checks := []func() error{
 		func() error { return store.Ready(ctx) },
 		func() error { _, _, err := store.Get(ctx, "k"); return err },
 		func() error { return store.Set(ctx, "k", []byte("v"), time.Minute) },
 		func() error { _, err := store.Add(ctx, "k", []byte("v"), time.Minute); return err },
+		func() error { _, err := locks.LockAcquire(ctx, "k", []byte("owner"), time.Minute); return err },
+		func() error { _, err := locks.LockRelease(ctx, "k", []byte("owner")); return err },
 		func() error { _, err := store.Increment(ctx, "k", 1, time.Minute); return err },
 		func() error { _, err := store.Decrement(ctx, "k", 1, time.Minute); return err },
 		func() error { return store.Delete(ctx, "k") },
@@ -259,6 +292,74 @@ func TestWrapStoreConfigurationFailuresFailClosed(t *testing.T) {
 	for i, check := range checks {
 		if err := check(); !errors.Is(err, ErrEncryptionKey) {
 			t.Fatalf("operation %d error = %v, want ErrEncryptionKey", i, err)
+		}
+	}
+}
+
+// TestWrapStorePreservesLockOwnership verifies shaped wrappers delegate private lock capabilities without enveloping tokens.
+func TestWrapStorePreservesLockOwnership(t *testing.T) {
+	configs := []BaseConfig{
+		{Compression: CompressionGzip},
+		{EncryptionKey: []byte("0123456789abcdef")},
+	}
+	ctx := context.Background()
+	owner := []byte("owner")
+	for _, cfg := range configs {
+		base := &lockCapableShapingStore{shapingTestStore: newShapingTestStore()}
+		store, err := WrapStore(base, cfg)
+		if err != nil {
+			t.Fatalf("WrapStore(%+v) error = %v", cfg, err)
+		}
+		locks := store.(lockStore)
+		if acquired, err := locks.LockAcquire(ctx, "lock", owner, time.Minute); err != nil || !acquired {
+			t.Fatalf("LockAcquire(%+v) = %v, %v", cfg, acquired, err)
+		}
+		if stored := base.raw("lock"); !bytes.Equal(stored, owner) {
+			t.Fatalf("stored owner for %+v = %q, want raw token %q", cfg, stored, owner)
+		}
+		if released, err := locks.LockRelease(ctx, "lock", []byte("stale")); err != nil || released {
+			t.Fatalf("stale LockRelease(%+v) = %v, %v", cfg, released, err)
+		}
+		if released, err := locks.LockRelease(ctx, "lock", owner); err != nil || !released {
+			t.Fatalf("owner LockRelease(%+v) = %v, %v", cfg, released, err)
+		}
+	}
+}
+
+// TestWrapStoreLockFallbacks verifies legacy stores retain add/delete semantics and deletion failures.
+func TestWrapStoreLockFallbacks(t *testing.T) {
+	configs := []BaseConfig{
+		{Compression: CompressionGzip},
+		{EncryptionKey: []byte("0123456789abcdef")},
+	}
+	ctx := context.Background()
+	owner := []byte("owner")
+	for _, cfg := range configs {
+		base := newShapingTestStore()
+		store, err := WrapStore(base, cfg)
+		if err != nil {
+			t.Fatalf("WrapStore(%+v) error = %v", cfg, err)
+		}
+		locks := store.(lockStore)
+		if acquired, err := locks.LockAcquire(ctx, "lock", owner, time.Minute); err != nil || !acquired {
+			t.Fatalf("fallback LockAcquire(%+v) = %v, %v", cfg, acquired, err)
+		}
+		if stored := base.raw("lock"); !bytes.Equal(stored, owner) {
+			t.Fatalf("fallback stored owner for %+v = %q, want raw token %q", cfg, stored, owner)
+		}
+		if released, err := locks.LockRelease(ctx, "lock", owner); err != nil || !released {
+			t.Fatalf("fallback LockRelease(%+v) = %v, %v", cfg, released, err)
+		}
+
+		expected := errors.New("delete failed")
+		failingBase := &deleteErrorShapingStore{Store: newShapingTestStore(), err: expected}
+		failingStore, err := WrapStore(failingBase, cfg)
+		if err != nil {
+			t.Fatalf("WrapStore failing fallback (%+v) error = %v", cfg, err)
+		}
+		failingLocks := failingStore.(lockStore)
+		if released, err := failingLocks.LockRelease(ctx, "lock", owner); released || !errors.Is(err, expected) {
+			t.Fatalf("failed fallback LockRelease(%+v) = %v, %v", cfg, released, err)
 		}
 	}
 }

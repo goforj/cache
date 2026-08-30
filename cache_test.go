@@ -16,6 +16,13 @@ type testPayload struct {
 	Name string `json:"name"`
 }
 
+type lockErrorReader struct {
+	err error
+}
+
+// Read reports the configured entropy failure.
+func (r lockErrorReader) Read([]byte) (int, error) { return 0, r.err }
+
 // TestCacheRememberCachesValue verifies that a miss computes once and subsequent reads reuse the stored bytes.
 func TestCacheRememberCachesValue(t *testing.T) {
 	repo := NewCache(newMemoryStore(0, 0))
@@ -1290,6 +1297,72 @@ func TestCacheTryLockAndUnlock(t *testing.T) {
 	if err != nil || !locked {
 		t.Fatalf("expected try lock success after unlock, locked=%v err=%v", locked, err)
 	}
+	if err := c.Unlock(key); err != nil {
+		t.Fatalf("second lifecycle unlock failed: %v", err)
+	}
+	if err := c.Unlock(key); err != nil {
+		t.Fatalf("duplicate unlock failed: %v", err)
+	}
+}
+
+// TestCacheUnlockDoesNotReleaseAnotherCacheOwner verifies an expired owner cannot delete its successor's lock.
+func TestCacheUnlockDoesNotReleaseAnotherCacheOwner(t *testing.T) {
+	store := NewMemoryStore(context.Background())
+	first := NewCache(store)
+	second := NewCache(store)
+	contender := NewCache(store)
+	key := "lock:owner-safe"
+	if locked, err := first.TryLock(key, 20*time.Millisecond); err != nil || !locked {
+		t.Fatalf("first owner acquire failed: locked=%v err=%v", locked, err)
+	}
+	deadline := time.Now().Add(time.Second)
+	for {
+		locked, err := second.TryLock(key, time.Second)
+		if err != nil {
+			t.Fatalf("second owner acquire failed: %v", err)
+		}
+		if locked {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("second owner did not acquire after expiration")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if err := first.Unlock(key); err != nil {
+		t.Fatalf("stale owner release failed: %v", err)
+	}
+	if locked, err := contender.TryLock(key, time.Second); err != nil || locked {
+		t.Fatalf("stale owner removed successor lock: locked=%v err=%v", locked, err)
+	}
+}
+
+// TestCacheSingletonDoesNotOverlapLockLifecycles verifies shared facades cannot reuse one owner token after expiry.
+func TestCacheSingletonDoesNotOverlapLockLifecycles(t *testing.T) {
+	store := NewMemoryStore(context.Background())
+	shared := NewCache(store)
+	successor := NewCache(store)
+	contender := NewCache(store)
+	key := "lock:singleton-owner-safe"
+	if locked, err := shared.TryLock(key, 20*time.Millisecond); err != nil || !locked {
+		t.Fatalf("shared first acquire failed: locked=%v err=%v", locked, err)
+	}
+	time.Sleep(30 * time.Millisecond)
+	if locked, err := shared.TryLock(key, time.Second); err != nil || locked {
+		t.Fatalf("shared Cache overlapped its ownership lifecycle: locked=%v err=%v", locked, err)
+	}
+	if locked, err := successor.TryLock(key, time.Second); err != nil || !locked {
+		t.Fatalf("successor acquire failed: locked=%v err=%v", locked, err)
+	}
+	if err := shared.Unlock(key); err != nil {
+		t.Fatalf("stale shared release failed: %v", err)
+	}
+	if locked, err := contender.TryLock(key, time.Second); err != nil || locked {
+		t.Fatalf("stale shared release removed successor: locked=%v err=%v", locked, err)
+	}
+	if err := successor.Unlock(key); err != nil {
+		t.Fatalf("successor release failed: %v", err)
+	}
 }
 
 // TestCacheTryLockValidationAndError verifies invalid lock inputs and backend failures are returned before ownership.
@@ -1302,6 +1375,14 @@ func TestCacheTryLockValidationAndError(t *testing.T) {
 	cErr := NewCache(&spyStore{driver: cachecore.DriverMemory, addErr: expectedErr})
 	if _, err := cErr.TryLock("lock:err", time.Second); !errors.Is(err, expectedErr) {
 		t.Fatalf("expected add error, got %v", err)
+	}
+}
+
+// TestNewLockOwnerTokenFromPropagatesEntropyFailure verifies locks fail instead of using a predictable owner.
+func TestNewLockOwnerTokenFromPropagatesEntropyFailure(t *testing.T) {
+	expected := errors.New("entropy unavailable")
+	if _, err := newLockOwnerTokenFrom(lockErrorReader{err: expected}); !errors.Is(err, expected) {
+		t.Fatalf("newLockOwnerTokenFrom() error = %v, want %v", err, expected)
 	}
 }
 

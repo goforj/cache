@@ -109,8 +109,12 @@ For client-facing APIs:
 ## Locking Guidance
 
 - Use short TTL locks for idempotent jobs and cache rebuild gates.
-- Always design critical work to finish within lock TTL or renew externally.
-- `Unlock` removes lock key without owner token validation; avoid long-running lock ownership assumptions.
+- Standard bundled backends validate an opaque owner token atomically before release, preventing an expired owner from deleting its successor's lock.
+- Always design critical work to finish within lock TTL; expiration can still admit another owner while the original work runs.
+- Locks do not renew automatically and do not provide fencing tokens, so keep protected work idempotent.
+- Direct Cache helpers keep one local lifecycle per key until `Unlock`; use one `LockHandle` per independent operation when ownership may overlap.
+- Custom Redis clients must support `Eval` before locking can safely acquire a key.
+- Use a shared backend rather than memory or file when coordination must cross process boundaries.
 
 ## Observability Patterns
 

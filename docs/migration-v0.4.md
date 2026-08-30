@@ -35,10 +35,23 @@ conversion.
 `cache.NewCache(nil)` and `cache.NewMemoStore(nil)` now panic immediately. These stores are required
 dependencies; construction-time failure replaces a later operation-time nil dereference.
 
+### Lock Ownership Lifecycles
+
+- Standard bundled backends now persist opaque lock owner tokens and compare them atomically during release,
+  preventing an expired Cache instance or `LockHandle` from deleting a later owner's lock.
+- Direct `TryLock`, `Lock`, and `Unlock` calls now form one local lifecycle per Cache instance and key.
+  Reacquisition through the same Cache is not allowed until `Unlock` closes that lifecycle, even after backend expiry.
+- A Cache instance can release only a lock that it acquired. Code that previously acquired through one request-scoped
+  Cache and unlocked through another must retain the acquiring Cache or use one `LockHandle` per operation.
+- Custom Redis Client overrides must expose go-redis `Eval` support to use locking. Acquisition fails before writing
+  when scripts are unavailable because a separate compare and delete cannot safely release distributed locks.
+- During a rolling deployment, drain binaries with legacy unconditional unlock behavior before relying on owner-safe
+  release. An old process can still delete a new process's lock until the old binary is gone.
+
 ## Behavior Fixes Without Call-Site Changes
 
-- Derived `LockHandle` values share ownership state, preventing a stale handle from releasing a
-  later owner's lock.
+- Derived `LockHandle` values continue to share ownership state, so releasing through one derived
+  handle makes later releases from its siblings harmless no-ops.
 - File-store mutation sequences targeting the same normalized directory are serialized within the
   process, making Add and counters atomic across local store instances.
 - File-store Flush removes only cache-owned files and preserves unrelated files in the directory.

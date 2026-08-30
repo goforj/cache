@@ -22,6 +22,7 @@ import (
 var (
 	createTempFile = os.CreateTemp
 	renameFile     = os.Rename
+	removeFile     = os.Remove
 )
 
 var fileRecordMagic = []byte("CFR1")
@@ -205,6 +206,26 @@ func (s *fileStore) Add(_ context.Context, key string, value []byte, ttl time.Du
 	return true, nil
 }
 
+// LockAcquire atomically records owner when key is absent.
+func (s *fileStore) LockAcquire(ctx context.Context, key string, owner []byte, ttl time.Duration) (bool, error) {
+	return s.Add(ctx, key, owner, ttl)
+}
+
+// LockRelease deletes key only while it still belongs to owner.
+func (s *fileStore) LockRelease(_ context.Context, key string, owner []byte) (bool, error) {
+	mu := s.mutationLock()
+	mu.Lock()
+	defer mu.Unlock()
+	body, ok, err := s.get(key)
+	if err != nil || !ok || !bytes.Equal(body, owner) {
+		return false, err
+	}
+	if err := s.delete(key); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 // Increment atomically adds delta while preserving the store's TTL contract.
 func (s *fileStore) Increment(_ context.Context, key string, delta int64, ttl time.Duration) (int64, error) {
 	mu := s.mutationLock()
@@ -242,7 +263,7 @@ func (s *fileStore) Delete(_ context.Context, key string) error {
 
 // delete treats a missing cache file as an idempotent success.
 func (s *fileStore) delete(key string) error {
-	if err := os.Remove(s.path(key)); err != nil && !errors.Is(err, os.ErrNotExist) {
+	if err := removeFile(s.path(key)); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
 	return nil

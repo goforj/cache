@@ -226,6 +226,153 @@ func TestLockHandleInternalNilCallbacks(t *testing.T) {
 	}
 }
 
+// TestBundledLockStoreCapabilityBranches verifies local, memo, null, and failing stores preserve owner checks.
+func TestBundledLockStoreCapabilityBranches(t *testing.T) {
+	ctx := context.Background()
+	owner := []byte("owner")
+
+	memory := newMemoryStore(time.Minute, time.Minute).(*memoryStore)
+	if released, err := memory.LockRelease(ctx, "memory", owner); err != nil || released {
+		t.Fatalf("missing memory LockRelease() = %v, %v", released, err)
+	}
+
+	file := newFileStore(t.TempDir(), time.Minute).(*fileStore)
+	if acquired, err := file.LockAcquire(ctx, "file", owner, time.Minute); err != nil || !acquired {
+		t.Fatalf("file LockAcquire() = %v, %v", acquired, err)
+	}
+	if released, err := file.LockRelease(ctx, "file", []byte("stale")); err != nil || released {
+		t.Fatalf("stale file LockRelease() = %v, %v", released, err)
+	}
+	if released, err := file.LockRelease(ctx, "file", owner); err != nil || !released {
+		t.Fatalf("owner file LockRelease() = %v, %v", released, err)
+	}
+	if acquired, err := file.LockAcquire(ctx, "file-delete-error", owner, time.Minute); err != nil || !acquired {
+		t.Fatalf("file delete-error LockAcquire() = %v, %v", acquired, err)
+	}
+	expectedDeleteError := errors.New("remove failed")
+	originalRemoveFile := removeFile
+	removeFile = func(string) error { return expectedDeleteError }
+	released, releaseErr := file.LockRelease(ctx, "file-delete-error", owner)
+	removeFile = originalRemoveFile
+	if released || !errors.Is(releaseErr, expectedDeleteError) {
+		t.Fatalf("failed file LockRelease() = %v, %v", released, releaseErr)
+	}
+	if released, err := file.LockRelease(ctx, "file", owner); err != nil || released {
+		t.Fatalf("missing file LockRelease() = %v, %v", released, err)
+	}
+
+	memo := NewMemoStore(newMemoryStore(time.Minute, time.Minute)).(*memoStore)
+	if acquired, err := memo.LockAcquire(ctx, "memo", owner, time.Minute); err != nil || !acquired {
+		t.Fatalf("memo LockAcquire() = %v, %v", acquired, err)
+	}
+	if released, err := memo.LockRelease(ctx, "memo", []byte("stale")); err != nil || released {
+		t.Fatalf("stale memo LockRelease() = %v, %v", released, err)
+	}
+	if released, err := memo.LockRelease(ctx, "memo", owner); err != nil || !released {
+		t.Fatalf("owner memo LockRelease() = %v, %v", released, err)
+	}
+
+	fallbackStore := &spyStore{driver: cachecore.DriverMemory, addOK: true}
+	fallback := NewMemoStore(fallbackStore).(*memoStore)
+	if acquired, err := fallback.LockAcquire(ctx, "fallback", owner, time.Minute); err != nil || !acquired {
+		t.Fatalf("fallback LockAcquire() = %v, %v", acquired, err)
+	}
+	if released, err := fallback.LockRelease(ctx, "fallback", owner); err != nil || !released {
+		t.Fatalf("fallback LockRelease() = %v, %v", released, err)
+	}
+	fallbackErrorStore := struct{ cachecore.Store }{
+		Store: &errorStore{driver: cachecore.DriverMemory, err: expectedDeleteError},
+	}
+	fallbackError := NewMemoStore(fallbackErrorStore).(*memoStore)
+	if released, err := fallbackError.LockRelease(ctx, "fallback-error", owner); released || !errors.Is(err, expectedDeleteError) {
+		t.Fatalf("failed fallback LockRelease() = %v, %v", released, err)
+	}
+
+	null := newNullStore().(*nullStore)
+	if acquired, err := null.LockAcquire(ctx, "null", owner, time.Minute); err != nil || !acquired {
+		t.Fatalf("null LockAcquire() = %v, %v", acquired, err)
+	}
+	if released, err := null.LockRelease(ctx, "null", owner); err != nil || !released {
+		t.Fatalf("null LockRelease() = %v, %v", released, err)
+	}
+
+	expected := errors.New("store failed")
+	failing := &errorStore{driver: cachecore.DriverMemory, err: expected}
+	if acquired, err := failing.LockAcquire(ctx, "error", owner, time.Minute); acquired || !errors.Is(err, expected) {
+		t.Fatalf("failing LockAcquire() = %v, %v", acquired, err)
+	}
+	if released, err := failing.LockRelease(ctx, "error", owner); released || !errors.Is(err, expected) {
+		t.Fatalf("failing LockRelease() = %v, %v", released, err)
+	}
+}
+
+// TestLockOwnershipFailureAndReuseBranches verifies entropy errors and concurrent handle reuse fail safely.
+func TestLockOwnershipFailureAndReuseBranches(t *testing.T) {
+	expected := errors.New("owner failed")
+	c := NewCache(NewMemoryStore(context.Background()))
+	owner := &cacheLockOwner{}
+	owner.once.Do(func() { owner.err = expected })
+	c.lockOwner = owner
+	if locked, err := c.TryLock("try", time.Minute); locked || !errors.Is(err, expected) {
+		t.Fatalf("TryLock() = %v, %v", locked, err)
+	}
+	if locked, err := c.Lock("lock", time.Minute, time.Millisecond); locked || !errors.Is(err, expected) {
+		t.Fatalf("Lock() = %v, %v", locked, err)
+	}
+	if !c.directLocks.beginAcquire("unlock") {
+		t.Fatal("failed to reserve direct unlock test lifecycle")
+	}
+	c.directLocks.finishAcquire("unlock", true)
+	if err := c.Unlock("unlock"); !errors.Is(err, expected) {
+		t.Fatalf("Unlock() error = %v, want %v", err, expected)
+	}
+
+	c.lockOwner = nil
+	if locked, err := c.TryLock("nil-owner", time.Minute); err != nil || !locked {
+		t.Fatalf("TryLock() with nil owner state = %v, %v", locked, err)
+	}
+	if err := c.Unlock("nil-owner"); err != nil {
+		t.Fatalf("Unlock() with regenerated owner = %v", err)
+	}
+	if locked, err := c.lock(context.Background(), "default-retry", time.Minute, 0); err != nil || !locked {
+		t.Fatalf("lock() with default retry = %v, %v", locked, err)
+	}
+	nullCache := NewCache(newNullStore())
+	if locked, err := nullCache.lock(context.Background(), "null-lock", time.Minute, 0); err != nil || !locked {
+		t.Fatalf("null lock() = %v, %v", locked, err)
+	}
+	nullCache.lockOwner = owner
+	if err := nullCache.unlock(context.Background(), "null-unlock"); !errors.Is(err, expected) {
+		t.Fatalf("null unlock() owner error = %v, want %v", err, expected)
+	}
+
+	handle := c.NewLockHandle("handle", time.Minute)
+	handle.ownerErr = expected
+	if locked, err := handle.Acquire(); locked || !errors.Is(err, expected) {
+		t.Fatalf("Acquire() = %v, %v", locked, err)
+	}
+	if locked, err := handle.get(context.Background(), func(context.Context) error { return nil }); locked || !errors.Is(err, expected) {
+		t.Fatalf("get() = %v, %v", locked, err)
+	}
+	if locked, err := handle.block(context.Background(), time.Millisecond, func(context.Context) error { return nil }); locked || !errors.Is(err, expected) {
+		t.Fatalf("block() = %v, %v", locked, err)
+	}
+
+	held := c.NewLockHandle("held", time.Minute)
+	if locked, err := held.Acquire(); err != nil || !locked {
+		t.Fatalf("held Acquire() = %v, %v", locked, err)
+	}
+	if locked, err := held.Acquire(); err != nil || locked {
+		t.Fatalf("repeated Acquire() = %v, %v", locked, err)
+	}
+	if locked, err := held.get(context.Background(), func(context.Context) error { return nil }); err != nil || locked {
+		t.Fatalf("held get() = %v, %v", locked, err)
+	}
+	if locked, err := held.block(context.Background(), time.Millisecond, func(context.Context) error { return nil }); err != nil || locked {
+		t.Fatalf("held block() = %v, %v", locked, err)
+	}
+}
+
 // TestFileStoreFailureAndLegacyBranches verifies corrupt records and filesystem failures remain classified.
 func TestFileStoreFailureAndLegacyBranches(t *testing.T) {
 	ctx := context.Background()

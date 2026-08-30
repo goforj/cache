@@ -2,6 +2,7 @@ package rediscache
 
 import (
 	"context"
+	"errors"
 	"strconv"
 	"strings"
 	"time"
@@ -22,6 +23,7 @@ type stubClient struct {
 	incrErr   error
 	scanErr   error
 	delErr    error
+	evalErr   error
 }
 
 // newStubClient creates an empty in-memory Redis client stub.
@@ -30,6 +32,29 @@ func newStubClient() *stubClient {
 		store: make(map[string]string),
 		ttl:   make(map[string]time.Time),
 	}
+}
+
+// Eval emulates the owner-checked delete script used for lock release.
+func (c *stubClient) Eval(ctx context.Context, _ string, keys []string, args ...interface{}) *redis.Cmd {
+	cmd := redis.NewCmd(ctx)
+	if c.evalErr != nil {
+		cmd.SetErr(c.evalErr)
+		return cmd
+	}
+	if len(keys) != 1 || len(args) != 1 {
+		cmd.SetErr(errors.New("unexpected eval arguments"))
+		return cmd
+	}
+	c.expireIfNeeded(keys[0])
+	owner, _ := args[0].([]byte)
+	if c.store[keys[0]] != string(owner) {
+		cmd.SetVal(int64(0))
+		return cmd
+	}
+	delete(c.store, keys[0])
+	delete(c.ttl, keys[0])
+	cmd.SetVal(int64(1))
+	return cmd
 }
 
 // expireIfNeeded removes values whose simulated Redis deadline has passed.

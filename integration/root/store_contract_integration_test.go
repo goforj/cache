@@ -508,7 +508,7 @@ func runLockHelperInvariantSuite(t *testing.T, cache *Cache, driver cachecore.Dr
 		}
 	})
 
-	t.Run("lock_ttl_expiry_allows_reacquire", func(t *testing.T) {
+	t.Run("lock_ttl_expiry_requires_a_distinct_local_lifecycle", func(t *testing.T) {
 		key := caseKey("lock:expiry")
 		ttl := lockTTLFor(driver)
 		locked, err := cache.TryLock(key, ttl)
@@ -517,8 +517,47 @@ func runLockHelperInvariantSuite(t *testing.T, cache *Cache, driver cachecore.Dr
 		}
 		time.Sleep(lockTTLWaitForExpiry(driver))
 		locked, err = cache.TryLock(key, ttl)
+		if err != nil || locked {
+			t.Fatalf("same Cache overlapped its local lifecycle after expiry: locked=%v err=%v", locked, err)
+		}
+		successor := NewCache(cache.Store())
+		locked, err = successor.TryLock(key, ttl)
 		if err != nil || !locked {
-			t.Fatalf("expected try lock after ttl expiry, locked=%v err=%v", locked, err)
+			t.Fatalf("distinct lifecycle did not acquire after ttl expiry: locked=%v err=%v", locked, err)
+		}
+		if err := cache.Unlock(key); err != nil {
+			t.Fatalf("stale local lifecycle release failed: %v", err)
+		}
+		contender := NewCache(cache.Store())
+		if locked, err := contender.TryLock(key, ttl); err != nil || locked {
+			t.Fatalf("stale local lifecycle removed successor: locked=%v err=%v", locked, err)
+		}
+		if err := successor.Unlock(key); err != nil {
+			t.Fatalf("successor release failed: %v", err)
+		}
+	})
+
+	t.Run("expired_lock_owner_cannot_release_successor", func(t *testing.T) {
+		key := caseKey("lock:stale-owner")
+		ttl := lockTTLFor(driver)
+		first := NewCache(cache.Store()).NewLockHandle(key, ttl)
+		if locked, err := first.Acquire(); err != nil || !locked {
+			t.Fatalf("first owner acquire failed: locked=%v err=%v", locked, err)
+		}
+		time.Sleep(lockTTLWaitForExpiry(driver))
+		second := NewCache(cache.Store()).NewLockHandle(key, ttl)
+		if locked, err := second.Acquire(); err != nil || !locked {
+			t.Fatalf("second owner acquire failed: locked=%v err=%v", locked, err)
+		}
+		if err := first.Release(); err != nil {
+			t.Fatalf("stale owner release failed: %v", err)
+		}
+		contender := NewCache(cache.Store()).NewLockHandle(key, ttl)
+		if locked, err := contender.Acquire(); err != nil || locked {
+			t.Fatalf("stale owner removed successor lock: locked=%v err=%v", locked, err)
+		}
+		if err := second.Release(); err != nil {
+			t.Fatalf("second owner release failed: %v", err)
 		}
 	})
 }

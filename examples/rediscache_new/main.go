@@ -16,6 +16,7 @@ func main() {
 	// - Prefix: "app" when empty
 	// - Addr: empty by default (no client auto-created unless Addr is set)
 	// - Client: optional advanced override (takes precedence when set)
+	// - Client overrides must also implement Eval to use ownership-safe locking
 	// - If neither Client nor Addr is set, operations return errors until a client is provided
 
 	// Example: explicit Redis driver config

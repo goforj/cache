@@ -678,6 +678,7 @@ Defaults:
 - Prefix: "app" when empty
 - Addr: empty by default (no client auto-created unless Addr is set)
 - Client: optional advanced override (takes precedence when set)
+- Client overrides must also implement Eval to use ownership-safe locking
 - If neither Client nor Addr is set, operations return errors until a client is provided
 
 ```go
@@ -837,13 +838,16 @@ fmt.Println(err == nil, locked) // true true
 
 ### <a id="cache-lock"></a>Lock
 
-Lock waits until the lock is acquired or timeout elapses.
+Lock waits until this Cache instance and the backend can begin a lock lifecycle or timeout elapses.
 
 ```go
 ctx := context.Background()
 c := cache.NewCache(cache.NewMemoryStore(ctx))
 locked, err := c.Lock("job:sync", 10*time.Second, time.Second)
 fmt.Println(err == nil, locked) // true true
+if locked {
+	_ = c.Unlock("job:sync")
+}
 ```
 
 ### <a id="lockhandle-get"></a>LockHandle.Get
@@ -878,7 +882,7 @@ if locked {
 
 ### <a id="lockhandle-release"></a>Release
 
-Release unlocks the key if this handle previously acquired it.
+Release unlocks the key if this handle previously acquired and still owns it.
 
 It is safe to call multiple times; repeated calls become no-ops after the first
 successful release.
@@ -895,18 +899,21 @@ if locked {
 
 ### <a id="cache-trylock"></a>TryLock
 
-TryLock acquires a short-lived lock key when not already held.
+TryLock acquires a short-lived lock key when this Cache instance has no active lifecycle for it.
 
 ```go
 ctx := context.Background()
 c := cache.NewCache(cache.NewMemoryStore(ctx))
 locked, _ := c.TryLock("job:sync", 10*time.Second)
 fmt.Println(locked) // true
+if locked {
+	_ = c.Unlock("job:sync")
+}
 ```
 
 ### <a id="cache-unlock"></a>Unlock
 
-Unlock releases a previously acquired lock key.
+Unlock closes this Cache instance's lifecycle and releases the key only while it still owns the backend lock.
 
 ```go
 ctx := context.Background()

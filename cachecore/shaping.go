@@ -29,6 +29,12 @@ var (
 	ErrEncryptValueTooBig = errors.New("cache: encrypt value too large")
 )
 
+// lockStore is a private structural capability used to preserve atomic lock ownership through wrappers.
+type lockStore interface {
+	LockAcquire(ctx context.Context, key string, owner []byte, ttl time.Duration) (bool, error)
+	LockRelease(ctx context.Context, key string, owner []byte) (bool, error)
+}
+
 // compressionMagic distinguishes shaped gzip values from legacy raw bytes.
 var compressionMagic = []byte("CMP1")
 
@@ -127,6 +133,27 @@ func (s *shapingStore) Add(ctx context.Context, key string, value []byte, ttl ti
 	return s.inner.Add(ctx, key, encoded, ttl)
 }
 
+// LockAcquire bypasses value shaping because lock ownership tokens are private coordination metadata.
+func (s *shapingStore) LockAcquire(ctx context.Context, key string, owner []byte, ttl time.Duration) (bool, error) {
+	store, ok := s.inner.(lockStore)
+	if !ok {
+		return s.inner.Add(ctx, key, owner, ttl)
+	}
+	return store.LockAcquire(ctx, key, owner, ttl)
+}
+
+// LockRelease preserves the wrapped store's atomic owner comparison when available.
+func (s *shapingStore) LockRelease(ctx context.Context, key string, owner []byte) (bool, error) {
+	store, ok := s.inner.(lockStore)
+	if !ok {
+		if err := s.inner.Delete(ctx, key); err != nil {
+			return false, err
+		}
+		return true, nil
+	}
+	return store.LockRelease(ctx, key, owner)
+}
+
 // Increment bypasses shaping so backend-native numeric operations remain atomic.
 func (s *shapingStore) Increment(ctx context.Context, key string, delta int64, ttl time.Duration) (int64, error) {
 	return s.inner.Increment(ctx, key, delta, ttl)
@@ -222,6 +249,27 @@ func (s *encryptingStore) Add(ctx context.Context, key string, value []byte, ttl
 		return false, err
 	}
 	return s.inner.Add(ctx, key, encoded, ttl)
+}
+
+// LockAcquire bypasses encryption because opaque ownership tokens never leave the private lock namespace.
+func (s *encryptingStore) LockAcquire(ctx context.Context, key string, owner []byte, ttl time.Duration) (bool, error) {
+	store, ok := s.inner.(lockStore)
+	if !ok {
+		return s.inner.Add(ctx, key, owner, ttl)
+	}
+	return store.LockAcquire(ctx, key, owner, ttl)
+}
+
+// LockRelease preserves the wrapped store's atomic owner comparison when available.
+func (s *encryptingStore) LockRelease(ctx context.Context, key string, owner []byte) (bool, error) {
+	store, ok := s.inner.(lockStore)
+	if !ok {
+		if err := s.inner.Delete(ctx, key); err != nil {
+			return false, err
+		}
+		return true, nil
+	}
+	return store.LockRelease(ctx, key, owner)
 }
 
 // Increment bypasses encryption so backend-native numeric operations remain atomic.
@@ -390,6 +438,16 @@ func (s *failingStore) Set(context.Context, string, []byte, time.Duration) error
 
 // Add reports the shaping configuration error.
 func (s *failingStore) Add(context.Context, string, []byte, time.Duration) (bool, error) {
+	return false, s.err
+}
+
+// LockAcquire reports the shaping configuration error.
+func (s *failingStore) LockAcquire(context.Context, string, []byte, time.Duration) (bool, error) {
+	return false, s.err
+}
+
+// LockRelease reports the shaping configuration error.
+func (s *failingStore) LockRelease(context.Context, string, []byte) (bool, error) {
 	return false, s.err
 }
 
