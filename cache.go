@@ -2,10 +2,13 @@ package cache
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/goforj/cache/cachecore"
@@ -17,6 +20,20 @@ type Cache struct {
 	defaultTTL time.Duration
 	observer   Observer
 	ctx        context.Context
+	lockOwner  *cacheLockOwner
+}
+
+// cacheLockOwner lazily assigns one ownership token shared by contextual Cache clones.
+type cacheLockOwner struct {
+	once  sync.Once
+	token []byte
+	err   error
+}
+
+// lockStore is an internal capability implemented by bundled stores for ownership-safe locks.
+type lockStore interface {
+	LockAcquire(ctx context.Context, key string, owner []byte, ttl time.Duration) (bool, error)
+	LockRelease(ctx context.Context, key string, owner []byte) (bool, error)
 }
 
 // RateLimitStatus contains fixed-window rate limiting metadata.
@@ -66,6 +83,7 @@ func NewCacheWithTTL(store cachecore.Store, defaultTTL time.Duration) *Cache {
 	return &Cache{
 		store:      store,
 		defaultTTL: defaultTTL,
+		lockOwner:  &cacheLockOwner{},
 	}
 }
 
@@ -736,7 +754,7 @@ func (c *Cache) rateLimit(ctx context.Context, key string, limit int64, window t
 	}, nil
 }
 
-// TryLock acquires a short-lived lock key when not already held.
+// TryLock acquires a short-lived lock key owned by this Cache instance when not already held.
 // @group Locking
 //
 // Example: try lock
@@ -749,18 +767,33 @@ func (c *Cache) TryLock(key string, ttl time.Duration) (bool, error) {
 	return c.tryLock(c.context(), key, ttl)
 }
 
-// tryLock relies on Store.Add so lock scope and atomicity match the selected backend.
+// tryLock binds direct lock calls to the Cache instance so stale instances cannot release a successor's lock.
 func (c *Cache) tryLock(ctx context.Context, key string, ttl time.Duration) (bool, error) {
+	owner, err := c.lockOwnerToken()
+	if err != nil {
+		return false, err
+	}
+	return c.tryLockOwned(ctx, key, owner, ttl)
+}
+
+// tryLockOwned acquires a lock using owner as the release identity.
+func (c *Cache) tryLockOwned(ctx context.Context, key string, owner []byte, ttl time.Duration) (bool, error) {
 	if ttl <= 0 {
 		return false, errors.New("cache try lock requires ttl > 0")
 	}
 	start := time.Now()
-	created, err := c.store.Add(ctx, lockPrefix+key, []byte("1"), ttl)
+	var created bool
+	var err error
+	if store, ok := c.store.(lockStore); ok {
+		created, err = store.LockAcquire(ctx, lockPrefix+key, owner, ttl)
+	} else {
+		created, err = c.store.Add(ctx, lockPrefix+key, owner, ttl)
+	}
 	c.observe(ctx, "try_lock", key, created, err, start)
 	return created, err
 }
 
-// Lock waits until the lock is acquired or timeout elapses.
+// Lock waits until this Cache instance acquires the lock or timeout elapses.
 // @group Locking
 //
 // Example: lock with timeout
@@ -781,12 +814,21 @@ func (c *Cache) Lock(key string, ttl, timeout time.Duration) (bool, error) {
 
 // lock retries conditional acquisition until success or context cancellation.
 func (c *Cache) lock(ctx context.Context, key string, ttl, retryInterval time.Duration) (bool, error) {
+	owner, err := c.lockOwnerToken()
+	if err != nil {
+		return false, err
+	}
+	return c.lockOwned(ctx, key, owner, ttl, retryInterval)
+}
+
+// lockOwned retries acquisition while preserving one owner identity across attempts.
+func (c *Cache) lockOwned(ctx context.Context, key string, owner []byte, ttl, retryInterval time.Duration) (bool, error) {
 	if retryInterval <= 0 {
 		retryInterval = defaultLockRetryInterval
 	}
 	start := time.Now()
 	for {
-		locked, err := c.tryLock(ctx, key, ttl)
+		locked, err := c.tryLockOwned(ctx, key, owner, ttl)
 		if err != nil {
 			c.observe(ctx, "lock", key, false, err, start)
 			return false, err
@@ -805,7 +847,7 @@ func (c *Cache) lock(ctx context.Context, key string, ttl, retryInterval time.Du
 	}
 }
 
-// Unlock releases a previously acquired lock key.
+// Unlock releases a lock key only when it is still owned by this Cache instance on standard bundled backends.
 // @group Locking
 //
 // Example: unlock key
@@ -822,10 +864,49 @@ func (c *Cache) Unlock(key string) error {
 
 // unlock derives the same namespaced key as acquisition so release cannot target a different lock.
 func (c *Cache) unlock(ctx context.Context, key string) error {
+	owner, err := c.lockOwnerToken()
+	if err != nil {
+		return err
+	}
+	return c.unlockOwned(ctx, key, owner)
+}
+
+// unlockOwned releases only the lock that still contains owner on capable stores.
+func (c *Cache) unlockOwned(ctx context.Context, key string, owner []byte) error {
 	start := time.Now()
-	err := c.store.Delete(ctx, lockPrefix+key)
+	var err error
+	if store, ok := c.store.(lockStore); ok {
+		_, err = store.LockRelease(ctx, lockPrefix+key, owner)
+	} else {
+		err = c.store.Delete(ctx, lockPrefix+key)
+	}
 	c.observe(ctx, "unlock", key, err == nil, err, start)
 	return err
+}
+
+// lockOwnerToken returns the stable ownership identity for direct Cache lock calls.
+func (c *Cache) lockOwnerToken() ([]byte, error) {
+	if c.lockOwner == nil {
+		c.lockOwner = &cacheLockOwner{}
+	}
+	c.lockOwner.once.Do(func() {
+		c.lockOwner.token, c.lockOwner.err = newLockOwnerToken()
+	})
+	return c.lockOwner.token, c.lockOwner.err
+}
+
+// newLockOwnerToken creates an opaque identity that cannot collide across processes in normal operation.
+func newLockOwnerToken() ([]byte, error) {
+	return newLockOwnerTokenFrom(rand.Reader)
+}
+
+// newLockOwnerTokenFrom makes entropy failures directly testable without replacing process globals.
+func newLockOwnerTokenFrom(source io.Reader) ([]byte, error) {
+	token := make([]byte, 32)
+	if _, err := io.ReadFull(source, token); err != nil {
+		return nil, fmt.Errorf("create cache lock owner: %w", err)
+	}
+	return token, nil
 }
 
 // PullBytes returns value and removes it from cache.

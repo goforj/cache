@@ -37,8 +37,10 @@ dependencies; construction-time failure replaces a later operation-time nil dere
 
 ## Behavior Fixes Without Call-Site Changes
 
-- Derived `LockHandle` values share ownership state, preventing a stale handle from releasing a
-  later owner's lock.
+- Standard bundled backends now persist opaque lock owner tokens and compare them atomically during release,
+  preventing an expired Cache instance or `LockHandle` from deleting a later owner's lock.
+- Derived `LockHandle` values continue to share ownership state, so releasing through one derived
+  handle makes later releases from its siblings harmless no-ops.
 - File-store mutation sequences targeting the same normalized directory are serialized within the
   process, making Add and counters atomic across local store instances.
 - File-store Flush removes only cache-owned files and preserves unrelated files in the directory.

@@ -33,6 +33,16 @@ func (e *errorStore) Add(context.Context, string, []byte, time.Duration) (bool, 
 	return false, e.err
 }
 
+// LockAcquire reports the store's construction failure.
+func (e *errorStore) LockAcquire(context.Context, string, []byte, time.Duration) (bool, error) {
+	return false, e.err
+}
+
+// LockRelease reports the store's construction failure.
+func (e *errorStore) LockRelease(context.Context, string, []byte) (bool, error) {
+	return false, e.err
+}
+
 // Increment atomically adds delta while preserving the store's TTL contract.
 func (e *errorStore) Increment(context.Context, string, int64, time.Duration) (int64, error) {
 	return 0, e.err

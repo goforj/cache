@@ -104,16 +104,22 @@ Refresh-ahead caveats:
 
 ## Locking (TryLock, Lock, Unlock)
 
-- Mechanism: lock key ("__lock:"+key) using Add (set-if-absent).
+- Mechanism: lock key ("__lock:"+key) using atomic add-if-absent with an opaque owner token.
 - Scope:
   - distributed only when backend is shared/distributed
   - process-local when backend is process/local only (for example memory)
 - Guarantee:
-  - mutual exclusion best-effort based on backend atomic Add
+  - mutual exclusion during the TTL window based on backend atomic Add
   - lock expires by TTL
-- Important caveat:
-  - Unlock deletes lock key without owner token validation
-  - use short TTLs and keep critical sections bounded
+  - standard bundled backends compare the owner atomically before release, so an expired owner cannot delete a successor's lock
+  - direct Cache helpers scope ownership to the Cache instance; LockHandle scopes ownership to the handle
+- Important caveats:
+  - expiration still allows another owner to begin while the original work is running
+  - locks do not renew automatically and do not provide fencing tokens
+  - custom Store implementations that provide only the base Store contract retain legacy unconditional release behavior
+  - custom Redis Client overrides need script support for atomic comparison; older overrides use a compatible best-effort compare/delete fallback
+  - the file backend coordinates lock mutation only within one process
+  - use short TTLs, keep critical sections bounded, and keep protected work idempotent
 
 ## Rate limiting (RateLimit, WithContext(...).RateLimit)
 

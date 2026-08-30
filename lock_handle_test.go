@@ -6,7 +6,28 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/goforj/cache/cachecore"
 )
+
+type blockingReleaseStore struct {
+	cachecore.Store
+	locks           lockStore
+	releaseStarted  chan struct{}
+	releaseContinue chan struct{}
+}
+
+// LockAcquire delegates to the wrapped ownership-capable store.
+func (s *blockingReleaseStore) LockAcquire(ctx context.Context, key string, owner []byte, ttl time.Duration) (bool, error) {
+	return s.locks.LockAcquire(ctx, key, owner, ttl)
+}
+
+// LockRelease pauses before delegation so tests can attempt concurrent handle reuse.
+func (s *blockingReleaseStore) LockRelease(ctx context.Context, key string, owner []byte) (bool, error) {
+	close(s.releaseStarted)
+	<-s.releaseContinue
+	return s.locks.LockRelease(ctx, key, owner)
+}
 
 // TestLockHandleAcquireRelease verifies lock handles acquire once and release their key.
 func TestLockHandleAcquireRelease(t *testing.T) {
@@ -67,6 +88,117 @@ func TestLockHandleWithContextSharesOwnership(t *testing.T) {
 	}
 	if err := next.Release(); err != nil {
 		t.Fatalf("next owner release failed: %v", err)
+	}
+}
+
+// TestLockHandleExpiredOwnerCannotReleaseSuccessor verifies handle identity survives backend TTL turnover.
+func TestLockHandleExpiredOwnerCannotReleaseSuccessor(t *testing.T) {
+	c := NewCache(NewMemoryStore(context.Background()))
+	first := c.NewLockHandle("lh:expired-owner", 20*time.Millisecond)
+	if locked, err := first.Acquire(); err != nil || !locked {
+		t.Fatalf("first owner acquire failed: locked=%v err=%v", locked, err)
+	}
+	second := c.NewLockHandle("lh:expired-owner", time.Second)
+	deadline := time.Now().Add(time.Second)
+	for {
+		locked, err := second.Acquire()
+		if err != nil {
+			t.Fatalf("second owner acquire failed: %v", err)
+		}
+		if locked {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("second owner did not acquire after expiration")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if err := first.Release(); err != nil {
+		t.Fatalf("stale owner release failed: %v", err)
+	}
+	contender := c.NewLockHandle("lh:expired-owner", time.Second)
+	if locked, err := contender.Acquire(); err != nil || locked {
+		t.Fatalf("stale owner removed successor lock: locked=%v err=%v", locked, err)
+	}
+	if err := second.Release(); err != nil {
+		t.Fatalf("second owner release failed: %v", err)
+	}
+}
+
+// TestLockHandleSerializesReleaseAndReuse verifies one handle cannot reacquire while its prior release is in flight.
+func TestLockHandleSerializesReleaseAndReuse(t *testing.T) {
+	base := NewMemoryStore(context.Background())
+	store := &blockingReleaseStore{
+		Store:           base,
+		locks:           base.(lockStore),
+		releaseStarted:  make(chan struct{}),
+		releaseContinue: make(chan struct{}),
+	}
+	handle := NewCache(store).NewLockHandle("lh:serialized", time.Second)
+	if locked, err := handle.Acquire(); err != nil || !locked {
+		t.Fatalf("initial Acquire() = %v, %v", locked, err)
+	}
+	releaseDone := make(chan error, 1)
+	go func() { releaseDone <- handle.Release() }()
+	select {
+	case <-store.releaseStarted:
+	case <-time.After(time.Second):
+		t.Fatal("Release did not reach the backing store")
+	}
+	acquireDone := make(chan bool, 1)
+	go func() {
+		locked, _ := handle.Acquire()
+		acquireDone <- locked
+	}()
+	select {
+	case <-acquireDone:
+		close(store.releaseContinue)
+		t.Fatal("Acquire returned while Release still owned the handle operation")
+	case <-time.After(20 * time.Millisecond):
+	}
+	close(store.releaseContinue)
+	select {
+	case err := <-releaseDone:
+		if err != nil {
+			t.Fatalf("Release() error = %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Release did not finish")
+	}
+	select {
+	case locked := <-acquireDone:
+		if !locked {
+			t.Fatal("Acquire did not succeed after serialized release")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Acquire did not resume after serialized release")
+	}
+}
+
+// TestLockHandleOwnershipSurvivesValueShaping verifies private lock metadata bypasses value envelopes.
+func TestLockHandleOwnershipSurvivesValueShaping(t *testing.T) {
+	store := NewMemoryStoreWithConfig(context.Background(), StoreConfig{
+		BaseConfig: cachecore.BaseConfig{
+			Compression:   CompressionGzip,
+			EncryptionKey: []byte("0123456789abcdef0123456789abcdef"),
+		},
+	})
+	c := NewCache(store)
+	first := c.NewLockHandle("lh:shaped", 20*time.Millisecond)
+	if locked, err := first.Acquire(); err != nil || !locked {
+		t.Fatalf("first owner acquire failed: locked=%v err=%v", locked, err)
+	}
+	time.Sleep(30 * time.Millisecond)
+	second := c.NewLockHandle("lh:shaped", time.Second)
+	if locked, err := second.Acquire(); err != nil || !locked {
+		t.Fatalf("second owner acquire failed: locked=%v err=%v", locked, err)
+	}
+	if err := first.Release(); err != nil {
+		t.Fatalf("stale owner release failed: %v", err)
+	}
+	contender := c.NewLockHandle("lh:shaped", time.Second)
+	if locked, err := contender.Acquire(); err != nil || locked {
+		t.Fatalf("stale shaped owner removed successor lock: locked=%v err=%v", locked, err)
 	}
 }
 

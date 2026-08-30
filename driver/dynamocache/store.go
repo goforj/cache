@@ -222,6 +222,31 @@ func (s *dynamoStore) Add(ctx context.Context, key string, value []byte, ttl tim
 	return true, nil
 }
 
+// LockAcquire atomically records owner when key is absent or expired.
+func (s *dynamoStore) LockAcquire(ctx context.Context, key string, owner []byte, ttl time.Duration) (bool, error) {
+	return s.Add(ctx, key, owner, ttl)
+}
+
+// LockRelease deletes key only while its persisted value still matches owner.
+func (s *dynamoStore) LockRelease(ctx context.Context, key string, owner []byte) (bool, error) {
+	_, err := s.client.DeleteItem(ctx, &dynamodb.DeleteItemInput{
+		TableName:           aws.String(s.table),
+		Key:                 map[string]types.AttributeValue{"k": &types.AttributeValueMemberS{Value: s.cacheKey(key)}},
+		ConditionExpression: aws.String("v = :owner"),
+		ExpressionAttributeValues: map[string]types.AttributeValue{
+			":owner": &types.AttributeValueMemberB{Value: cloneBytes(owner)},
+		},
+	})
+	if err != nil {
+		var conditional *types.ConditionalCheckFailedException
+		if errors.As(err, &conditional) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
+}
+
 // Increment atomically adds delta while preserving the store's TTL contract.
 func (s *dynamoStore) Increment(ctx context.Context, key string, delta int64, ttl time.Duration) (int64, error) {
 	body, ok, err := s.Get(ctx, key)

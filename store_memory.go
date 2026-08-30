@@ -1,6 +1,7 @@
 package cache
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"strconv"
@@ -81,6 +82,29 @@ func (s *memoryStore) Add(_ context.Context, key string, value []byte, ttl time.
 		}
 		return false, err
 	}
+	return true, nil
+}
+
+// LockAcquire atomically records owner when key is absent.
+func (s *memoryStore) LockAcquire(ctx context.Context, key string, owner []byte, ttl time.Duration) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.Add(ctx, key, owner, ttl)
+}
+
+// LockRelease deletes key only while it still belongs to owner.
+func (s *memoryStore) LockRelease(_ context.Context, key string, owner []byte) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	body, ok := s.cache.Get(key)
+	if !ok {
+		return false, nil
+	}
+	value, ok := body.([]byte)
+	if !ok || !bytes.Equal(value, owner) {
+		return false, nil
+	}
+	s.cache.Delete(key)
 	return true, nil
 }
 

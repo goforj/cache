@@ -3,25 +3,27 @@ package cache
 import (
 	"context"
 	"errors"
+	"sync"
 	"sync/atomic"
 	"time"
 )
 
 // LockHandle provides ergonomic lock management on top of Cache lock helpers.
 //
-// It wraps TryLock/Lock/Unlock and adds callback-based helpers.
-//
-// Caveat:
-//   - Release is a best-effort wrapper over Unlock and does not perform owner-token
-//     validation. Do not assume ownership safety after lock expiry.
+// Standard bundled backends bind each handle to an opaque owner token, so Release cannot
+// delete a successor's lock after this handle's TTL expires. Reuse one handle
+// for one ownership lifecycle at a time.
 //
 // @group Locking
 type LockHandle struct {
-	cache *Cache
-	key   string
-	ttl   time.Duration
-	held  *atomic.Bool
-	ctx   context.Context
+	cache       *Cache
+	key         string
+	ttl         time.Duration
+	held        *atomic.Bool
+	operationMu *sync.Mutex
+	owner       []byte
+	ownerErr    error
+	ctx         context.Context
 }
 
 // NewLockHandle creates a reusable lock handle for a key/ttl pair.
@@ -38,11 +40,15 @@ type LockHandle struct {
 //		_ = lock.Release()
 //	}
 func (c *Cache) NewLockHandle(key string, ttl time.Duration) *LockHandle {
+	owner, ownerErr := newLockOwnerToken()
 	return &LockHandle{
-		cache: c,
-		key:   key,
-		ttl:   ttl,
-		held:  &atomic.Bool{},
+		cache:       c,
+		key:         key,
+		ttl:         ttl,
+		held:        &atomic.Bool{},
+		operationMu: &sync.Mutex{},
+		owner:       owner,
+		ownerErr:    ownerErr,
 	}
 }
 
@@ -72,14 +78,22 @@ func (l *LockHandle) context() context.Context {
 //	locked, err := lock.Acquire()
 //	fmt.Println(err == nil, locked) // true true
 func (l *LockHandle) Acquire() (bool, error) {
-	locked, err := l.cache.tryLock(l.context(), l.key, l.ttl)
+	l.operationMu.Lock()
+	defer l.operationMu.Unlock()
+	if l.ownerErr != nil {
+		return false, l.ownerErr
+	}
+	if l.held.Load() {
+		return false, nil
+	}
+	locked, err := l.cache.tryLockOwned(l.context(), l.key, l.owner, l.ttl)
 	if locked && err == nil {
 		l.held.Store(true)
 	}
 	return locked, err
 }
 
-// Release unlocks the key if this handle previously acquired it.
+// Release unlocks the key if this handle previously acquired and still owns it.
 //
 // It is safe to call multiple times; repeated calls become no-ops after the first
 // successful release.
@@ -95,10 +109,12 @@ func (l *LockHandle) Acquire() (bool, error) {
 //		_ = lock.Release()
 //	}
 func (l *LockHandle) Release() error {
+	l.operationMu.Lock()
+	defer l.operationMu.Unlock()
 	if !l.held.CompareAndSwap(true, false) {
 		return nil
 	}
-	if err := l.cache.unlock(l.context(), l.key); err != nil {
+	if err := l.cache.unlockOwned(l.context(), l.key, l.owner); err != nil {
 		l.held.Store(true)
 		return err
 	}
@@ -129,11 +145,22 @@ func (l *LockHandle) Get(fn func() error) (bool, error) {
 
 // get shares the single-attempt ownership and release sequence with callback adapters.
 func (l *LockHandle) get(ctx context.Context, fn func(context.Context) error) (bool, error) {
-	locked, err := l.cache.tryLock(ctx, l.key, l.ttl)
+	l.operationMu.Lock()
+	if l.ownerErr != nil {
+		l.operationMu.Unlock()
+		return false, l.ownerErr
+	}
+	if l.held.Load() {
+		l.operationMu.Unlock()
+		return false, nil
+	}
+	locked, err := l.cache.tryLockOwned(ctx, l.key, l.owner, l.ttl)
 	if err != nil || !locked {
+		l.operationMu.Unlock()
 		return locked, err
 	}
 	l.held.Store(true)
+	l.operationMu.Unlock()
 	defer func() { _ = l.WithContext(ctx).Release() }()
 	if fn == nil {
 		return true, errors.New("cache lock handle requires a callback")
@@ -173,11 +200,22 @@ func (l *LockHandle) Block(timeout, retryInterval time.Duration, fn func() error
 
 // block shares the retrying ownership and release sequence with callback adapters.
 func (l *LockHandle) block(ctx context.Context, retryInterval time.Duration, fn func(context.Context) error) (bool, error) {
-	locked, err := l.cache.lock(ctx, l.key, l.ttl, retryInterval)
+	l.operationMu.Lock()
+	if l.ownerErr != nil {
+		l.operationMu.Unlock()
+		return false, l.ownerErr
+	}
+	if l.held.Load() {
+		l.operationMu.Unlock()
+		return false, nil
+	}
+	locked, err := l.cache.lockOwned(ctx, l.key, l.owner, l.ttl, retryInterval)
 	if err != nil || !locked {
+		l.operationMu.Unlock()
 		return locked, err
 	}
 	l.held.Store(true)
+	l.operationMu.Unlock()
 	defer func() { _ = l.WithContext(ctx).Release() }()
 	if fn == nil {
 		return true, errors.New("cache lock handle requires a callback")

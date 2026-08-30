@@ -74,6 +74,41 @@ func TestNewShapingConfigFailureFailsClosed(t *testing.T) {
 	}
 }
 
+// TestLockReleaseRequiresCurrentOwner verifies Redis never deletes a successor's lock value.
+func TestLockReleaseRequiresCurrentOwner(t *testing.T) {
+	client := newStubClient()
+	store := New(Config{Client: client}).(*store)
+	ctx := context.Background()
+	owner := []byte("owner")
+	if acquired, err := store.LockAcquire(ctx, "lock:key", owner, time.Minute); err != nil || !acquired {
+		t.Fatalf("LockAcquire() = %v, %v", acquired, err)
+	}
+	if released, err := store.LockRelease(ctx, "lock:key", []byte("stale")); err != nil || released {
+		t.Fatalf("stale LockRelease() = %v, %v", released, err)
+	}
+	if released, err := store.LockRelease(ctx, "lock:key", owner); err != nil || !released {
+		t.Fatalf("owner LockRelease() = %v, %v", released, err)
+	}
+}
+
+type clientWithoutEval struct {
+	Client
+}
+
+// TestLockReleaseSupportsLegacyClientOverride verifies existing Client implementations retain lock release behavior.
+func TestLockReleaseSupportsLegacyClientOverride(t *testing.T) {
+	client := newStubClient()
+	store := New(Config{Client: clientWithoutEval{Client: client}}).(*store)
+	ctx := context.Background()
+	owner := []byte("owner")
+	if acquired, err := store.LockAcquire(ctx, "lock:key", owner, time.Minute); err != nil || !acquired {
+		t.Fatalf("LockAcquire() = %v, %v", acquired, err)
+	}
+	if released, err := store.LockRelease(ctx, "lock:key", owner); err != nil || !released {
+		t.Fatalf("LockRelease() = %v, %v", released, err)
+	}
+}
+
 // TestNewWithAddrCreatesClient verifies address-based construction owns a usable Redis client.
 func TestNewWithAddrCreatesClient(t *testing.T) {
 	s := New(Config{Addr: "127.0.0.1:6379"})

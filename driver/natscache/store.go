@@ -194,6 +194,49 @@ func (s *store) Add(ctx context.Context, key string, value []byte, ttl time.Dura
 	return false, err
 }
 
+// LockAcquire atomically records owner when key is absent.
+func (s *store) LockAcquire(ctx context.Context, key string, owner []byte, ttl time.Duration) (bool, error) {
+	return s.Add(ctx, key, owner, ttl)
+}
+
+// LockRelease deletes key only when its current revision still belongs to owner.
+func (s *store) LockRelease(_ context.Context, key string, owner []byte) (bool, error) {
+	if s.kv == nil {
+		return false, errors.New("nats cache key-value unavailable")
+	}
+	cacheKey := s.cacheKey(key)
+	entry, err := s.kv.Get(cacheKey)
+	if err != nil {
+		if isMiss(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	body := entry.Value()
+	if !s.bucketTTL {
+		envelope, wrapped, decodeErr := decodeEnvelope(body)
+		if decodeErr != nil {
+			return false, decodeErr
+		}
+		if wrapped {
+			if envelope.ExpiresAt > 0 && time.Now().UnixMilli() > envelope.ExpiresAt {
+				return false, nil
+			}
+			body = envelope.Value
+		}
+	}
+	if !bytes.Equal(body, owner) {
+		return false, nil
+	}
+	if err := s.kv.Delete(cacheKey, nats.LastRevision(entry.Revision())); err != nil {
+		if isMiss(err) || errors.Is(err, nats.ErrKeyExists) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
+}
+
 // Increment atomically adds delta while preserving the store's TTL contract.
 func (s *store) Increment(_ context.Context, key string, delta int64, ttl time.Duration) (int64, error) {
 	if s.kv == nil {

@@ -102,6 +102,47 @@ func TestObserverContextPropagation_AllDrivers(t *testing.T) {
 	}
 }
 
+// TestLockOwnerSafety_AllDrivers verifies expired owners cannot remove successor locks on every selected backend.
+func TestLockOwnerSafety_AllDrivers(t *testing.T) {
+	fixtures := integrationFixtures(t)
+	if len(fixtures) == 0 {
+		t.Skip("no integration drivers selected")
+	}
+	for _, fixture := range fixtures {
+		fixture := fixture
+		t.Run(fixture.name, func(t *testing.T) {
+			store, cleanup := fixture.new(t)
+			t.Cleanup(cleanup)
+			if store.Driver() == cachecore.DriverNull {
+				t.Skip("null store intentionally admits every lock")
+			}
+			ttl := 300 * time.Millisecond
+			wait := 400 * time.Millisecond
+			if store.Driver() == cachecore.DriverMemcached {
+				ttl = time.Second
+				wait = 1500 * time.Millisecond
+			}
+			key := "integration:lock:owner-safe"
+			first := cache.NewCache(store).NewLockHandle(key, ttl)
+			if locked, err := first.Acquire(); err != nil || !locked {
+				t.Fatalf("first owner acquire failed: locked=%v err=%v", locked, err)
+			}
+			time.Sleep(wait)
+			second := cache.NewCache(store).NewLockHandle(key, ttl)
+			if locked, err := second.Acquire(); err != nil || !locked {
+				t.Fatalf("second owner acquire failed: locked=%v err=%v", locked, err)
+			}
+			if err := first.Release(); err != nil {
+				t.Fatalf("stale owner release failed: %v", err)
+			}
+			contender := cache.NewCache(store).NewLockHandle(key, ttl)
+			if locked, err := contender.Acquire(); err != nil || locked {
+				t.Fatalf("stale owner removed successor lock: locked=%v err=%v", locked, err)
+			}
+		})
+	}
+}
+
 // integrationFixtures builds factories for every selected local or container-backed driver.
 func integrationFixtures(t *testing.T) []storeFactory {
 	t.Helper()

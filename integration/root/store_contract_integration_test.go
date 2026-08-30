@@ -521,6 +521,30 @@ func runLockHelperInvariantSuite(t *testing.T, cache *Cache, driver cachecore.Dr
 			t.Fatalf("expected try lock after ttl expiry, locked=%v err=%v", locked, err)
 		}
 	})
+
+	t.Run("expired_lock_owner_cannot_release_successor", func(t *testing.T) {
+		key := caseKey("lock:stale-owner")
+		ttl := lockTTLFor(driver)
+		first := NewCache(cache.Store()).NewLockHandle(key, ttl)
+		if locked, err := first.Acquire(); err != nil || !locked {
+			t.Fatalf("first owner acquire failed: locked=%v err=%v", locked, err)
+		}
+		time.Sleep(lockTTLWaitForExpiry(driver))
+		second := NewCache(cache.Store()).NewLockHandle(key, ttl)
+		if locked, err := second.Acquire(); err != nil || !locked {
+			t.Fatalf("second owner acquire failed: locked=%v err=%v", locked, err)
+		}
+		if err := first.Release(); err != nil {
+			t.Fatalf("stale owner release failed: %v", err)
+		}
+		contender := NewCache(cache.Store()).NewLockHandle(key, ttl)
+		if locked, err := contender.Acquire(); err != nil || locked {
+			t.Fatalf("stale owner removed successor lock: locked=%v err=%v", locked, err)
+		}
+		if err := second.Release(); err != nil {
+			t.Fatalf("second owner release failed: %v", err)
+		}
+	})
 }
 
 // runContextCancellationHelperInvariantSuite verifies helper callbacks and operations honor cancellation capabilities.

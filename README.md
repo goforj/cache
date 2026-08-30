@@ -837,7 +837,7 @@ fmt.Println(err == nil, locked) // true true
 
 ### <a id="cache-lock"></a>Lock
 
-Lock waits until the lock is acquired or timeout elapses.
+Lock waits until this Cache instance acquires the lock or timeout elapses.
 
 ```go
 ctx := context.Background()
@@ -878,7 +878,7 @@ if locked {
 
 ### <a id="lockhandle-release"></a>Release
 
-Release unlocks the key if this handle previously acquired it.
+Release unlocks the key if this handle previously acquired and still owns it.
 
 It is safe to call multiple times; repeated calls become no-ops after the first
 successful release.
@@ -895,7 +895,7 @@ if locked {
 
 ### <a id="cache-trylock"></a>TryLock
 
-TryLock acquires a short-lived lock key when not already held.
+TryLock acquires a short-lived lock key owned by this Cache instance when not already held.
 
 ```go
 ctx := context.Background()
@@ -906,7 +906,7 @@ fmt.Println(locked) // true
 
 ### <a id="cache-unlock"></a>Unlock
 
-Unlock releases a previously acquired lock key.
+Unlock releases a lock key only when it is still owned by this Cache instance on standard bundled backends.
 
 ```go
 ctx := context.Background()

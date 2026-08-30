@@ -203,6 +203,25 @@ func (s *sqlStore) Add(ctx context.Context, key string, value []byte, ttl time.D
 	return true, nil
 }
 
+// LockAcquire atomically records owner when key is absent or expired.
+func (s *sqlStore) LockAcquire(ctx context.Context, key string, owner []byte, ttl time.Duration) (bool, error) {
+	return s.Add(ctx, key, owner, ttl)
+}
+
+// LockRelease deletes key only while its persisted value still matches owner.
+func (s *sqlStore) LockRelease(ctx context.Context, key string, owner []byte) (bool, error) {
+	query := fmt.Sprintf("DELETE FROM %s WHERE k = %s AND v = %s", s.table, s.ph(1), s.ph(2))
+	result, err := s.db.ExecContext(ctx, query, s.cacheKey(key), owner)
+	if err != nil {
+		return false, err
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return rows > 0, nil
+}
+
 // Increment atomically adds delta while preserving the store's TTL contract.
 func (s *sqlStore) Increment(ctx context.Context, key string, delta int64, ttl time.Duration) (int64, error) {
 	if ttl <= 0 {

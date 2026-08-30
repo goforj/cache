@@ -1,6 +1,7 @@
 package rediscache
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"errors"
@@ -28,6 +29,18 @@ type Client interface {
 	Del(ctx context.Context, keys ...string) *redis.IntCmd
 	Scan(ctx context.Context, cursor uint64, match string, count int64) *redis.ScanCmd
 }
+
+// lockClient captures Redis scripting without widening the configurable Client contract.
+type lockClient interface {
+	Eval(ctx context.Context, script string, keys []string, args ...interface{}) *redis.Cmd
+}
+
+const releaseLockScript = `
+if redis.call("get", KEYS[1]) == ARGV[1] then
+  return redis.call("del", KEYS[1])
+end
+return 0
+`
 
 // Config configures a Redis-backed cache store.
 type Config struct {
@@ -145,6 +158,37 @@ func (s *store) Add(ctx context.Context, key string, value []byte, ttl time.Dura
 		return false, err
 	}
 	return created, nil
+}
+
+// LockAcquire atomically records owner when key is absent.
+func (s *store) LockAcquire(ctx context.Context, key string, owner []byte, ttl time.Duration) (bool, error) {
+	return s.Add(ctx, key, owner, ttl)
+}
+
+// LockRelease deletes key only when Redis still stores owner.
+func (s *store) LockRelease(ctx context.Context, key string, owner []byte) (bool, error) {
+	client, ok := s.client.(lockClient)
+	if !ok {
+		// Advanced client overrides predating script support retain compatible
+		// behavior while still avoiding an obvious different-owner deletion.
+		value, err := s.client.Get(ctx, s.cacheKey(key)).Bytes()
+		if errors.Is(err, redis.Nil) {
+			return false, nil
+		}
+		if err != nil {
+			return false, err
+		}
+		if !bytes.Equal(value, owner) {
+			return false, nil
+		}
+		removed, err := s.client.Del(ctx, s.cacheKey(key)).Result()
+		return removed == 1, err
+	}
+	released, err := client.Eval(ctx, releaseLockScript, []string{s.cacheKey(key)}, owner).Int64()
+	if err != nil {
+		return false, err
+	}
+	return released == 1, nil
 }
 
 // Increment atomically adds delta while preserving the store's TTL contract.
