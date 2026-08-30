@@ -22,6 +22,7 @@ import (
 var (
 	createTempFile = os.CreateTemp
 	renameFile     = os.Rename
+	removeFile     = os.Remove
 )
 
 var fileRecordMagic = []byte("CFR1")
@@ -262,7 +263,7 @@ func (s *fileStore) Delete(_ context.Context, key string) error {
 
 // delete treats a missing cache file as an idempotent success.
 func (s *fileStore) delete(key string) error {
-	if err := os.Remove(s.path(key)); err != nil && !errors.Is(err, os.ErrNotExist) {
+	if err := removeFile(s.path(key)); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
 	return nil

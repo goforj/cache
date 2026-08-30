@@ -241,6 +241,17 @@ func TestBundledLockStoreCapabilityBranches(t *testing.T) {
 	if released, err := file.LockRelease(ctx, "file", owner); err != nil || !released {
 		t.Fatalf("owner file LockRelease() = %v, %v", released, err)
 	}
+	if acquired, err := file.LockAcquire(ctx, "file-delete-error", owner, time.Minute); err != nil || !acquired {
+		t.Fatalf("file delete-error LockAcquire() = %v, %v", acquired, err)
+	}
+	expectedDeleteError := errors.New("remove failed")
+	originalRemoveFile := removeFile
+	removeFile = func(string) error { return expectedDeleteError }
+	released, releaseErr := file.LockRelease(ctx, "file-delete-error", owner)
+	removeFile = originalRemoveFile
+	if released || !errors.Is(releaseErr, expectedDeleteError) {
+		t.Fatalf("failed file LockRelease() = %v, %v", released, releaseErr)
+	}
 	if released, err := file.LockRelease(ctx, "file", owner); err != nil || released {
 		t.Fatalf("missing file LockRelease() = %v, %v", released, err)
 	}
@@ -263,6 +274,13 @@ func TestBundledLockStoreCapabilityBranches(t *testing.T) {
 	}
 	if released, err := fallback.LockRelease(ctx, "fallback", owner); err != nil || !released {
 		t.Fatalf("fallback LockRelease() = %v, %v", released, err)
+	}
+	fallbackErrorStore := struct{ cachecore.Store }{
+		Store: &errorStore{driver: cachecore.DriverMemory, err: expectedDeleteError},
+	}
+	fallbackError := NewMemoStore(fallbackErrorStore).(*memoStore)
+	if released, err := fallbackError.LockRelease(ctx, "fallback-error", owner); released || !errors.Is(err, expectedDeleteError) {
+		t.Fatalf("failed fallback LockRelease() = %v, %v", released, err)
 	}
 
 	null := newNullStore().(*nullStore)
