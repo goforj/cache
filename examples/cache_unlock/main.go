@@ -8,7 +8,7 @@ import (
 
 // main keeps this generated example executable so API drift fails during compilation.
 func main() {
-	// Unlock releases a previously acquired lock key.
+	// Unlock closes this Cache instance's lifecycle and releases the key only while it still owns the backend lock.
 
 	// Example: unlock key
 	ctx := context.Background()

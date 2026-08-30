@@ -17,8 +17,9 @@ import (
 )
 
 const (
-	defaultTTL    = 5 * time.Minute
-	defaultPrefix = "app"
+	defaultTTL                = 5 * time.Minute
+	defaultPrefix             = "app"
+	expiredMemcachedTimestamp = 30*24*60*60 + 1
 )
 
 var dialMemcached = func(ctx context.Context, network, addr string) (net.Conn, error) {
@@ -250,7 +251,7 @@ func (s *store) LockAcquire(ctx context.Context, key string, owner []byte, ttl t
 	return s.Add(ctx, key, owner, ttl)
 }
 
-// LockRelease uses Memcached CAS to replace only the current owner's value before deletion.
+// LockRelease uses one Memcached CAS to expire only the current owner's value.
 func (s *store) LockRelease(ctx context.Context, key string, owner []byte) (bool, error) {
 	mc, err := s.acquire(ctx)
 	if err != nil {
@@ -297,7 +298,7 @@ func (s *store) LockRelease(ctx context.Context, key string, owner []byte) (bool
 	if !bytes.Equal(value, owner) {
 		return false, nil
 	}
-	if _, err := fmt.Fprintf(mc.conn, "cas %s 0 1 0 %s\r\n\r\n", full, fields[4]); err != nil {
+	if _, err := fmt.Fprintf(mc.conn, "cas %s 0 %d 0 %s\r\n\r\n", full, expiredMemcachedTimestamp, fields[4]); err != nil {
 		bad = true
 		return false, err
 	}
@@ -312,19 +313,6 @@ func (s *store) LockRelease(ctx context.Context, key string, owner []byte) (bool
 	if !strings.HasPrefix(line, "STORED") {
 		bad = true
 		return false, fmt.Errorf("memcached lock release failed: %s", strings.TrimSpace(line))
-	}
-	if _, err := fmt.Fprintf(mc.conn, "delete %s\r\n", full); err != nil {
-		bad = true
-		return false, err
-	}
-	line, err = mc.reader.ReadString('\n')
-	if err != nil {
-		bad = true
-		return false, err
-	}
-	if !strings.HasPrefix(line, "DELETED") && !strings.HasPrefix(line, "NOT_FOUND") {
-		bad = true
-		return false, fmt.Errorf("memcached lock delete failed: %s", strings.TrimSpace(line))
 	}
 	return true, nil
 }

@@ -191,6 +191,24 @@ func TestObserverContract_HelperOpsEmitExpectedMetadata(t *testing.T) {
 		_ = c.WithContext(ctx).Unlock("lock:key2")
 	})
 
+	t.Run("stale_unlock_reports_miss", func(t *testing.T) {
+		store := NewMemoryStore(ctx)
+		first := NewCache(store).WithObserver(obs)
+		second := NewCache(store)
+		if locked, err := first.TryLock("lock:stale-observer", 20*time.Millisecond); err != nil || !locked {
+			t.Fatalf("first acquire failed: locked=%v err=%v", locked, err)
+		}
+		time.Sleep(30 * time.Millisecond)
+		if locked, err := second.TryLock("lock:stale-observer", time.Second); err != nil || !locked {
+			t.Fatalf("second acquire failed: locked=%v err=%v", locked, err)
+		}
+		before := obs.len()
+		if err := first.Unlock("lock:stale-observer"); err != nil {
+			t.Fatalf("stale unlock failed: %v", err)
+		}
+		assertLast(t, before, "unlock", "lock:stale-observer", false, nil)
+	})
+
 	t.Run("pull_delete_delete_many_flush", func(t *testing.T) {
 		if err := c.WithContext(ctx).SetBytes("pull:key", []byte("v"), time.Minute); err != nil {
 			t.Fatalf("seed pull failed: %v", err)

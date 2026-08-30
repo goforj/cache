@@ -13,32 +13,39 @@ import (
 
 // TestNewNilClientErrors verifies construction fails fast when no Redis client is supplied.
 func TestNewNilClientErrors(t *testing.T) {
-	store := New(Config{})
-	if err := store.Ready(context.Background()); err == nil {
+	cacheStore := New(Config{})
+	if err := cacheStore.Ready(context.Background()); err == nil {
 		t.Fatalf("expected ready error when redis client is nil")
 	}
-	if _, _, err := store.Get(context.Background(), "k"); err == nil {
+	if _, _, err := cacheStore.Get(context.Background(), "k"); err == nil {
 		t.Fatalf("expected get error when redis client is nil")
 	}
-	if err := store.Set(context.Background(), "k", []byte("v"), 0); err == nil {
+	if err := cacheStore.Set(context.Background(), "k", []byte("v"), 0); err == nil {
 		t.Fatalf("expected set error when redis client is nil")
 	}
-	if err := store.Delete(context.Background(), "k"); err == nil {
+	if err := cacheStore.Delete(context.Background(), "k"); err == nil {
 		t.Fatalf("expected delete error when redis client is nil")
 	}
-	if _, err := store.Add(context.Background(), "k", []byte("v"), 0); err == nil {
+	if _, err := cacheStore.Add(context.Background(), "k", []byte("v"), 0); err == nil {
 		t.Fatalf("expected add error when redis client is nil")
 	}
-	if _, err := store.Increment(context.Background(), "k", 1, 0); err == nil {
+	if _, err := cacheStore.Increment(context.Background(), "k", 1, 0); err == nil {
 		t.Fatalf("expected increment error when redis client is nil")
 	}
-	if _, err := store.Decrement(context.Background(), "k", 1, 0); err == nil {
+	if _, err := cacheStore.Decrement(context.Background(), "k", 1, 0); err == nil {
 		t.Fatalf("expected decrement error when redis client is nil")
 	}
-	if err := store.DeleteMany(context.Background(), "a", "b"); err == nil {
+	impl := cacheStore.(*store)
+	if acquired, err := impl.LockAcquire(context.Background(), "k", []byte("owner"), time.Minute); acquired || err == nil {
+		t.Fatalf("expected lock acquire error when redis client is nil")
+	}
+	if released, err := impl.LockRelease(context.Background(), "k", []byte("owner")); released || err == nil {
+		t.Fatalf("expected lock release error when redis client is nil")
+	}
+	if err := cacheStore.DeleteMany(context.Background(), "a", "b"); err == nil {
 		t.Fatalf("expected delete many error when redis client is nil")
 	}
-	if err := store.Flush(context.Background()); err == nil {
+	if err := cacheStore.Flush(context.Background()); err == nil {
 		t.Fatalf("expected flush error when redis client is nil")
 	}
 }
@@ -95,17 +102,17 @@ type clientWithoutEval struct {
 	Client
 }
 
-// TestLockReleaseSupportsLegacyClientOverride verifies existing Client implementations retain lock release behavior.
-func TestLockReleaseSupportsLegacyClientOverride(t *testing.T) {
+// TestLockingRejectsLegacyClientOverride verifies clients without scripts fail before acquiring an unsafe lock.
+func TestLockingRejectsLegacyClientOverride(t *testing.T) {
 	client := newStubClient()
 	store := New(Config{Client: clientWithoutEval{Client: client}}).(*store)
 	ctx := context.Background()
 	owner := []byte("owner")
-	if acquired, err := store.LockAcquire(ctx, "lock:key", owner, time.Minute); err != nil || !acquired {
-		t.Fatalf("LockAcquire() = %v, %v", acquired, err)
+	if acquired, err := store.LockAcquire(ctx, "lock:key", owner, time.Minute); acquired || !errors.Is(err, errLockScriptsRequired) {
+		t.Fatalf("LockAcquire() = %v, %v, want script error", acquired, err)
 	}
-	if released, err := store.LockRelease(ctx, "lock:key", owner); err != nil || !released {
-		t.Fatalf("LockRelease() = %v, %v", released, err)
+	if released, err := store.LockRelease(ctx, "lock:key", owner); released || !errors.Is(err, errLockScriptsRequired) {
+		t.Fatalf("LockRelease() = %v, %v, want script error", released, err)
 	}
 }
 

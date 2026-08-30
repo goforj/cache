@@ -314,6 +314,10 @@ func TestLockOwnershipFailureAndReuseBranches(t *testing.T) {
 	if locked, err := c.Lock("lock", time.Minute, time.Millisecond); locked || !errors.Is(err, expected) {
 		t.Fatalf("Lock() = %v, %v", locked, err)
 	}
+	if !c.directLocks.beginAcquire("unlock") {
+		t.Fatal("failed to reserve direct unlock test lifecycle")
+	}
+	c.directLocks.finishAcquire("unlock", true)
 	if err := c.Unlock("unlock"); !errors.Is(err, expected) {
 		t.Fatalf("Unlock() error = %v, want %v", err, expected)
 	}
@@ -321,6 +325,20 @@ func TestLockOwnershipFailureAndReuseBranches(t *testing.T) {
 	c.lockOwner = nil
 	if locked, err := c.TryLock("nil-owner", time.Minute); err != nil || !locked {
 		t.Fatalf("TryLock() with nil owner state = %v, %v", locked, err)
+	}
+	if err := c.Unlock("nil-owner"); err != nil {
+		t.Fatalf("Unlock() with regenerated owner = %v", err)
+	}
+	if locked, err := c.lock(context.Background(), "default-retry", time.Minute, 0); err != nil || !locked {
+		t.Fatalf("lock() with default retry = %v, %v", locked, err)
+	}
+	nullCache := NewCache(newNullStore())
+	if locked, err := nullCache.lock(context.Background(), "null-lock", time.Minute, 0); err != nil || !locked {
+		t.Fatalf("null lock() = %v, %v", locked, err)
+	}
+	nullCache.lockOwner = owner
+	if err := nullCache.unlock(context.Background(), "null-unlock"); !errors.Is(err, expected) {
+		t.Fatalf("null unlock() owner error = %v, want %v", err, expected)
 	}
 
 	handle := c.NewLockHandle("handle", time.Minute)

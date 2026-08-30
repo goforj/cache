@@ -112,13 +112,17 @@ Refresh-ahead caveats:
   - mutual exclusion during the TTL window based on backend atomic Add
   - lock expires by TTL
   - standard bundled backends compare the owner atomically before release, so an expired owner cannot delete a successor's lock
-  - direct Cache helpers scope ownership to the Cache instance; LockHandle scopes ownership to the handle
+  - direct Cache helpers scope ownership to the Cache instance and allow only one active local lifecycle per key
+  - `TryLock` returns false and `Lock` waits while the same Cache instance still has an active lifecycle for that key, even if its backend TTL has expired
+  - `Unlock` closes the local lifecycle; use a separate `LockHandle` for each independently owned or potentially overlapping operation
+  - `LockHandle` scopes ownership to the handle
 - Important caveats:
   - expiration still allows another owner to begin while the original work is running
   - locks do not renew automatically and do not provide fencing tokens
   - custom Store implementations that provide only the base Store contract retain legacy unconditional release behavior
-  - custom Redis Client overrides need script support for atomic comparison; older overrides use a compatible best-effort compare/delete fallback
+  - custom Redis Client overrides must implement the go-redis `Eval` method; lock acquisition fails before writing when atomic script support is unavailable
   - the file backend coordinates lock mutation only within one process
+  - mixed-version deployments remain vulnerable until binaries with legacy unconditional unlock behavior have been drained
   - use short TTLs, keep critical sections bounded, and keep protected work idempotent
 
 ## Rate limiting (RateLimit, WithContext(...).RateLimit)

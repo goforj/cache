@@ -94,6 +94,9 @@ func serveLockRelease(conn net.Conn, stored []byte) error {
 				return err
 			}
 		case "cas":
+			if len(fields) != 6 || fields[3] != strconv.Itoa(expiredMemcachedTimestamp) {
+				return fmt.Errorf("unexpected ownership CAS: %q", strings.TrimSpace(line))
+			}
 			length, err := strconv.Atoi(fields[4])
 			if err != nil {
 				return err
@@ -106,11 +109,7 @@ func serveLockRelease(conn net.Conn, stored []byte) error {
 			if _, err := io.WriteString(conn, "STORED\r\n"); err != nil {
 				return err
 			}
-		case "delete":
-			stored = nil
-			if _, err := io.WriteString(conn, "DELETED\r\n"); err != nil {
-				return err
-			}
+			return nil
 		default:
 			return fmt.Errorf("unexpected command %q", fields[0])
 		}

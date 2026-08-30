@@ -16,11 +16,12 @@ import (
 
 // Cache provides an ergonomic cache API on top of Store.
 type Cache struct {
-	store      cachecore.Store
-	defaultTTL time.Duration
-	observer   Observer
-	ctx        context.Context
-	lockOwner  *cacheLockOwner
+	store       cachecore.Store
+	defaultTTL  time.Duration
+	observer    Observer
+	ctx         context.Context
+	lockOwner   *cacheLockOwner
+	directLocks *cacheDirectLocks
 }
 
 // cacheLockOwner lazily assigns one ownership token shared by contextual Cache clones.
@@ -28,6 +29,65 @@ type cacheLockOwner struct {
 	once  sync.Once
 	token []byte
 	err   error
+}
+
+// cacheDirectLockStatus distinguishes acquisition from held and releasing lifecycles.
+type cacheDirectLockStatus uint8
+
+const (
+	cacheDirectLockAcquiring cacheDirectLockStatus = iota + 1
+	cacheDirectLockHeld
+	cacheDirectLockReleasing
+)
+
+// cacheDirectLocks prevents one Cache instance from overlapping ownership lifecycles for a key.
+type cacheDirectLocks struct {
+	mu    sync.Mutex
+	locks map[string]cacheDirectLockStatus
+}
+
+// beginAcquire reserves key for one direct Cache acquisition lifecycle.
+func (l *cacheDirectLocks) beginAcquire(key string) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if _, exists := l.locks[key]; exists {
+		return false
+	}
+	l.locks[key] = cacheDirectLockAcquiring
+	return true
+}
+
+// finishAcquire retains successful ownership and removes failed local reservations.
+func (l *cacheDirectLocks) finishAcquire(key string, acquired bool) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if acquired {
+		l.locks[key] = cacheDirectLockHeld
+		return
+	}
+	delete(l.locks, key)
+}
+
+// beginRelease serializes release against acquisition and duplicate release calls.
+func (l *cacheDirectLocks) beginRelease(key string) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.locks[key] != cacheDirectLockHeld {
+		return false
+	}
+	l.locks[key] = cacheDirectLockReleasing
+	return true
+}
+
+// finishRelease forgets completed lifecycles and restores ownership after backend errors.
+func (l *cacheDirectLocks) finishRelease(key string, succeeded bool) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if succeeded {
+		delete(l.locks, key)
+		return
+	}
+	l.locks[key] = cacheDirectLockHeld
 }
 
 // lockStore is an internal capability implemented by bundled stores for ownership-safe locks.
@@ -81,9 +141,10 @@ func NewCacheWithTTL(store cachecore.Store, defaultTTL time.Duration) *Cache {
 		defaultTTL = defaultCacheTTL
 	}
 	return &Cache{
-		store:      store,
-		defaultTTL: defaultTTL,
-		lockOwner:  &cacheLockOwner{},
+		store:       store,
+		defaultTTL:  defaultTTL,
+		lockOwner:   &cacheLockOwner{},
+		directLocks: &cacheDirectLocks{locks: make(map[string]cacheDirectLockStatus)},
 	}
 }
 
@@ -754,7 +815,7 @@ func (c *Cache) rateLimit(ctx context.Context, key string, limit int64, window t
 	}, nil
 }
 
-// TryLock acquires a short-lived lock key owned by this Cache instance when not already held.
+// TryLock acquires a short-lived lock key when this Cache instance has no active lifecycle for it.
 // @group Locking
 //
 // Example: try lock
@@ -763,6 +824,9 @@ func (c *Cache) rateLimit(ctx context.Context, key string, limit int64, window t
 //	c := cache.NewCache(cache.NewMemoryStore(ctx))
 //	locked, _ := c.TryLock("job:sync", 10*time.Second)
 //	fmt.Println(locked) // true
+//	if locked {
+//		_ = c.Unlock("job:sync")
+//	}
 func (c *Cache) TryLock(key string, ttl time.Duration) (bool, error) {
 	return c.tryLock(c.context(), key, ttl)
 }
@@ -773,7 +837,16 @@ func (c *Cache) tryLock(ctx context.Context, key string, ttl time.Duration) (boo
 	if err != nil {
 		return false, err
 	}
-	return c.tryLockOwned(ctx, key, owner, ttl)
+	if !c.usesDirectLockLifecycle() {
+		return c.tryLockOwned(ctx, key, owner, ttl)
+	}
+	if !c.directLocks.beginAcquire(key) {
+		c.observe(ctx, "try_lock", key, false, nil, time.Now())
+		return false, nil
+	}
+	locked, err := c.tryLockOwned(ctx, key, owner, ttl)
+	c.directLocks.finishAcquire(key, err == nil && locked)
+	return locked, err
 }
 
 // tryLockOwned acquires a lock using owner as the release identity.
@@ -793,7 +866,7 @@ func (c *Cache) tryLockOwned(ctx context.Context, key string, owner []byte, ttl 
 	return created, err
 }
 
-// Lock waits until this Cache instance acquires the lock or timeout elapses.
+// Lock waits until this Cache instance and the backend can begin a lock lifecycle or timeout elapses.
 // @group Locking
 //
 // Example: lock with timeout
@@ -802,6 +875,9 @@ func (c *Cache) tryLockOwned(ctx context.Context, key string, owner []byte, ttl 
 //	c := cache.NewCache(cache.NewMemoryStore(ctx))
 //	locked, err := c.Lock("job:sync", 10*time.Second, time.Second)
 //	fmt.Println(err == nil, locked) // true true
+//	if locked {
+//		_ = c.Unlock("job:sync")
+//	}
 func (c *Cache) Lock(key string, ttl, timeout time.Duration) (bool, error) {
 	ctx := c.context()
 	if timeout > 0 {
@@ -814,19 +890,41 @@ func (c *Cache) Lock(key string, ttl, timeout time.Duration) (bool, error) {
 
 // lock retries conditional acquisition until success or context cancellation.
 func (c *Cache) lock(ctx context.Context, key string, ttl, retryInterval time.Duration) (bool, error) {
+	start := time.Now()
 	owner, err := c.lockOwnerToken()
 	if err != nil {
 		return false, err
 	}
-	return c.lockOwned(ctx, key, owner, ttl, retryInterval)
+	if !c.usesDirectLockLifecycle() {
+		return c.lockOwned(ctx, key, owner, ttl, retryInterval)
+	}
+	if retryInterval <= 0 {
+		retryInterval = defaultLockRetryInterval
+	}
+	for !c.directLocks.beginAcquire(key) {
+		select {
+		case <-ctx.Done():
+			err := ctx.Err()
+			c.observe(ctx, "lock", key, false, err, start)
+			return false, err
+		case <-time.After(retryInterval):
+		}
+	}
+	locked, err := c.lockOwnedSince(ctx, key, owner, ttl, retryInterval, start)
+	c.directLocks.finishAcquire(key, err == nil && locked)
+	return locked, err
 }
 
 // lockOwned retries acquisition while preserving one owner identity across attempts.
 func (c *Cache) lockOwned(ctx context.Context, key string, owner []byte, ttl, retryInterval time.Duration) (bool, error) {
+	return c.lockOwnedSince(ctx, key, owner, ttl, retryInterval, time.Now())
+}
+
+// lockOwnedSince includes any local lifecycle wait in the final lock observation duration.
+func (c *Cache) lockOwnedSince(ctx context.Context, key string, owner []byte, ttl, retryInterval time.Duration, start time.Time) (bool, error) {
 	if retryInterval <= 0 {
 		retryInterval = defaultLockRetryInterval
 	}
-	start := time.Now()
 	for {
 		locked, err := c.tryLockOwned(ctx, key, owner, ttl)
 		if err != nil {
@@ -847,7 +945,7 @@ func (c *Cache) lockOwned(ctx context.Context, key string, owner []byte, ttl, re
 	}
 }
 
-// Unlock releases a lock key only when it is still owned by this Cache instance on standard bundled backends.
+// Unlock closes this Cache instance's lifecycle and releases the key only while it still owns the backend lock.
 // @group Locking
 //
 // Example: unlock key
@@ -864,23 +962,44 @@ func (c *Cache) Unlock(key string) error {
 
 // unlock derives the same namespaced key as acquisition so release cannot target a different lock.
 func (c *Cache) unlock(ctx context.Context, key string) error {
+	if !c.usesDirectLockLifecycle() {
+		owner, err := c.lockOwnerToken()
+		if err != nil {
+			return err
+		}
+		return c.unlockOwned(ctx, key, owner)
+	}
+	if !c.directLocks.beginRelease(key) {
+		c.observe(ctx, "unlock", key, false, nil, time.Now())
+		return nil
+	}
 	owner, err := c.lockOwnerToken()
 	if err != nil {
+		c.directLocks.finishRelease(key, false)
 		return err
 	}
-	return c.unlockOwned(ctx, key, owner)
+	err = c.unlockOwned(ctx, key, owner)
+	c.directLocks.finishRelease(key, err == nil)
+	return err
+}
+
+// usesDirectLockLifecycle preserves the null store's intentional admit-every-call behavior.
+func (c *Cache) usesDirectLockLifecycle() bool {
+	return c.store.Driver() != cachecore.DriverNull
 }
 
 // unlockOwned releases only the lock that still contains owner on capable stores.
 func (c *Cache) unlockOwned(ctx context.Context, key string, owner []byte) error {
 	start := time.Now()
+	released := false
 	var err error
 	if store, ok := c.store.(lockStore); ok {
-		_, err = store.LockRelease(ctx, lockPrefix+key, owner)
+		released, err = store.LockRelease(ctx, lockPrefix+key, owner)
 	} else {
 		err = c.store.Delete(ctx, lockPrefix+key)
+		released = err == nil
 	}
-	c.observe(ctx, "unlock", key, err == nil, err, start)
+	c.observe(ctx, "unlock", key, released && err == nil, err, start)
 	return err
 }
 

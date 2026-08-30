@@ -147,19 +147,13 @@ func (s *store) Set(_ context.Context, key string, value []byte, ttl time.Durati
 	if s.kv == nil {
 		return errors.New("nats cache key-value unavailable")
 	}
-	var (
-		body []byte
-		err  error
-	)
+	var body []byte
 	if s.bucketTTL {
 		body = cloneBytes(value)
 	} else {
-		body, err = s.encodeEnvelope(value, ttl)
-		if err != nil {
-			return err
-		}
+		body = s.encodeEnvelope(value, ttl)
 	}
-	_, err = s.kv.Put(s.cacheKey(key), body)
+	_, err := s.kv.Put(s.cacheKey(key), body)
 	return err
 }
 
@@ -179,10 +173,7 @@ func (s *store) Add(ctx context.Context, key string, value []byte, ttl time.Dura
 	if s.bucketTTL {
 		body = cloneBytes(value)
 	} else {
-		body, err = s.encodeEnvelope(value, ttl)
-		if err != nil {
-			return false, err
-		}
+		body = s.encodeEnvelope(value, ttl)
 	}
 	_, err = s.kv.Create(s.cacheKey(key), body)
 	if err == nil {
@@ -194,9 +185,53 @@ func (s *store) Add(ctx context.Context, key string, value []byte, ttl time.Dura
 	return false, err
 }
 
-// LockAcquire atomically records owner when key is absent.
-func (s *store) LockAcquire(ctx context.Context, key string, owner []byte, ttl time.Duration) (bool, error) {
-	return s.Add(ctx, key, owner, ttl)
+// LockAcquire atomically records owner when key is absent or its envelope revision is expired.
+func (s *store) LockAcquire(_ context.Context, key string, owner []byte, ttl time.Duration) (bool, error) {
+	if s.kv == nil {
+		return false, errors.New("nats cache key-value unavailable")
+	}
+	if s.bucketTTL {
+		return s.addBucketLock(key, owner)
+	}
+	body := s.encodeEnvelope(owner, ttl)
+	cacheKey := s.cacheKey(key)
+	entry, err := s.kv.Get(cacheKey)
+	if isMiss(err) {
+		return s.createLock(cacheKey, body)
+	}
+	if err != nil {
+		return false, err
+	}
+	envelope, wrapped, err := decodeEnvelope(entry.Value())
+	if err != nil {
+		return false, err
+	}
+	if !wrapped || envelope.ExpiresAt <= 0 || time.Now().UnixMilli() <= envelope.ExpiresAt {
+		return false, nil
+	}
+	if _, err := s.kv.Update(cacheKey, body, entry.Revision()); err != nil {
+		if errors.Is(err, nats.ErrKeyExists) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
+}
+
+// addBucketLock creates a lock in buckets whose server-side TTL removes expired entries.
+func (s *store) addBucketLock(key string, owner []byte) (bool, error) {
+	return s.createLock(s.cacheKey(key), cloneBytes(owner))
+}
+
+// createLock normalizes JetStream's conditional-create conflict into lock contention.
+func (s *store) createLock(cacheKey string, body []byte) (bool, error) {
+	if _, err := s.kv.Create(cacheKey, body); err != nil {
+		if errors.Is(err, nats.ErrKeyExists) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
 }
 
 // LockRelease deletes key only when its current revision still belongs to owner.
@@ -290,10 +325,7 @@ func (s *store) Increment(_ context.Context, key string, delta int64, ttl time.D
 		next := current + delta
 		body := []byte(strconv.FormatInt(next, 10))
 		if !s.bucketTTL {
-			body, err = s.encodeEnvelope(body, ttl)
-			if err != nil {
-				return 0, err
-			}
+			body = s.encodeEnvelope(body, ttl)
 		}
 		if revision == 0 {
 			_, err = s.kv.Create(cacheKey, body)
@@ -449,7 +481,7 @@ func (s *store) ListPage(_ context.Context, opts cachecore.ListPageOptions) (cac
 }
 
 // encodeEnvelope stores expiration metadata beside NATS payload bytes in a versioned representation.
-func (s *store) encodeEnvelope(value []byte, ttl time.Duration) ([]byte, error) {
+func (s *store) encodeEnvelope(value []byte, ttl time.Duration) []byte {
 	if ttl <= 0 {
 		ttl = s.defaultTTL
 	}
@@ -458,7 +490,7 @@ func (s *store) encodeEnvelope(value []byte, ttl time.Duration) ([]byte, error) 
 	copy(body[:4], natsEnvelopeMagic)
 	binary.BigEndian.PutUint64(body[4:12], uint64(expiresAt))
 	copy(body[12:], value)
-	return body, nil
+	return body
 }
 
 // decodeEnvelope validates and decodes the stored NATS value and expiration metadata.

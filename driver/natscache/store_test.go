@@ -3,6 +3,8 @@ package natscache
 import (
 	"context"
 	"errors"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -11,8 +13,12 @@ import (
 )
 
 type lockKeyValue struct {
-	value    []byte
-	revision uint64
+	mu        sync.Mutex
+	value     []byte
+	revision  uint64
+	getErr    error
+	createErr error
+	updateErr error
 }
 
 // Status reports a healthy test bucket.
@@ -20,6 +26,11 @@ func (k *lockKeyValue) Status() (nats.KeyValueStatus, error) { return nil, nil }
 
 // Get returns the current test entry.
 func (k *lockKeyValue) Get(key string) (nats.KeyValueEntry, error) {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	if k.getErr != nil {
+		return nil, k.getErr
+	}
 	if k.value == nil {
 		return nil, nats.ErrKeyNotFound
 	}
@@ -28,6 +39,13 @@ func (k *lockKeyValue) Get(key string) (nats.KeyValueEntry, error) {
 
 // Put replaces the current test value.
 func (k *lockKeyValue) Put(_ string, value []byte) (uint64, error) {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	return k.put(value)
+}
+
+// put replaces the value while the caller holds the test store mutex.
+func (k *lockKeyValue) put(value []byte) (uint64, error) {
 	k.revision++
 	k.value = append([]byte(nil), value...)
 	return k.revision, nil
@@ -35,22 +53,34 @@ func (k *lockKeyValue) Put(_ string, value []byte) (uint64, error) {
 
 // Create records the value only when the test key is absent.
 func (k *lockKeyValue) Create(_ string, value []byte) (uint64, error) {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	if k.createErr != nil {
+		return 0, k.createErr
+	}
 	if k.value != nil {
 		return 0, nats.ErrKeyExists
 	}
-	return k.Put("", value)
+	return k.put(value)
 }
 
 // Update replaces the value only at the expected revision.
 func (k *lockKeyValue) Update(_ string, value []byte, revision uint64) (uint64, error) {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	if k.updateErr != nil {
+		return 0, k.updateErr
+	}
 	if revision != k.revision {
 		return 0, nats.ErrKeyExists
 	}
-	return k.Put("", value)
+	return k.put(value)
 }
 
 // Delete removes the current test value.
 func (k *lockKeyValue) Delete(_ string, _ ...nats.DeleteOpt) error {
+	k.mu.Lock()
+	defer k.mu.Unlock()
 	if k.value == nil {
 		return nats.ErrKeyNotFound
 	}
@@ -94,15 +124,39 @@ func (e lockKeyValueEntry) Delta() uint64 { return 0 }
 // Operation reports a normal value write.
 func (e lockKeyValueEntry) Operation() nats.KeyValueOp { return nats.KeyValuePut }
 
+// racingLockKeyValue holds two reads at one revision so concurrent replacement is deterministic.
+type racingLockKeyValue struct {
+	*lockKeyValue
+	reads atomic.Int32
+	both  chan struct{}
+}
+
+// Get waits until both contenders have observed the same expired revision.
+func (k *racingLockKeyValue) Get(key string) (nats.KeyValueEntry, error) {
+	entry, err := k.lockKeyValue.Get(key)
+	if k.reads.Add(1) == 2 {
+		close(k.both)
+	}
+	<-k.both
+	return entry, err
+}
+
 // TestNewNilKeyValueErrors verifies NATS construction rejects a nil key-value bucket.
 func TestNewNilKeyValueErrors(t *testing.T) {
-	store := New(Config{})
+	cacheStore := New(Config{})
 	ctx := context.Background()
-	if err := store.Ready(ctx); err == nil {
+	if err := cacheStore.Ready(ctx); err == nil {
 		t.Fatalf("expected ready error when key-value is nil")
 	}
-	if _, _, err := store.Get(ctx, "k"); err == nil {
+	if _, _, err := cacheStore.Get(ctx, "k"); err == nil {
 		t.Fatalf("expected get error when key-value is nil")
+	}
+	impl := cacheStore.(*store)
+	if acquired, err := impl.LockAcquire(ctx, "k", []byte("owner"), time.Minute); acquired || err == nil {
+		t.Fatalf("expected lock acquire error when key-value is nil")
+	}
+	if released, err := impl.LockRelease(ctx, "k", []byte("owner")); released || err == nil {
+		t.Fatalf("expected lock release error when key-value is nil")
 	}
 }
 
@@ -123,10 +177,107 @@ func TestLockReleaseRequiresCurrentOwner(t *testing.T) {
 	if acquired, err := store.LockAcquire(ctx, "lock:key", owner, time.Minute); err != nil || !acquired {
 		t.Fatalf("LockAcquire() = %v, %v", acquired, err)
 	}
+	if acquired, err := store.LockAcquire(ctx, "lock:key", owner, time.Minute); err != nil || acquired {
+		t.Fatalf("contended LockAcquire() = %v, %v", acquired, err)
+	}
 	if released, err := store.LockRelease(ctx, "lock:key", []byte("stale")); err != nil || released {
 		t.Fatalf("stale LockRelease() = %v, %v", released, err)
 	}
 	if released, err := store.LockRelease(ctx, "lock:key", owner); err != nil || !released {
 		t.Fatalf("owner LockRelease() = %v, %v", released, err)
+	}
+}
+
+// TestLockAcquireEnvelopeBranches verifies creation, live contention, decoding, and backend failures.
+func TestLockAcquireEnvelopeBranches(t *testing.T) {
+	t.Run("create and live contention", func(t *testing.T) {
+		kv := &lockKeyValue{}
+		store := &store{kv: kv, prefix: "p", defaultTTL: time.Minute}
+		if acquired, err := store.LockAcquire(context.Background(), "lock:key", []byte("owner"), time.Minute); err != nil || !acquired {
+			t.Fatalf("LockAcquire() = %v, %v", acquired, err)
+		}
+		if acquired, err := store.LockAcquire(context.Background(), "lock:key", []byte("other"), time.Minute); err != nil || acquired {
+			t.Fatalf("live LockAcquire() = %v, %v", acquired, err)
+		}
+	})
+
+	t.Run("get failure", func(t *testing.T) {
+		expected := errors.New("get failed")
+		store := &store{kv: &lockKeyValue{getErr: expected}, prefix: "p", defaultTTL: time.Minute}
+		if acquired, err := store.LockAcquire(context.Background(), "lock:key", []byte("owner"), time.Minute); acquired || !errors.Is(err, expected) {
+			t.Fatalf("LockAcquire() = %v, %v, want get failure", acquired, err)
+		}
+	})
+
+	t.Run("create failure", func(t *testing.T) {
+		expected := errors.New("create failed")
+		store := &store{kv: &lockKeyValue{createErr: expected}, prefix: "p", defaultTTL: time.Minute}
+		if acquired, err := store.LockAcquire(context.Background(), "lock:key", []byte("owner"), time.Minute); acquired || !errors.Is(err, expected) {
+			t.Fatalf("LockAcquire() = %v, %v, want create failure", acquired, err)
+		}
+	})
+
+	t.Run("corrupt envelope", func(t *testing.T) {
+		kv := &lockKeyValue{value: []byte("{"), revision: 1}
+		store := &store{kv: kv, prefix: "p", defaultTTL: time.Minute}
+		if acquired, err := store.LockAcquire(context.Background(), "lock:key", []byte("owner"), time.Minute); acquired || err == nil {
+			t.Fatalf("LockAcquire() = %v, %v, want decode failure", acquired, err)
+		}
+	})
+
+	t.Run("expired update failure", func(t *testing.T) {
+		expected := errors.New("update failed")
+		kv := &lockKeyValue{}
+		store := &store{kv: kv, prefix: "p", defaultTTL: time.Minute}
+		expired := store.encodeEnvelope([]byte("expired"), time.Millisecond)
+		if _, err := kv.Put(store.cacheKey("lock:key"), expired); err != nil {
+			t.Fatalf("seed expired lock: %v", err)
+		}
+		time.Sleep(5 * time.Millisecond)
+		kv.mu.Lock()
+		kv.updateErr = expected
+		kv.mu.Unlock()
+		if acquired, err := store.LockAcquire(context.Background(), "lock:key", []byte("owner"), time.Minute); acquired || !errors.Is(err, expected) {
+			t.Fatalf("LockAcquire() = %v, %v, want update failure", acquired, err)
+		}
+	})
+}
+
+// TestLockAcquireReplacesExpiredEnvelopeByRevision verifies only one contender can claim an expired lock.
+func TestLockAcquireReplacesExpiredEnvelopeByRevision(t *testing.T) {
+	base := &lockKeyValue{}
+	kv := &racingLockKeyValue{lockKeyValue: base, both: make(chan struct{})}
+	store := &store{kv: kv, prefix: "p", defaultTTL: time.Minute}
+	expired := store.encodeEnvelope([]byte("expired"), time.Millisecond)
+	if _, err := base.Put(store.cacheKey("lock:key"), expired); err != nil {
+		t.Fatalf("seed expired lock: %v", err)
+	}
+	time.Sleep(5 * time.Millisecond)
+
+	type result struct {
+		owner    string
+		acquired bool
+		err      error
+	}
+	results := make(chan result, 2)
+	for _, owner := range []string{"first", "second"} {
+		owner := owner
+		go func() {
+			acquired, err := store.LockAcquire(context.Background(), "lock:key", []byte(owner), time.Minute)
+			results <- result{owner: owner, acquired: acquired, err: err}
+		}()
+	}
+	winners := 0
+	for range 2 {
+		result := <-results
+		if result.err != nil {
+			t.Fatalf("LockAcquire(%s) error = %v", result.owner, result.err)
+		}
+		if result.acquired {
+			winners++
+		}
+	}
+	if winners != 1 {
+		t.Fatalf("successful expired-lock contenders = %d, want 1", winners)
 	}
 }
