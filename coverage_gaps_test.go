@@ -231,6 +231,11 @@ func TestBundledLockStoreCapabilityBranches(t *testing.T) {
 	ctx := context.Background()
 	owner := []byte("owner")
 
+	memory := newMemoryStore(time.Minute, time.Minute).(*memoryStore)
+	if released, err := memory.LockRelease(ctx, "memory", owner); err != nil || released {
+		t.Fatalf("missing memory LockRelease() = %v, %v", released, err)
+	}
+
 	file := newFileStore(t.TempDir(), time.Minute).(*fileStore)
 	if acquired, err := file.LockAcquire(ctx, "file", owner, time.Minute); err != nil || !acquired {
 		t.Fatalf("file LockAcquire() = %v, %v", acquired, err)
