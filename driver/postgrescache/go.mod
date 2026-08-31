@@ -3,8 +3,8 @@ module github.com/goforj/cache/driver/postgrescache
 go 1.24.4
 
 require (
-	github.com/goforj/cache/cachecore v0.4.0
-	github.com/goforj/cache/driver/sqlcore v0.4.0
+	github.com/goforj/cache/cachecore v0.4.1
+	github.com/goforj/cache/driver/sqlcore v0.4.1
 	github.com/jackc/pgx/v5 v5.5.4
 )
 

@@ -7,7 +7,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/config v1.27.1
 	github.com/aws/aws-sdk-go-v2/credentials v1.17.10
 	github.com/aws/aws-sdk-go-v2/service/dynamodb v1.27.1
-	github.com/goforj/cache/cachecore v0.4.0
+	github.com/goforj/cache/cachecore v0.4.1
 )
 
 require (

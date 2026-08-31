@@ -3,7 +3,7 @@ module github.com/goforj/cache/driver/natscache
 go 1.24.4
 
 require (
-	github.com/goforj/cache/cachecore v0.4.0
+	github.com/goforj/cache/cachecore v0.4.1
 	github.com/nats-io/nats.go v1.48.0
 )
 
