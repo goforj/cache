@@ -1,0 +1,62 @@
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+  - package-ecosystem: gomod
+    directory: /cachecore
+    schedule:
+      interval: weekly
+  - package-ecosystem: gomod
+    directory: /cachetest
+    schedule:
+      interval: weekly
+  - package-ecosystem: gomod
+    directory: /docs
+    schedule:
+      interval: weekly
+  - package-ecosystem: gomod
+    directory: /driver/dynamocache
+    schedule:
+      interval: weekly
+  - package-ecosystem: gomod
+    directory: /driver/memcachedcache
+    schedule:
+      interval: weekly
+  - package-ecosystem: gomod
+    directory: /driver/mysqlcache
+    schedule:
+      interval: weekly
+  - package-ecosystem: gomod
+    directory: /driver/natscache
+    schedule:
+      interval: weekly
+  - package-ecosystem: gomod
+    directory: /driver/postgrescache
+    schedule:
+      interval: weekly
+  - package-ecosystem: gomod
+    directory: /driver/rediscache
+    schedule:
+      interval: weekly
+  - package-ecosystem: gomod
+    directory: /driver/sqlcore
+    schedule:
+      interval: weekly
+  - package-ecosystem: gomod
+    directory: /driver/sqlitecache
+    schedule:
+      interval: weekly
+  - package-ecosystem: gomod
+    directory: /examples
+    schedule:
+      interval: weekly
+  - package-ecosystem: gomod
+    directory: /integration
+    schedule:
+      interval: weekly
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
