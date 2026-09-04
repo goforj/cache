@@ -103,7 +103,7 @@ jobs:
         run: scripts/coverage-codecov.sh
 
       - name: Upload results to Codecov
-        uses: codecov/codecov-action@fb8b3582d5d662f22153c6f4f4cb48f05f0c4b65 # v7.0.0
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
         with:
           files: coverage.txt
         env:
