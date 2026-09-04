@@ -41,6 +41,8 @@ go get github.com/goforj/cache/driver/sqlitecache
 go get github.com/goforj/cache/driver/postgrescache
 go get github.com/goforj/cache/driver/mysqlcache
 ```
+
+`driver/postgrescache` requires Go 1.25 or newer because its pgx v5.9.2 security update requires that toolchain. The pgx update also discards pooled connections left in transactions during reset and uses the operating-system user when a PostgreSQL DSN omits a database user. Use an explicit DSN user when that default is not intended.
  
 ## Drivers
 

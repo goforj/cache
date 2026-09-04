@@ -43,6 +43,25 @@ jobs:
           CACHE_GO_VERSION_FILTER: "1.24.4"
         run: scripts/check-quality.sh
 
+  postgrescache-go125:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.0"
+
+      - name: Test the PostgreSQL cache driver at its minimum Go version
+        working-directory: driver/postgrescache
+        env:
+          GOWORK: "off"
+        run: |
+          go mod verify
+          go test ./... -count=1
+
   unit:
     runs-on: ubuntu-latest
     steps:
