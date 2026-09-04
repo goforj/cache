@@ -10,5 +10,5 @@ github.com/goforj/cache/cachecore v0.4.1 h1:oM+iXW0ZUSrN2aAG29xJKgxu48iXp4E81Nq6
 github.com/goforj/cache/cachecore v0.4.1/go.mod h1:/f1P+eik1Q59SQsJdOc+PDtJqNMmHu8+WVMQycKlm1M=
 github.com/goforj/cache/cachetest v0.4.1 h1:E6bTEYfl458O5WmfUxnNeMg7jzCIaQIGsXjqTmFuC1c=
 github.com/goforj/cache/cachetest v0.4.1/go.mod h1:tuOBIl1nPLT63YgvFkzQR56Gwxn21+mmtJ3xmObZSHQ=
-github.com/redis/go-redis/v9 v9.5.1 h1:H1X4D3yHPaYrkL5X06Wh6xNVM/pX0Ft4RV0vMGvLBh8=
-github.com/redis/go-redis/v9 v9.5.1/go.mod h1:hdY0cQFCN4fnSYT6TkisLufl/4W5UIXyv0b/CLO2V2M=
+github.com/redis/go-redis/v9 v9.6.3 h1:8Dr5ygF1QFXRxIH/m3Xg9MMG1rS8YCtAgosrsewT6i0=
+github.com/redis/go-redis/v9 v9.6.3/go.mod h1:0C0c6ycQsdpVNQpxb1njEQIqkx5UcsM8FJCQLgE9+RA=
