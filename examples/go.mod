@@ -68,7 +68,7 @@ require (
 	modernc.org/token v1.0.1 // indirect
 )
 
-replace github.com/goforj/cache => ..
+replace github.com/goforj/cache => ./..
 
 replace github.com/goforj/cache/cachecore => ../cachecore
 
