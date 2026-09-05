@@ -1,0 +1,8 @@
+# The docs and integration modules use testcontainers as a Docker client. These
+# advisories affect Docker daemon behavior, have no patched stable release on
+# this module path, and remain outside the packages exercised by Cache.
+allow-ghsas:
+  - GHSA-pxq6-2prw-chj9
+  - GHSA-rg2x-37c3-w2rh
+  - GHSA-vp62-88p7-qqf5
+  - GHSA-x86f-5xw2-fm2r
