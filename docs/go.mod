@@ -13,7 +13,7 @@ require (
 	github.com/goforj/cache/driver/rediscache v0.0.0
 	github.com/goforj/cache/driver/sqlcore v0.4.1
 	github.com/goforj/cache/driver/sqlitecache v0.0.0
-	github.com/jackc/pgx/v5 v5.9.2
+	github.com/jackc/pgx/v5 v5.10.0
 	github.com/nats-io/nats.go v1.48.0
 	github.com/redis/go-redis/v9 v9.6.3
 	github.com/testcontainers/testcontainers-go v0.41.0
