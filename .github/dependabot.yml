@@ -1,4 +1,6 @@
 version: 2
+# Compatible releases are batched across modules so shared driver dependencies
+# move together and produce one repository-level validation result.
 updates:
   - package-ecosystem: gomod
     directories:
@@ -18,10 +20,19 @@ updates:
       - /integration
     schedule:
       interval: weekly
+      day: monday
+    open-pull-requests-limit: 3
     groups:
-      shared-dependencies:
-        group-by: dependency-name
+      compatible-go-dependencies:
+        patterns: ["*"]
+        update-types: [minor, patch]
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
+      day: friday
+    open-pull-requests-limit: 3
+    groups:
+      actions-compatible:
+        patterns: ["*"]
+        update-types: [minor, patch]
