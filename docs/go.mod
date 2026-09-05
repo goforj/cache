@@ -4,7 +4,7 @@ go 1.27.0
 
 require (
 	github.com/docker/go-connections v0.6.0
-	github.com/go-sql-driver/mysql v1.7.1
+	github.com/go-sql-driver/mysql v1.10.1
 	github.com/goforj/cache v0.0.0
 	github.com/goforj/cache/cachecore v0.4.1
 	github.com/goforj/cache/driver/dynamocache v0.0.0
@@ -21,6 +21,7 @@ require (
 
 require (
 	dario.cat/mergo v1.0.2 // indirect
+	filippo.io/edwards25519 v1.2.0 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/aws/aws-sdk-go-v2 v1.26.1 // indirect
