@@ -1,0 +1,27 @@
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directories:
+      - /
+      - /cachecore
+      - /cachetest
+      - /docs
+      - /driver/dynamocache
+      - /driver/memcachedcache
+      - /driver/mysqlcache
+      - /driver/natscache
+      - /driver/postgrescache
+      - /driver/rediscache
+      - /driver/sqlcore
+      - /driver/sqlitecache
+      - /examples
+      - /integration
+    schedule:
+      interval: weekly
+    groups:
+      shared-dependencies:
+        group-by: dependency-name
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
