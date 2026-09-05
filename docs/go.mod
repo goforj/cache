@@ -3,7 +3,7 @@ module github.com/goforj/cache/docs
 go 1.27.0
 
 require (
-	github.com/docker/go-connections v0.6.0
+	github.com/docker/go-connections v0.8.1
 	github.com/go-sql-driver/mysql v1.7.1
 	github.com/goforj/cache v0.0.0
 	github.com/goforj/cache/cachecore v0.4.1
