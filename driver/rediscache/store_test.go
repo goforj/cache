@@ -128,6 +128,31 @@ func TestNewWithAddrCreatesClient(t *testing.T) {
 	}
 }
 
+// TestRedisClientOptionsPreserveConnectionDefaults verifies dependency upgrades do not change cache I/O behavior.
+func TestRedisClientOptionsPreserveConnectionDefaults(t *testing.T) {
+	options := redisClientOptions(Config{
+		Addr:     "127.0.0.1:6379",
+		Username: "user",
+		Password: "secret",
+		DB:       2,
+	})
+	if options.ReadTimeout != redisReadTimeout || options.WriteTimeout != redisWriteTimeout {
+		t.Fatalf("timeouts = %v/%v, want %v/%v", options.ReadTimeout, options.WriteTimeout, redisReadTimeout, redisWriteTimeout)
+	}
+	if options.MinRetryBackoff != redisMinRetryBackoff || options.MaxRetryBackoff != redisMaxRetryBackoff {
+		t.Fatalf("retry backoff = %v/%v, want %v/%v", options.MinRetryBackoff, options.MaxRetryBackoff, redisMinRetryBackoff, redisMaxRetryBackoff)
+	}
+	if options.Dialer == nil {
+		t.Fatal("expected the compatibility dialer")
+	}
+	if dialer := redisNetworkDialer(options); dialer.KeepAlive != redisKeepAlive {
+		t.Fatalf("keepalive = %v, want %v", dialer.KeepAlive, redisKeepAlive)
+	}
+	if options.Addr != "127.0.0.1:6379" || options.Username != "user" || options.Password != "secret" || options.DB != 2 {
+		t.Fatalf("connection settings were not preserved: %+v", options)
+	}
+}
+
 // TestOperationsWithStubClient verifies Redis commands implement the complete store operation contract.
 func TestOperationsWithStubClient(t *testing.T) {
 	ctx := context.Background()

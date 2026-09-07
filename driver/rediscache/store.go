@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"net"
 	"strings"
 	"time"
 
@@ -13,8 +14,13 @@ import (
 )
 
 const (
-	defaultTTL    = 5 * time.Minute
-	defaultPrefix = "app"
+	defaultTTL           = 5 * time.Minute
+	defaultPrefix        = "app"
+	redisReadTimeout     = 3 * time.Second
+	redisWriteTimeout    = 3 * time.Second
+	redisMinRetryBackoff = 8 * time.Millisecond
+	redisMaxRetryBackoff = 512 * time.Millisecond
+	redisKeepAlive       = 5 * time.Minute
 )
 
 // Client captures the subset of redis.Client used by the store.
@@ -91,13 +97,7 @@ func New(cfg Config) cachecore.Store {
 	}
 	client := cfg.Client
 	if client == nil && cfg.Addr != "" {
-		client = redis.NewClient(&redis.Options{
-			Addr:      cfg.Addr,
-			Username:  cfg.Username,
-			Password:  cfg.Password,
-			DB:        cfg.DB,
-			TLSConfig: cfg.TLSConfig,
-		})
+		client = redis.NewClient(redisClientOptions(cfg))
 	}
 	backend := &store{
 		client:     client,
@@ -106,6 +106,42 @@ func New(cfg Config) cachecore.Store {
 	}
 	wrapped, _ := cachecore.WrapStore(backend, cfg.BaseConfig)
 	return wrapped
+}
+
+// redisClientOptions preserves the established connection behavior when upstream defaults change.
+func redisClientOptions(cfg Config) *redis.Options {
+	options := &redis.Options{
+		Addr:            cfg.Addr,
+		Username:        cfg.Username,
+		Password:        cfg.Password,
+		DB:              cfg.DB,
+		TLSConfig:       cfg.TLSConfig,
+		ReadTimeout:     redisReadTimeout,
+		WriteTimeout:    redisWriteTimeout,
+		MinRetryBackoff: redisMinRetryBackoff,
+		MaxRetryBackoff: redisMaxRetryBackoff,
+	}
+	options.Dialer = redisDialer(options)
+	return options
+}
+
+// redisDialer retains the keepalive policy used by earlier go-redis releases.
+func redisDialer(options *redis.Options) func(context.Context, string, string) (net.Conn, error) {
+	return func(ctx context.Context, network, addr string) (net.Conn, error) {
+		dialer := redisNetworkDialer(options)
+		if options.TLSConfig == nil {
+			return dialer.DialContext(ctx, network, addr)
+		}
+		return tls.DialWithDialer(dialer, network, addr, options.TLSConfig)
+	}
+}
+
+// redisNetworkDialer keeps the pre-upgrade TCP liveness interval explicit and testable.
+func redisNetworkDialer(options *redis.Options) *net.Dialer {
+	return &net.Dialer{
+		Timeout:   options.DialTimeout,
+		KeepAlive: redisKeepAlive,
+	}
 }
 
 // Driver identifies the backend for diagnostics and capability-specific behavior.
