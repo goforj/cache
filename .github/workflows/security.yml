@@ -46,5 +46,31 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with: {go-version: stable, cache: false}
       - run: .github/scripts/generate-sboms.sh "$RUNNER_TEMP/sbom"
+      - run: |
+          .github/scripts/build-dependency-snapshot.sh \
+            "$RUNNER_TEMP/sbom" \
+            "$RUNNER_TEMP/dependency-snapshot.json" \
+            "$GITHUB_SHA" \
+            "$GITHUB_REF" \
+            "$GITHUB_RUN_ID" \
+            "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with: {name: cyclonedx-sbom, path: '${{ runner.temp }}/sbom/*.cdx.json', if-no-files-found: error}
+        with:
+          name: cyclonedx-sbom
+          path: |
+            ${{ runner.temp }}/sbom/*.cdx.json
+            ${{ runner.temp }}/dependency-snapshot.json
+          if-no-files-found: error
+  dependency-submission:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: sbom
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with: {name: cyclonedx-sbom, path: '${{ runner.temp }}/sbom'}
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api --method POST "repos/$GITHUB_REPOSITORY/dependency-graph/snapshots" --input "$RUNNER_TEMP/sbom/dependency-snapshot.json"

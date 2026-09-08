@@ -10,7 +10,10 @@ while IFS= read -r -d '' module; do
   [[ -n "${module_dir}" ]] || module_dir="."
   output="${output_dir}/go-${module_count}.cdx.json"
   (cd "${module_dir}" && GOWORK=off go run github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@v1.12.0 mod -json -type library -test -output "${output}" .) < /dev/null
-  jq -e '.bomFormat == "CycloneDX" and .metadata.component.type == "library" and ((.components // []) | type == "array") and ([.components[]?.name] | index("..") | not)' "${output}" > /dev/null
+  manifest_source="${module#./}"
+  jq --arg manifest_source "${manifest_source}" '.metadata.properties = ((.metadata.properties // []) + [{name: "goforj:manifest-source", value: $manifest_source}])' "${output}" > "${output}.next"
+  mv "${output}.next" "${output}"
+  jq -e --arg manifest_source "${manifest_source}" '.bomFormat == "CycloneDX" and .metadata.component.type == "library" and ((.components // []) | type == "array") and ([.components[]?.name] | index("..") | not) and ([.metadata.properties[] | select(.name == "goforj:manifest-source" and .value == $manifest_source)] | length == 1)' "${output}" > /dev/null
   module_count=$((module_count + 1))
 done < <(find . -type f -name go.mod -not -path './vendor/*' -print0)
 while IFS= read -r -d '' lockfile; do lockfile_count=$((lockfile_count + 1)); done < <(find . -type f -name package-lock.json -not -path './node_modules/*' -print0)
