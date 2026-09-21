@@ -1,6 +1,6 @@
 module github.com/goforj/cache/driver/rediscache
 
-go 1.24.4
+go 1.25.0
 
 require (
 	github.com/goforj/cache/cachecore v0.4.1
@@ -10,6 +10,7 @@ require (
 
 require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
+	github.com/stretchr/testify v1.11.1 // indirect
 	go.uber.org/atomic v1.11.0 // indirect
-	golang.org/x/sys v0.30.0 // indirect
+	golang.org/x/sys v0.47.0 // indirect
 )
