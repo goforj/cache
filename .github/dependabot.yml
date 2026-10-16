@@ -19,20 +19,28 @@ updates:
       - /examples
       - /integration
     schedule:
-      interval: weekly
-      day: monday
-    open-pull-requests-limit: 3
+      interval: monthly
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 2
     groups:
+      security-fixes:
+        applies-to: security-updates
+        patterns: ["*"]
       compatible-go-dependencies:
         patterns: ["*"]
         update-types: [minor, patch]
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: weekly
-      day: friday
-    open-pull-requests-limit: 3
+      interval: monthly
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 2
     groups:
+      security-fixes:
+        applies-to: security-updates
+        patterns: ["*"]
       actions-compatible:
         patterns: ["*"]
         update-types: [minor, patch]
