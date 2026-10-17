@@ -6,12 +6,12 @@ require (
 	github.com/docker/go-connections v0.8.1
 	github.com/go-sql-driver/mysql v1.10.1
 	github.com/goforj/cache v0.0.0
-	github.com/goforj/cache/cachecore v0.4.1
+	github.com/goforj/cache/cachecore v0.4.2
 	github.com/goforj/cache/driver/dynamocache v0.0.0
 	github.com/goforj/cache/driver/memcachedcache v0.0.0
 	github.com/goforj/cache/driver/natscache v0.0.0
 	github.com/goforj/cache/driver/rediscache v0.0.0
-	github.com/goforj/cache/driver/sqlcore v0.4.1
+	github.com/goforj/cache/driver/sqlcore v0.4.2
 	github.com/goforj/cache/driver/sqlitecache v0.0.0
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/nats-io/nats.go v1.53.1
