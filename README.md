@@ -1508,3 +1508,7 @@ Notes:
 
 - The badge watcher runs real tests, so it is slower than API/example regeneration.
 - Fault/recovery integration tests run with the integration suite when container-backed fixtures are selected.
+
+## Documentation
+
+Read the [cache library documentation](https://goforj.dev/cache) for standalone installation, usage, and API reference.
