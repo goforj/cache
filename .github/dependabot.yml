@@ -1,22 +1,80 @@
 version: 2
-# Compatible releases are batched across modules so shared driver dependencies
-# move together and produce one repository-level validation result.
+# Group modules by their supported Go version so updates cannot silently raise
+# a published driver's minimum toolchain requirement.
 updates:
   - package-ecosystem: gomod
     directories:
-      - /
       - /cachecore
       - /cachetest
-      - /docs
       - /driver/dynamocache
       - /driver/memcachedcache
       - /driver/mysqlcache
-      - /driver/natscache
-      - /driver/postgrescache
       - /driver/rediscache
       - /driver/sqlcore
+    schedule:
+      interval: monthly
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 2
+    # These releases require a newer Go version than this group supports.
+    ignore:
+      - dependency-name: github.com/redis/go-redis/v9
+        versions: [">=9.23.0"]
+      - dependency-name: golang.org/x/sys
+        versions: [">=0.42.0"]
+    groups:
+      security-fixes:
+        applies-to: security-updates
+        patterns: ["*"]
+      compatible-go-dependencies:
+        patterns: ["*"]
+        update-types: [minor, patch]
+  - package-ecosystem: gomod
+    directories:
+      - /driver/postgrescache
       - /driver/sqlitecache
+    schedule:
+      interval: monthly
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 2
+    # These releases require a newer Go version than this group supports.
+    ignore:
+      - dependency-name: modernc.org/sqlite
+        versions: [">=1.60.0"]
+      - dependency-name: golang.org/x/sync
+        versions: [">=0.23.0"]
+      - dependency-name: golang.org/x/text
+        versions: [">=0.42.0"]
+      - dependency-name: golang.org/x/sys
+        versions: [">=0.48.0"]
+    groups:
+      security-fixes:
+        applies-to: security-updates
+        patterns: ["*"]
+      compatible-go-dependencies:
+        patterns: ["*"]
+        update-types: [minor, patch]
+  - package-ecosystem: gomod
+    directories:
+      - /driver/natscache
+    schedule:
+      interval: monthly
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 2
+    groups:
+      security-fixes:
+        applies-to: security-updates
+        patterns: ["*"]
+      compatible-go-dependencies:
+        patterns: ["*"]
+        update-types: [minor, patch]
+  - package-ecosystem: gomod
+    directories:
+      - /docs
       - /examples
+      - /
       - /integration
     schedule:
       interval: monthly
