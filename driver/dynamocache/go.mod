@@ -1,6 +1,6 @@
 module github.com/goforj/cache/driver/dynamocache
 
-go 1.24.4
+go 1.26.0
 
 require (
 	github.com/aws/aws-sdk-go-v2 v1.47.4
