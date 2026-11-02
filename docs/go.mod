@@ -5,14 +5,14 @@ go 1.27.0
 require (
 	github.com/docker/go-connections v0.8.2
 	github.com/go-sql-driver/mysql v1.10.1
-	github.com/goforj/cache v0.0.0
-	github.com/goforj/cache/cachecore v0.4.2
-	github.com/goforj/cache/driver/dynamocache v0.0.0
-	github.com/goforj/cache/driver/memcachedcache v0.0.0
-	github.com/goforj/cache/driver/natscache v0.0.0
-	github.com/goforj/cache/driver/rediscache v0.0.0
-	github.com/goforj/cache/driver/sqlcore v0.4.2
-	github.com/goforj/cache/driver/sqlitecache v0.0.0
+	github.com/goforj/cache v0.4.3
+	github.com/goforj/cache/cachecore v0.4.3
+	github.com/goforj/cache/driver/dynamocache v0.4.3
+	github.com/goforj/cache/driver/memcachedcache v0.4.3
+	github.com/goforj/cache/driver/natscache v0.4.3
+	github.com/goforj/cache/driver/rediscache v0.4.3
+	github.com/goforj/cache/driver/sqlcore v0.4.3
+	github.com/goforj/cache/driver/sqlitecache v0.4.3
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/nats-io/nats.go v1.55.0
 	github.com/redis/go-redis/v9 v9.23.0

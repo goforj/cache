@@ -3,16 +3,16 @@ module github.com/goforj/cache/examples
 go 1.27.0
 
 require (
-	github.com/goforj/cache v0.0.0
-	github.com/goforj/cache/cachecore v0.4.2
-	github.com/goforj/cache/driver/dynamocache v0.0.0
-	github.com/goforj/cache/driver/memcachedcache v0.0.0
-	github.com/goforj/cache/driver/mysqlcache v0.0.0
-	github.com/goforj/cache/driver/natscache v0.0.0
-	github.com/goforj/cache/driver/postgrescache v0.0.0
-	github.com/goforj/cache/driver/rediscache v0.0.0
-	github.com/goforj/cache/driver/sqlcore v0.4.2
-	github.com/goforj/cache/driver/sqlitecache v0.0.0
+	github.com/goforj/cache v0.4.3
+	github.com/goforj/cache/cachecore v0.4.3
+	github.com/goforj/cache/driver/dynamocache v0.4.3
+	github.com/goforj/cache/driver/memcachedcache v0.4.3
+	github.com/goforj/cache/driver/mysqlcache v0.4.3
+	github.com/goforj/cache/driver/natscache v0.4.3
+	github.com/goforj/cache/driver/postgrescache v0.4.3
+	github.com/goforj/cache/driver/rediscache v0.4.3
+	github.com/goforj/cache/driver/sqlcore v0.4.3
+	github.com/goforj/cache/driver/sqlitecache v0.4.3
 	modernc.org/sqlite v1.61.0
 )
 
