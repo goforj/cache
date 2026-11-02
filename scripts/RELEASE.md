@@ -136,3 +136,11 @@ tag is available.
 If a module proxy has not observed a newly pushed dependency tag yet, wait for
 that tag to resolve before moving to the next layer. Do not add a committed
 replacement to bypass the ordering.
+
+## Dependency updates and Go minimums
+
+Dependabot updates each nested module separately, grouped by its supported Go version. Do not add the repository root to these jobs: Dependabot reads `go.work` there and copies dependencies between modules, which can raise a driver's Go requirement. Keep `go.work` for local development.
+
+The main cache module and the documentation, examples, and integration modules all require `github.com/patrickmn/go-cache`. Dependabot monitors it in the latter three modules. When updating it there, also update the main cache requirement and test with `GOWORK=off`. Use the release procedure above to update internal Cache module versions.
+
+CI tests fixed lists of modules on their minimum Go versions, with automatic toolchain switching disabled. Changing a module's Go directive cannot remove it from those tests.

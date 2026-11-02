@@ -28,7 +28,7 @@ An explicit cache abstraction with a minimal Store interface and ergonomic Cache
 go get github.com/goforj/cache
 ```
 
-The generic method API requires Go 1.27 or newer. Projects on older Go releases can pin the v0.4 release line.
+The generic method API requires Go 1.27 or newer. Projects on Go 1.26 or earlier can keep the root module at v0.4.0 and update independently versioned core, test, and driver modules that support their Go version.
 
 Optional backends are separate modules. Install only what you use:
 
@@ -42,8 +42,20 @@ go get github.com/goforj/cache/driver/postgrescache
 go get github.com/goforj/cache/driver/mysqlcache
 ```
 
-`driver/postgrescache` requires Go 1.25 or newer because its pgx v5.9.2 security update requires that toolchain. The pgx update also discards pooled connections left in transactions during reset and uses the operating-system user when a PostgreSQL DSN omits a database user. Use an explicit DSN user when that default is not intended.
+The PostgreSQL and SQLite drivers require Go 1.25 or newer. PostgreSQL uses pgx v5.11.0. The pgx update also discards pooled connections left in transactions during reset and uses the operating-system user when a PostgreSQL DSN omits a database user. Use an explicit DSN user when that default is not intended.
  
+## Supported Go versions
+
+| Modules | Minimum Go version |
+| --- | --- |
+| Root `cache` module | 1.27.0 |
+| `cachecore`, `cachetest`, `driver/sqlcore` | 1.24.4 |
+| DynamoDB, Memcached, MySQL, and Redis drivers | 1.24.4 |
+| PostgreSQL and SQLite drivers | 1.25.0 |
+| NATS driver | 1.26.0 |
+
+Documentation, examples, and integration tooling use Go 1.27 and can select newer dependency versions than the independently published drivers. Their dependency graph does not change a driver's published minimum.
+
 ## Drivers
 
 Each driver is thoroughly tested against the shared test suite using [testcontainers](https://testcontainers.com/) or emulators where appropriate.
