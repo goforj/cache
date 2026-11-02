@@ -30,5 +30,5 @@ github.com/aws/aws-sdk-go-v2/service/sts v1.51.5 h1:OuyNaMncYP4ftrvcnOHJ9j3AxO3z
 github.com/aws/aws-sdk-go-v2/service/sts v1.51.5/go.mod h1:Bhu66tgvf94uunUSiAc0Ew0avhnpSm0J8Hl1MYocRbo=
 github.com/aws/smithy-go v1.28.6 h1:Pj+/sUviNYjow8ELRtNwKHZ9ECeF+7pATX3+shjLIrw=
 github.com/aws/smithy-go v1.28.6/go.mod h1:YE2RhdIuDbA5E5bTdciG9KrW3+TiEONeUWCqxX9i1Fc=
-github.com/goforj/cache/cachecore v0.4.2 h1:J5U/rg7AG36E28fcdw4qX2j9ZwUQE6LgbGTDO7VxBdM=
-github.com/goforj/cache/cachecore v0.4.2/go.mod h1:/f1P+eik1Q59SQsJdOc+PDtJqNMmHu8+WVMQycKlm1M=
+github.com/goforj/cache/cachecore v0.4.3 h1:xth/bOPnJzQ4Xe2C2hd2xZKbAO2q+tee05xor8kmVgM=
+github.com/goforj/cache/cachecore v0.4.3/go.mod h1:/f1P+eik1Q59SQsJdOc+PDtJqNMmHu8+WVMQycKlm1M=
