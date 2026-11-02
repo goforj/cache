@@ -1,6 +1,7 @@
 version: 2
-# Group modules by their supported Go version so updates cannot silently raise
-# a published driver's minimum toolchain requirement.
+# Update nested modules separately. Running from / makes Dependabot read
+# go.work and copy dependencies between modules, which can raise Go requirements.
+# See scripts/RELEASE.md for maintenance of the main cache module.
 updates:
   - package-ecosystem: gomod
     directories:
@@ -74,7 +75,6 @@ updates:
     directories:
       - /docs
       - /examples
-      - /
       - /integration
     schedule:
       interval: monthly

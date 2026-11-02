@@ -548,7 +548,11 @@ func startNATSContainer(t *testing.T, ctx context.Context) (testcontainers.Conta
 		Image:        "nats:2",
 		Cmd:          []string{"-js"},
 		ExposedPorts: []string{"4222/tcp"},
-		WaitingFor:   wait.ForLog("Server is ready").WithStartupTimeout(30 * time.Second),
+		// The readiness log can appear before Docker exposes the host port.
+		WaitingFor: wait.ForAll(
+			wait.ForLog("Server is ready"),
+			wait.ForListeningPort("4222/tcp").SkipInternalCheck(),
+		).WithDeadline(30 * time.Second),
 	}
 	container, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
 		ContainerRequest: req,
