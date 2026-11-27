@@ -6,6 +6,7 @@ import (
 	"context"
 	"database/sql"
 	"io"
+	"strings"
 	"testing"
 	"time"
 
@@ -78,6 +79,12 @@ func checkSQLNamespaces(t *testing.T, open func(cachecore.BaseConfig) (cachecore
 	entries, err := owned.(cachecore.Inspector).ListPage(ctx, cachecore.ListPageOptions{})
 	if err != nil || len(entries.Entries) != 1 || entries.Entries[0].Key != "item" {
 		t.Fatalf("own scope entries = %+v, err = %v", entries.Entries, err)
+	}
+	if _, err := owned.Increment(ctx, "item", 1, time.Minute); err == nil || !strings.Contains(err.Error(), "does not contain a numeric value") {
+		t.Fatalf("Increment error = %v, want nonnumeric value error", err)
+	}
+	if value, hit, err := owned.Get(ctx, "item"); err != nil || !hit || string(value) != "value" {
+		t.Fatalf("Get after failed Increment: value=%q hit=%v err=%v", value, hit, err)
 	}
 	if err := owned.Flush(ctx); err != nil {
 		t.Fatal(err)

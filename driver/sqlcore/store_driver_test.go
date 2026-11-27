@@ -2,7 +2,11 @@ package sqlcore
 
 import (
 	"context"
+	"database/sql"
+	"errors"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/goforj/cache/cachecore"
 )
@@ -73,5 +77,29 @@ func TestSQLPingError(t *testing.T) {
 		DSN:        "irrelevant",
 	}); err == nil {
 		t.Fatalf("expected ping error")
+	}
+}
+
+// TestSQLUnknownDriver verifies opening an unregistered SQL driver returns the setup error.
+func TestSQLUnknownDriver(t *testing.T) {
+	store, err := New(Config{DriverName: "unknown_cache_driver", DSN: "irrelevant"})
+	if store != nil || err == nil || !strings.Contains(err.Error(), "unknown driver") {
+		t.Fatalf("New returned store %v and error %v, want unknown driver error", store, err)
+	}
+}
+
+// TestSQLCounterSeedFailure verifies a failed initial insert is returned before attempting a read.
+func TestSQLCounterSeedFailure(t *testing.T) {
+	db, err := sql.Open("pgfail", "irrelevant")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	store := &sqlStore{db: db, table: "cache_entries", driverName: "postgres", prefix: "cache"}
+	if _, err := store.Increment(t.Context(), "counter", 1, time.Minute); !errors.Is(err, errFakeExec) {
+		t.Fatalf("Increment error = %v, want %v", err, errFakeExec)
+	}
+	if inUse := db.Stats().InUse; inUse != 0 {
+		t.Fatalf("connections still in use after rollback = %d", inUse)
 	}
 }

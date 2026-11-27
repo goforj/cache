@@ -13,7 +13,7 @@
     <img src="https://img.shields.io/github/v/tag/goforj/cache?label=version&sort=semver" alt="Latest tag">
     <a href="https://codecov.io/gh/goforj/cache"><img src="https://codecov.io/gh/goforj/cache/graph/badge.svg" alt="Codecov"></a>
 <!-- test-count:embed:start -->
-    <img src="https://img.shields.io/badge/unit_tests-430-brightgreen" alt="Unit tests (passing count)">
+    <img src="https://img.shields.io/badge/unit_tests-447-brightgreen" alt="Unit tests (passing count)">
     <img src="https://img.shields.io/badge/local_integration_tests-109-blue" alt="Local integration tests (passing count)">
 <!-- test-count:embed:end -->
 </p>

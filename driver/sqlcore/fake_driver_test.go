@@ -7,6 +7,8 @@ import (
 	"errors"
 )
 
+var errFakeExec = errors.New("boom")
+
 type fakeDriver struct {
 	execErr error
 	pingErr error
@@ -28,8 +30,16 @@ func (c *fakeConn) Prepare(string) (driver.Stmt, error) { return &fakeStmt{}, ni
 // Close leaves the stateless fake connection ready for reuse.
 func (c *fakeConn) Close() error { return nil }
 
-// Begin rejects transactions because the SQL cache does not require them.
-func (c *fakeConn) Begin() (driver.Tx, error) { return nil, errors.New("not impl") }
+// Begin permits the counter tests to exercise failures inside a transaction.
+func (c *fakeConn) Begin() (driver.Tx, error) { return fakeTx{}, nil }
+
+type fakeTx struct{}
+
+// Commit completes the stateless fake transaction.
+func (fakeTx) Commit() error { return nil }
+
+// Rollback discards the stateless fake transaction.
+func (fakeTx) Rollback() error { return nil }
 
 // ExecContext reports one affected row unless the fake was configured to fail.
 func (c *fakeConn) ExecContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Result, error) {
@@ -75,7 +85,7 @@ func (s *fakeStmt) Query(args []driver.Value) (driver.Rows, error) { return &fak
 func init() {
 	sql.Register("pgfake", &fakeDriver{})
 	sql.Register("mysqlfake", &fakeDriver{})
-	sql.Register("pgfail", &fakeDriver{execErr: errors.New("boom")})
+	sql.Register("pgfail", &fakeDriver{execErr: errFakeExec})
 	sql.Register("postgres", &fakeDriver{})
 	sql.Register("pingfail", &fakeDriver{pingErr: errors.New("ping boom")})
 }
