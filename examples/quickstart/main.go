@@ -19,15 +19,30 @@ type Product struct {
 func main() {
 	ctx := context.Background()
 	c := cache.NewCache(cache.NewMemoryStore(ctx))
-
-	loadProduct := func() (Product, error) {
-		return Product{Name: "Desk lamp", PriceCents: 4900}, nil
+	catalog := map[int]Product{
+		42: {Name: "Desk lamp", PriceCents: 4900},
 	}
-	product, err := c.Remember("product:42", time.Minute, loadProduct)
+
+	rememberProduct := func(id int) (Product, error) {
+		key := fmt.Sprintf("product:%d", id)
+		return c.Remember(key, time.Minute, func() (Product, error) {
+			product, found := catalog[id]
+			if !found {
+				return Product{}, fmt.Errorf("product %d not found", id)
+			}
+			return product, nil
+		})
+	}
+
+	product, err := rememberProduct(42)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	fmt.Printf("%s costs %d cents\n", product.Name, product.PriceCents)
 	// Output: Desk lamp costs 4900 cents
+
+	_, err = rememberProduct(99)
+	fmt.Println(err)
+	// Output: product 99 not found
 }
