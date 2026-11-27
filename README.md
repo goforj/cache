@@ -75,8 +75,6 @@ func main() {
 
 <!-- quick-start:embed:end -->
 
-[Run the complete example from this repository](examples/quickstart/main.go).
-
 ## Drivers
 
 Memory, file, and null are included in the root module. Install only the additional driver modules you use.
