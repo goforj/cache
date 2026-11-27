@@ -71,6 +71,21 @@ would make existing combined envelopes unreadable.
 Treat encryption-key changes as a data migration. Flush the cache or keep the previous key available
 until every value encrypted with it has expired; a wrong key fails closed with `ErrDecryptFailed`.
 
+## Payload Size Limits
+
+Set `cachecore.BaseConfig.MaxValueBytes` to enforce an application-level value limit. It is available through root `StoreConfig` and optional driver configs. The limit checks values entering the compression wrapper, which already include encryption overhead when encryption is enabled. It also checks stored bytes and bounds read-time decompression. A value can still exceed a backend limit because of its key, metadata, or driver encoding.
+
+| Driver | Effective limit |
+| :--- | :--- |
+| Null | Values are discarded. |
+| Memory | Available process memory. |
+| File | Available disk space and filesystem limits. |
+| Redis | Server limits for string values and available memory. |
+| NATS | Server and JetStream limits, including the cache value envelope in per-key TTL mode. |
+| Memcached | Approximately 1 MiB per item by default, configurable on the server with `-I`. |
+| DynamoDB | 400 KB per item, including the key and other attributes. |
+| SQLite, PostgreSQL, and MySQL | Blob, row, and packet limits vary by database engine and configuration. |
+
 ## TTL And Expiration Strategy
 
 - Use shorter TTLs for frequently changing data.
