@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/goforj/cache/cachecore"
 )
@@ -113,5 +114,120 @@ func serveLockRelease(conn net.Conn, stored []byte) error {
 		default:
 			return fmt.Errorf("unexpected command %q", fields[0])
 		}
+	}
+}
+
+// TestKeysOnlyDialTheirSelectedPeer verifies routing ignores address order and fails without fallback.
+func TestKeysOnlyDialTheirSelectedPeer(t *testing.T) {
+	originalDial := dialMemcached
+	t.Cleanup(func() { dialMemcached = originalDial })
+	offline := errors.New("peer unavailable")
+	var calls []string
+	dialMemcached = func(_ context.Context, _, addr string) (net.Conn, error) {
+		calls = append(calls, addr)
+		return nil, offline
+	}
+	ctx := context.Background()
+	for _, addresses := range [][]string{{"a", "b"}, {"b", "a", "b"}} {
+		store := New(Config{Addresses: addresses})
+		if err := store.Set(ctx, "session", []byte("value"), 0); !errors.Is(err, offline) {
+			t.Fatalf("Set error = %v", err)
+		}
+		if _, _, err := store.Get(ctx, "session"); !errors.Is(err, offline) {
+			t.Fatalf("Get error = %v", err)
+		}
+	}
+	if len(calls) != 4 {
+		t.Fatalf("dials = %v, want one attempted peer per operation", calls)
+	}
+	for _, call := range calls {
+		if call != calls[0] {
+			t.Fatalf("same key selected different peers: %v", calls)
+		}
+	}
+}
+
+// TestReadCancellation verifies canceling an operation interrupts established socket I/O.
+func TestReadCancellation(t *testing.T) {
+	originalDial := dialMemcached
+	t.Cleanup(func() { dialMemcached = originalDial })
+	client, server := net.Pipe()
+	t.Cleanup(func() { _ = server.Close() })
+	dialMemcached = func(context.Context, string, string) (net.Conn, error) { return client, nil }
+	store := New(Config{})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	result := make(chan error, 1)
+	go func() {
+		_, _, err := store.Get(ctx, "key")
+		result <- err
+	}()
+	if err := server.SetReadDeadline(time.Now().Add(time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := bufio.NewReader(server).ReadString('\n'); err != nil {
+		t.Fatal(err)
+	}
+	cancel()
+	select {
+	case err := <-result:
+		if err == nil {
+			t.Fatal("canceled operation succeeded")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("cancel did not interrupt the read")
+	}
+}
+
+// TestFlushRequiresDedicatedServers verifies Flush rejects the default shared-server configuration.
+func TestFlushRequiresDedicatedServers(t *testing.T) {
+	store := New(Config{})
+	if err := store.Flush(context.Background()); err == nil || !strings.Contains(err.Error(), "AllowServerFlush") {
+		t.Fatalf("Flush error = %v", err)
+	}
+}
+
+// TestCloseDrainsIdleConnections verifies shutdown releases pooled sockets and rejects further reads.
+func TestCloseDrainsIdleConnections(t *testing.T) {
+	store := New(Config{Addresses: []string{"peer"}}).(*store)
+	client, server := net.Pipe()
+	t.Cleanup(func() { _ = server.Close() })
+	store.pools["peer"] <- &memcachedConn{addr: "peer", conn: client, reader: bufio.NewReader(client)}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := server.Read(make([]byte, 1)); !errors.Is(err, io.EOF) {
+		t.Fatalf("pooled peer read error = %v", err)
+	}
+	if _, _, err := store.Get(context.Background(), "key"); !errors.Is(err, net.ErrClosed) {
+		t.Fatalf("Get after Close error = %v", err)
+	}
+}
+
+// TestInvalidWireKeys verifies invalid key names fail before touching a server.
+func TestInvalidWireKeys(t *testing.T) {
+	store := New(Config{})
+	for _, key := range []string{"space separated", strings.Repeat("x", 250)} {
+		if _, _, err := store.Get(context.Background(), key); err == nil || !strings.Contains(err.Error(), "250 bytes") {
+			t.Fatalf("Get error = %v", err)
+		}
+	}
+}
+
+// TestReadValueValidatesFraming verifies that incomplete and malformed responses fail before reuse.
+func TestReadValueValidatesFraming(t *testing.T) {
+	for _, tc := range []struct {
+		name, response string
+	}{
+		{"short body", "a"},
+		{"missing terminator", "abc\r\n"},
+		{"bad terminator", "abc\r\nNO\r\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := readValue(bufio.NewReader(strings.NewReader(tc.response)), 3)
+			if err == nil {
+				t.Fatal("readValue accepted incomplete or malformed framing")
+			}
+		})
 	}
 }

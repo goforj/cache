@@ -9,12 +9,15 @@ import (
 
 // main keeps this generated example executable so API drift fails during compilation.
 func main() {
-	// New builds a Memcached-backed cachecore.Store.
+	// New builds a lazy Memcached store that owns its connections. The caller can
+	// release them through io.Closer. Addresses are treated as a fixed peer set.
+	// A failed peer returns an error for its keys so locks never fail over to another peer.
 	//
 	// Defaults:
 	// - Addresses: []string{"127.0.0.1:11211"} when empty
 	// - DefaultTTL: 5*time.Minute when zero
 	// - Prefix: "app" when empty
+	// - AllowServerFlush: false, unless every server is dedicated to this cache
 
 	// Example: memcached cluster via explicit driver config
 	store := memcachedcache.New(memcachedcache.Config{

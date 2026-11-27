@@ -56,6 +56,13 @@ Notes:
 - RefreshAhead* does not allow fallback TTL; it returns an error when ttl <= 0.
 - RateLimit* and lock helpers enforce positive TTL/window and return errors otherwise.
 
+## Cache Helpers
+
+- `Pull` and `PullBytes` perform a read followed by a delete. Concurrent callers can receive the same value. Use an atomic operation from your durable store for one-time consumption.
+- `BatchGetBytes` and `BatchSetBytes` issue one operation per key. If a write fails, earlier writes remain applied and the order is unspecified.
+- `Remember` and `RememberStale` can call the loader independently for concurrent misses. Use explicit coordination when recomputation must be coalesced.
+- `NewMemoStore` is a bounded per-request snapshot. It retains up to 256 hits or misses for up to one second. Direct reads from the backing store observe its current TTL and writes made through other handles.
+
 ## Stale And Refresh-Ahead Semantics
 
 ## RememberStale*
@@ -122,6 +129,8 @@ Refresh-ahead caveats:
   - custom Store implementations that provide only the base Store contract retain legacy unconditional release behavior
   - custom Redis Client overrides must implement the go-redis `Eval` method; lock acquisition fails before writing when atomic script support is unavailable
   - the file backend coordinates lock mutation only within one process
+  - Memcached clients must use the same peer set for distributed locks. Changing the peer set can move keys. A failed peer returns an error for its keys.
+  - NATS bucket TTL mode uses the bucket's TTL for every lock and value.
   - mixed-version deployments remain vulnerable until binaries with legacy unconditional unlock behavior have been drained
   - use short TTLs, keep critical sections bounded, and keep protected work idempotent
 

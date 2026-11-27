@@ -31,6 +31,16 @@ store := rediscache.New(cfg)
 c := cache.NewCache(store)
 ```
 
+## Driver Connections And Rollout
+
+SQL store constructors open a database pool, check connectivity, create the cache table if needed, and prepare statements. Construct the store once per application lifetime. For SQL and Memcached, call `Close` through `io.Closer` after the application stops using the store. Memcached opens sockets on first use and applies a three-second I/O deadline, shortened by the operation context when applicable. The NATS driver borrows the caller's JetStream bucket. Its owner closes the NATS connection.
+
+SQL `Flush` clears the configured prefix. When stores share a resource, choose non-overlapping prefixes: `billing:v1` and `billing:v2` are distinct, while `billing` shares a key boundary with both.
+
+Memcached has a server-wide flush operation. `Flush` returns an error by default. For dedicated peers, set `AllowServerFlush: true` to clear every configured server, including all prefixes. Shared servers should use known-key deletion or a new versioned prefix for invalidation.
+
+When upgrading an existing multi-server Memcached deployment, drain old clients before relying on shared locks or rate limits. Older clients route each request independently. Expect cold cache misses when the upgrade or a peer-set change moves keys. Drain old PostgreSQL cache clients before relying on atomic initialization of new shared counters.
+
 ## Key Naming And Versioning
 
 Use structured keys so invalidation and migrations are predictable:

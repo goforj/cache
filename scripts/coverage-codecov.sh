@@ -12,7 +12,7 @@ TMP_ROOT="${COVERAGE_TMP_DIR:-/tmp/cache-coverage}"
 GOCACHE_DIR="${GOCACHE_DIR:-/tmp/go-build-cache}"
 INTEGRATION_TAGS="${INTEGRATION_TAGS:-integration}"
 INTEGRATION_MODULE_DIR="${INTEGRATION_MODULE_DIR:-integration}"
-INTEGRATION_MODULE_COVERPKG="${INTEGRATION_MODULE_COVERPKG:-github.com/goforj/cache,github.com/goforj/cache/cachecore,github.com/goforj/cache/cachetest,github.com/goforj/cache/integration/...}"
+INTEGRATION_MODULE_COVERPKG="${INTEGRATION_MODULE_COVERPKG:-github.com/goforj/cache,github.com/goforj/cache/cachecore,github.com/goforj/cache/cachetest,github.com/goforj/cache/driver/...,github.com/goforj/cache/integration/...}"
 INTEGRATION_MODULE_DRIVERS="${INTEGRATION_MODULE_DRIVERS:-memory,file,null,sqlitecache}"
 
 read -r -a unit_packages <<< "${UNIT_PKGS:-./...}"
@@ -25,6 +25,7 @@ CACHETEST_UNIT_DIR="$TMP_ROOT/cachetest-unit"
 INT_DIR="$TMP_ROOT/integration"
 INT_MOD_DIR="$TMP_ROOT/integration-module"
 MERGED_DIR="$TMP_ROOT/merged"
+DRIVER_UNIT_INPUTS=""
 
 rm -rf "$TMP_ROOT"
 mkdir -p "$UNIT_DIR" "$CORE_UNIT_DIR" "$CACHETEST_UNIT_DIR" "$INT_DIR" "$INT_MOD_DIR" "$MERGED_DIR"
@@ -51,6 +52,18 @@ if [[ -d "cachetest" ]]; then
   )
 fi
 
+while read -r classification module_dir _; do
+  if [[ "$classification" != "published" || "$module_dir" != driver/* ]]; then
+    continue
+  fi
+  driver_unit_dir="$TMP_ROOT/${module_dir##*/}-unit"
+  mkdir -p "$driver_unit_dir"
+  echo "==> $module_dir unit coverage collection"
+  GOCACHE="$GOCACHE_DIR" go -C "$module_dir" test -cover -coverpkg=./... ./... \
+    -args -test.gocoverdir="$driver_unit_dir"
+  DRIVER_UNIT_INPUTS="$DRIVER_UNIT_INPUTS,$driver_unit_dir"
+done < scripts/module-manifest.txt
+
 echo "==> Integration coverage collection"
 GOCACHE="$GOCACHE_DIR" \
 go test -cover -tags="$INTEGRATION_TAGS" -coverpkg=./... "${integration_packages[@]}" -args -test.gocoverdir="$INT_DIR"
@@ -66,7 +79,7 @@ if [[ -d "$INTEGRATION_MODULE_DIR" ]]; then
 fi
 
 echo "==> Merging coverage data"
-MERGE_INPUTS="$UNIT_DIR,$CORE_UNIT_DIR,$CACHETEST_UNIT_DIR,$INT_DIR"
+MERGE_INPUTS="$UNIT_DIR,$CORE_UNIT_DIR,$CACHETEST_UNIT_DIR$DRIVER_UNIT_INPUTS,$INT_DIR"
 if [[ -d "$INT_MOD_DIR" ]]; then
   MERGE_INPUTS="$MERGE_INPUTS,$INT_MOD_DIR"
 fi

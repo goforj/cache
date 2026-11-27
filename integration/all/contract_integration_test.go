@@ -238,8 +238,9 @@ func integrationFixtures(t *testing.T) []storeFactory {
 				ctx := context.Background()
 				container, addr := startMemcachedContainer(t, ctx)
 				store := memcachedcache.New(memcachedcache.Config{
-					BaseConfig: cachecore.BaseConfig{DefaultTTL: 2 * time.Second, Prefix: "itest"},
-					Addresses:  []string{addr},
+					BaseConfig:       cachecore.BaseConfig{DefaultTTL: 2 * time.Second, Prefix: "itest"},
+					Addresses:        []string{addr},
+					AllowServerFlush: true,
 				})
 				cleanup := func() {
 					shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

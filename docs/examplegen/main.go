@@ -598,7 +598,7 @@ func ensureMainComments(base string) error {
 		return err
 	}
 	for _, entry := range entries {
-		if !entry.IsDir() {
+		if !entry.IsDir() || entry.Name() == "quickstart" {
 			continue
 		}
 		path := filepath.Join(base, entry.Name(), "main.go")

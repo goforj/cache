@@ -245,7 +245,7 @@ func (c *Cache) getBytes(ctx context.Context, key string) ([]byte, bool, error) 
 }
 
 // BatchGetBytes returns all found values for the provided keys.
-// Missing keys are omitted from the returned map.
+// Missing keys are omitted from the returned map. Reads run individually.
 // @group Reads
 //
 // Example: batch get keys
@@ -400,7 +400,8 @@ func (c *Cache) setBytes(ctx context.Context, key string, value []byte, ttl time
 	return err
 }
 
-// BatchSetBytes writes many key/value pairs using a shared ttl.
+// BatchSetBytes writes each key individually using a shared TTL.
+// A write failure can leave an arbitrary subset of keys updated.
 // @group Writes
 //
 // Example: batch set keys
@@ -1028,15 +1029,16 @@ func newLockOwnerTokenFrom(source io.Reader) ([]byte, error) {
 	return token, nil
 }
 
-// PullBytes returns value and removes it from cache.
+// PullBytes reads a value and then deletes its key. The operations are separate.
+// Concurrent readers can receive the same value.
 // @group Invalidation
 //
 // Example: pull and delete
 //
 //	ctx := context.Background()
 //	c := cache.NewCache(cache.NewMemoryStore(ctx))
-//	_ = c.SetString("reset:token:42", "abc", time.Minute)
-//	body, ok, _ := c.PullBytes("reset:token:42")
+//	_ = c.SetString("preview:banner:42", "abc", time.Minute)
+//	body, ok, _ := c.PullBytes("preview:banner:42")
 //	fmt.Println(ok, string(body)) // true abc
 func (c *Cache) PullBytes(key string) ([]byte, bool, error) {
 	return c.pullBytes(c.context(), key)
@@ -1058,7 +1060,7 @@ func (c *Cache) pullBytes(ctx context.Context, key string) ([]byte, bool, error)
 	return body, true, nil
 }
 
-// Pull returns a typed value for key and removes it, using the default codec (JSON).
+// Pull reads a typed JSON value and then deletes its key. The operations are separate.
 // @group Invalidation
 //
 // Example: pull typed value
@@ -1066,14 +1068,14 @@ func (c *Cache) pullBytes(ctx context.Context, key string) ([]byte, bool, error)
 //	type Token struct { Value string `json:"value"` }
 //	ctx := context.Background()
 //	c := cache.NewCache(cache.NewMemoryStore(ctx))
-//	_ = c.Set("reset:token:42", Token{Value: "abc"}, time.Minute)
-//	tok, ok, err := c.Pull[Token]("reset:token:42")
+//	_ = c.Set("preview:banner:42", Token{Value: "abc"}, time.Minute)
+//	tok, ok, err := c.Pull[Token]("preview:banner:42")
 //	fmt.Println(err == nil, ok, tok.Value) // true true abc
 func (c *Cache) Pull[T any](key string) (T, bool, error) {
 	return pullValue[T](c.context(), c, key)
 }
 
-// Pull returns a typed value for key and removes it, using the default codec (JSON).
+// Pull reads a typed JSON value and then deletes its key. The operations are separate.
 // It remains available for compatibility; new code can use Cache.Pull.
 // @group Invalidation
 func Pull[T any](cache *Cache, key string) (T, bool, error) {
@@ -1158,7 +1160,8 @@ func (c *Cache) flush(ctx context.Context) error {
 	return err
 }
 
-// RememberBytes returns key value or computes/stores it when missing.
+// RememberBytes returns a cached value or computes and stores it on a miss.
+// Concurrent misses can each run the callback.
 // @group Read Through
 //
 // Example: remember bytes

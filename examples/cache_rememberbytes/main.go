@@ -9,7 +9,8 @@ import (
 
 // main keeps this generated example executable so API drift fails during compilation.
 func main() {
-	// RememberBytes returns key value or computes/stores it when missing.
+	// RememberBytes returns a cached value or computes and stores it on a miss.
+	// Concurrent misses can each run the callback.
 
 	// Example: remember bytes
 	ctx := context.Background()

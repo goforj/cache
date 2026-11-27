@@ -10,7 +10,7 @@ import (
 // main keeps this generated example executable so API drift fails during compilation.
 func main() {
 	// BatchGetBytes returns all found values for the provided keys.
-	// Missing keys are omitted from the returned map.
+	// Missing keys are omitted from the returned map. Reads run individually.
 
 	// Example: batch get keys
 	ctx := context.Background()

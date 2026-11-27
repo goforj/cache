@@ -8,24 +8,24 @@ import (
 	"github.com/goforj/cache/cachecore"
 )
 
+const (
+	memoMaxEntries = 256
+	memoMaxAge     = time.Second
+)
+
 type memoEntry struct {
-	body []byte
-	ok   bool
+	body      []byte
+	ok        bool
+	expiresAt time.Time
 }
 
-// NewMemoStore decorates store with per-process read memoization.
-//
-// Behavior:
-//   - First Get hits the backing store, clones the value, and memoizes it in-process.
-//   - Subsequent Get for the same key returns the memoized clone (no backend call).
-//   - Any write/delete/flush invalidates the memo entry so local reads stay in sync
-//     with changes made through this process.
-//   - Successful mutations advance one bounded process generation. This can prevent an
-//     unrelated in-flight read from being memoized, but it does not evict unrelated hits.
-//   - Memo data is per-process only; other processes or external writers will not
-//     invalidate it. Use only when that staleness window is acceptable.
-//   - NewMemoStore panics when store is nil because the backing store is required.
-//
+// NewMemoStore decorates a backing store with a short-lived local read snapshot.
+// Create one per request or unit of work. It holds up to 256 hits or misses, each
+// for at most one second from the start of its backing read. Those reads can
+// outlive the value's backing TTL or miss a write made through another handle.
+// Use the backing store directly when you need backend TTL or immediate visibility.
+// Writes through the decorator invalidate the memoized keys. The caller retains
+// ownership of the backing store. NewMemoStore panics when the store is nil.
 // @group Memoization
 //
 // Example: memoize a backing store
@@ -65,11 +65,12 @@ func (s *memoStore) Ready(ctx context.Context) error {
 
 // Get returns an owned copy of a stored value and distinguishes misses from failures.
 func (s *memoStore) Get(ctx context.Context, key string) ([]byte, bool, error) {
+	now := time.Now()
 	s.mu.RLock()
 	entry, ok := s.items[key]
 	generation := s.generation
 	s.mu.RUnlock()
-	if ok {
+	if ok && now.Before(entry.expiresAt) {
 		return cloneBytes(entry.body), entry.ok, nil
 	}
 
@@ -79,8 +80,12 @@ func (s *memoStore) Get(ctx context.Context, key string) ([]byte, bool, error) {
 	}
 
 	s.mu.Lock()
-	if s.generation == generation {
-		s.items[key] = memoEntry{body: cloneBytes(body), ok: exists}
+	if expiresAt := now.Add(memoMaxAge); s.generation == generation && time.Now().Before(expiresAt) {
+		if _, present := s.items[key]; !present && len(s.items) >= memoMaxEntries {
+			// Drop the snapshot as a unit rather than keeping a second eviction index.
+			clear(s.items)
+		}
+		s.items[key] = memoEntry{body: cloneBytes(body), ok: exists, expiresAt: expiresAt}
 	}
 	s.mu.Unlock()
 
@@ -168,28 +173,24 @@ func (s *memoStore) Delete(ctx context.Context, key string) error {
 
 // DeleteMany removes every requested key under the store's namespace.
 func (s *memoStore) DeleteMany(ctx context.Context, keys ...string) error {
-	if err := s.store.DeleteMany(ctx, keys...); err != nil {
-		return err
-	}
+	err := s.store.DeleteMany(ctx, keys...)
 	s.mu.Lock()
 	for _, key := range keys {
 		delete(s.items, key)
 	}
 	s.generation++
 	s.mu.Unlock()
-	return nil
+	return err
 }
 
 // Flush removes entries within the store's configured scope.
 func (s *memoStore) Flush(ctx context.Context) error {
-	if err := s.store.Flush(ctx); err != nil {
-		return err
-	}
+	err := s.store.Flush(ctx)
 	s.mu.Lock()
-	s.items = make(map[string]memoEntry)
+	clear(s.items)
 	s.generation++
 	s.mu.Unlock()
-	return nil
+	return err
 }
 
 // forget advances the store generation so no in-flight read can republish stale data.
