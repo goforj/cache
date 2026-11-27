@@ -123,7 +123,7 @@ func main() {
 Memory, file, and null are included in the root module. Install only the additional driver modules you use.
 
 | Backend | Use and limits |
-| :--- | :--- |
+| ---: | :--- |
 | <a href="#newmemorystore"><img src="https://img.shields.io/badge/memory-5c5c5c?logo=cachet&logoColor=white" alt="Memory"></a> | In-process cache. Values, locks, and counters are local to each process. |
 | <a href="#newfilestore"><img src="https://img.shields.io/badge/file-3f51b5?logo=files&logoColor=white" alt="File"></a> | Local files that survive restarts. Use a dedicated directory. Locks are process-local. |
 | <a href="#newnullstore"><img src="https://img.shields.io/badge/null-9e9e9e?logo=probot&logoColor=white" alt="Null"></a> | Disable caching. Drops writes and admits every lock. |
