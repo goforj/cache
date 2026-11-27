@@ -75,24 +75,22 @@ func main() {
 
 <!-- quick-start:embed:end -->
 
-[Run the complete example from this repository](examples/quickstart/main.go).
-
 ## Drivers
 
 Memory, file, and null are included in the root module. Install only the additional driver modules you use.
 
-| Backend | Choose it for | Scope and limits |
-| :--- | :--- | :--- |
-| Memory | Local development and one-process services | Values, locks, and counters are process-local. |
-| File | Local cache files that survive a restart | Lock coordination is process-local. Use a dedicated directory. |
-| Null | Running with caching disabled | Drops writes and admits every lock. |
-| [Redis](#driver-config-rediscache) | A shared cache with native counters | Counter expiry uses second granularity. |
-| [Memcached](#driver-config-memcachedcache) | Shared, ephemeral cache and counters | One-second TTL resolution. Each key routes to a stable peer. |
-| [NATS JetStream KV](#driver-config-natscache) | A cache backed by an existing KV bucket | Choose per-key or bucket-wide TTL. |
-| [DynamoDB](#driver-config-dynamocache) | A shared cache using a DynamoDB table | Item limits apply to encoded values and metadata. |
-| [SQLite](#driver-config-sqlitecache) | An embedded cache using SQL | Use a dedicated file or database when process-local access is sufficient. |
-| [PostgreSQL](#driver-config-postgrescache) | A shared cache using PostgreSQL | SQL table lifecycle and permissions apply. |
-| [MySQL](#driver-config-mysqlcache) | A shared cache using MySQL | SQL table lifecycle and permissions apply. |
+| Backend | Use and limits |
+| :--- | :--- |
+| <a href="#newmemorystore"><img src="https://img.shields.io/badge/memory-5c5c5c?logo=cachet&logoColor=white" alt="Memory"></a> | In-process cache. Values, locks, and counters are local to each process. |
+| <a href="#newfilestore"><img src="https://img.shields.io/badge/file-3f51b5?logo=files&logoColor=white" alt="File"></a> | Local files that survive restarts. Use a dedicated directory. Locks are process-local. |
+| <a href="#newnullstore"><img src="https://img.shields.io/badge/null-9e9e9e?logo=probot&logoColor=white" alt="Null"></a> | Disable caching. Drops writes and admits every lock. |
+| <a href="#driver-config-rediscache"><img src="https://img.shields.io/badge/redis-%23DC382D?logo=redis&logoColor=white" alt="Redis"></a> | Shared cache with native counters. Counter expiry has one-second resolution. |
+| <a href="#driver-config-memcachedcache"><img src="https://img.shields.io/badge/memcached-0198c4?logo=buffer&logoColor=white" alt="Memcached"></a> | Shared, ephemeral cache. Keys route to a stable peer. TTL resolution is one second. |
+| <a href="#driver-config-natscache"><img src="https://img.shields.io/badge/nats-27AAE1?logo=natsdotio&logoColor=white" alt="NATS JetStream KV"></a> | Uses an existing JetStream KV bucket with per-key or bucket-wide TTL. |
+| <a href="#driver-config-dynamocache"><img src="https://img.shields.io/badge/dynamodb-4053D6?logo=amazon-dynamodb&logoColor=white" alt="DynamoDB"></a> | Shared cache using a DynamoDB table. Item limits include encoded values and metadata. |
+| <a href="#driver-config-sqlitecache"><img src="https://img.shields.io/badge/sqlite-003B57?logo=sqlite&logoColor=white" alt="SQLite"></a> | Embedded SQL cache. Use a dedicated file or database. |
+| <a href="#driver-config-postgrescache"><img src="https://img.shields.io/badge/postgres-336791?logo=postgresql&logoColor=white" alt="PostgreSQL"></a> | Shared SQL cache backed by PostgreSQL. Requires access to a cache table. |
+| <a href="#driver-config-mysqlcache"><img src="https://img.shields.io/badge/mysql-4479A1?logo=mysql&logoColor=white" alt="MySQL"></a> | Shared SQL cache backed by MySQL. Requires access to a cache table. |
 
 ```sh
 go get github.com/goforj/cache/driver/rediscache@latest
