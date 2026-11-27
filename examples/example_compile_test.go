@@ -193,12 +193,17 @@ func TestQuickStartOutput(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, expectation, ok := strings.Cut(string(source), "// Output: ")
-	if !ok {
+	var want strings.Builder
+	for line := range strings.Lines(string(source)) {
+		if expected, ok := strings.CutPrefix(strings.TrimSpace(line), "// Output: "); ok {
+			want.WriteString(expected)
+			want.WriteByte('\n')
+		}
+	}
+	if want.Len() == 0 {
 		t.Fatal("quick start is missing its expected output")
 	}
-	want, _, _ := strings.Cut(expectation, "\n")
-	if string(output) != want+"\n" {
-		t.Fatalf("quick start output = %q, want %q", output, want+"\n")
+	if string(output) != want.String() {
+		t.Fatalf("quick start output = %q, want %q", output, want.String())
 	}
 }
