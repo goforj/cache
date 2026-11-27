@@ -6,11 +6,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"hash/crc32"
 	"io"
 	"net"
+	"slices"
 	"strconv"
 	"strings"
-	"sync/atomic"
+	"sync"
 	"time"
 
 	"github.com/goforj/cache/cachecore"
@@ -20,6 +22,7 @@ const (
 	defaultTTL                = 5 * time.Minute
 	defaultPrefix             = "app"
 	expiredMemcachedTimestamp = 30*24*60*60 + 1
+	ioTimeout                 = 3 * time.Second
 )
 
 var dialMemcached = func(ctx context.Context, network, addr string) (net.Conn, error) {
@@ -30,15 +33,20 @@ var dialMemcached = func(ctx context.Context, network, addr string) (net.Conn, e
 // Config configures a Memcached-backed cache store.
 type Config struct {
 	cachecore.BaseConfig
+	// Addresses identifies the peers used for deterministic key routing.
 	Addresses []string
+	// AllowServerFlush enables Flush on dedicated servers. It clears every prefix on every peer.
+	AllowServerFlush bool
 }
 
 type store struct {
-	addrs      []string
-	defaultTTL time.Duration
-	prefix     string
-	pools      map[string]chan *memcachedConn
-	rr         uint32
+	addrs            []string
+	defaultTTL       time.Duration
+	prefix           string
+	pools            map[string]chan *memcachedConn
+	allowServerFlush bool
+	mu               sync.Mutex
+	closed           bool
 }
 
 type memcachedConn struct {
@@ -47,12 +55,15 @@ type memcachedConn struct {
 	reader *bufio.Reader
 }
 
-// New builds a Memcached-backed cachecore.Store.
+// New builds a lazy Memcached store that owns its connections. The caller can
+// release them through io.Closer. Addresses are treated as a fixed peer set.
+// A failed peer returns an error for its keys so locks never fail over to another peer.
 //
 // Defaults:
 // - Addresses: []string{"127.0.0.1:11211"} when empty
 // - DefaultTTL: 5*time.Minute when zero
 // - Prefix: "app" when empty
+// - AllowServerFlush: false, unless every server is dedicated to this cache
 //
 // Example: memcached cluster via explicit driver config
 //
@@ -65,7 +76,9 @@ type memcachedConn struct {
 //	})
 //	fmt.Println(store.Driver()) // memcached
 func New(cfg Config) cachecore.Store {
-	addrs := cfg.Addresses
+	addrs := slices.Clone(cfg.Addresses)
+	slices.Sort(addrs)
+	addrs = slices.Compact(addrs)
 	if len(addrs) == 0 {
 		addrs = []string{"127.0.0.1:11211"}
 	}
@@ -81,7 +94,7 @@ func New(cfg Config) cachecore.Store {
 	for _, addr := range addrs {
 		pools[addr] = make(chan *memcachedConn, 16)
 	}
-	backend := &store{addrs: addrs, defaultTTL: ttl, prefix: prefix, pools: pools}
+	backend := &store{addrs: addrs, defaultTTL: ttl, prefix: prefix, pools: pools, allowServerFlush: cfg.AllowServerFlush}
 	wrapped, _ := cachecore.WrapStore(backend, cfg.BaseConfig)
 	return wrapped
 }
@@ -91,36 +104,22 @@ func (s *store) Driver() cachecore.Driver { return cachecore.DriverMemcached }
 
 // Ready verifies that the backend can serve cache operations.
 func (s *store) Ready(ctx context.Context) error {
-	mc, err := s.acquire(ctx)
-	if err != nil {
-		return err
-	}
-	bad := false
-	defer func() { s.release(mc, bad) }()
-	if _, err := fmt.Fprintf(mc.conn, "version\r\n"); err != nil {
-		bad = true
-		return err
-	}
-	line, err := mc.reader.ReadString('\n')
-	if err != nil {
-		bad = true
-		return err
-	}
-	if !strings.HasPrefix(line, "VERSION ") {
-		bad = true
-		return fmt.Errorf("memcached readiness failed: %s", strings.TrimSpace(line))
+	for _, addr := range s.addrs {
+		if err := s.serverCommand(ctx, addr, "version", "VERSION "); err != nil {
+			return err
+		}
 	}
 	return nil
 }
 
 // Get returns an owned copy of a stored value and distinguishes misses from failures.
 func (s *store) Get(ctx context.Context, key string) ([]byte, bool, error) {
-	mc, err := s.acquire(ctx)
+	mc, release, err := s.acquireKey(ctx, key)
 	if err != nil {
 		return nil, false, err
 	}
 	bad := false
-	defer func() { s.release(mc, bad) }()
+	defer func() { release(bad) }()
 
 	full := s.cacheKey(key)
 	if _, err := fmt.Fprintf(mc.conn, "get %s\r\n", full); err != nil {
@@ -137,27 +136,22 @@ func (s *store) Get(ctx context.Context, key string) ([]byte, bool, error) {
 	}
 
 	fields := strings.Fields(strings.TrimSpace(line))
-	if len(fields) < 4 || fields[0] != "VALUE" {
+	if len(fields) != 4 || fields[0] != "VALUE" || fields[1] != full {
+		bad = true
 		return nil, false, fmt.Errorf("unexpected response: %s", strings.TrimSpace(line))
 	}
 	bytesLen, err := strconv.Atoi(fields[3])
+	if err != nil || bytesLen < 0 {
+		bad = true
+		return nil, false, errors.New("invalid memcached value length")
+	}
+	value, err := readValue(mc.reader, bytesLen)
 	if err != nil {
-		return nil, false, fmt.Errorf("parse length: %w", err)
-	}
-	value := make([]byte, bytesLen)
-	if _, err := io.ReadFull(mc.reader, value); err != nil {
 		bad = true
 		return nil, false, err
 	}
-	if _, err := mc.reader.ReadString('\n'); err != nil { // trailing CRLF
-		bad = true
-		return nil, false, err
-	}
-	if _, err := mc.reader.ReadString('\n'); err != nil { // END
-		bad = true
-		return nil, false, err
-	}
-	return cloneBytes(value), true, nil
+
+	return value, true, nil
 }
 
 // Set stores an owned copy of a value using the requested or default TTL.
@@ -165,12 +159,12 @@ func (s *store) Set(ctx context.Context, key string, value []byte, ttl time.Dura
 	if ttl <= 0 {
 		ttl = s.defaultTTL
 	}
-	mc, err := s.acquire(ctx)
+	mc, release, err := s.acquireKey(ctx, key)
 	if err != nil {
 		return err
 	}
 	bad := false
-	defer func() { s.release(mc, bad) }()
+	defer func() { release(bad) }()
 
 	full := s.cacheKey(key)
 	seconds := int(ttl.Seconds())
@@ -206,12 +200,12 @@ func (s *store) Add(ctx context.Context, key string, value []byte, ttl time.Dura
 	if ttl <= 0 {
 		ttl = s.defaultTTL
 	}
-	mc, err := s.acquire(ctx)
+	mc, release, err := s.acquireKey(ctx, key)
 	if err != nil {
 		return false, err
 	}
 	bad := false
-	defer func() { s.release(mc, bad) }()
+	defer func() { release(bad) }()
 
 	full := s.cacheKey(key)
 	seconds := int(ttl.Seconds())
@@ -253,12 +247,12 @@ func (s *store) LockAcquire(ctx context.Context, key string, owner []byte, ttl t
 
 // LockRelease uses one Memcached CAS to expire only the current owner's value.
 func (s *store) LockRelease(ctx context.Context, key string, owner []byte) (bool, error) {
-	mc, err := s.acquire(ctx)
+	mc, release, err := s.acquireKey(ctx, key)
 	if err != nil {
 		return false, err
 	}
 	bad := false
-	defer func() { s.release(mc, bad) }()
+	defer func() { release(bad) }()
 	full := s.cacheKey(key)
 	if _, err := fmt.Fprintf(mc.conn, "gets %s\r\n", full); err != nil {
 		bad = true
@@ -273,28 +267,21 @@ func (s *store) LockRelease(ctx context.Context, key string, owner []byte) (bool
 		return false, nil
 	}
 	fields := strings.Fields(strings.TrimSpace(line))
-	if len(fields) != 5 || fields[0] != "VALUE" {
+	if len(fields) != 5 || fields[0] != "VALUE" || fields[1] != full {
 		bad = true
 		return false, fmt.Errorf("unexpected response: %s", strings.TrimSpace(line))
 	}
 	bytesLen, err := strconv.Atoi(fields[3])
+	if err != nil || bytesLen < 0 {
+		bad = true
+		return false, errors.New("invalid memcached value length")
+	}
+	value, err := readValue(mc.reader, bytesLen)
 	if err != nil {
 		bad = true
-		return false, fmt.Errorf("parse length: %w", err)
-	}
-	value := make([]byte, bytesLen)
-	if _, err := io.ReadFull(mc.reader, value); err != nil {
-		bad = true
 		return false, err
 	}
-	if _, err := mc.reader.ReadString('\n'); err != nil {
-		bad = true
-		return false, err
-	}
-	if _, err := mc.reader.ReadString('\n'); err != nil {
-		bad = true
-		return false, err
-	}
+
 	if !bytes.Equal(value, owner) {
 		return false, nil
 	}
@@ -343,29 +330,35 @@ func (s *store) incr(ctx context.Context, key string, delta int64, ttl time.Dura
 	if ttl <= 0 {
 		ttl = s.defaultTTL
 	}
-	mc, err := s.acquire(ctx)
+	mc, release, err := s.acquireKey(ctx, key)
 	if err != nil {
 		return 0, err
 	}
 	bad := false
-	defer func() { s.release(mc, bad) }()
+	defer func() { release(bad) }()
 
 	full := s.cacheKey(key)
-	if _, err := fmt.Fprintf(mc.conn, "%s %s %d\r\n", verb, full, delta); err != nil {
-		bad = true
-		return 0, err
-	}
-	line, err := mc.reader.ReadString('\n')
-	if err != nil {
-		bad = true
-		return 0, err
-	}
-	line = strings.TrimSpace(line)
-	if line == "NOT_FOUND" {
-		if err := s.Set(ctx, key, []byte("0"), ttl); err != nil {
+	var line string
+	for attempt := 0; ; attempt++ {
+		if _, err := fmt.Fprintf(mc.conn, "%s %s %d\r\n", verb, full, delta); err != nil {
+			bad = true
 			return 0, err
 		}
-		return s.incr(ctx, key, delta, ttl, verb)
+		response, err := mc.reader.ReadString('\n')
+		if err != nil {
+			bad = true
+			return 0, err
+		}
+		line = strings.TrimSpace(response)
+		if line != "NOT_FOUND" {
+			break
+		}
+		if attempt == 3 {
+			return 0, errors.New("memcached counter disappeared during initialization")
+		}
+		if _, err := s.Add(ctx, key, []byte("0"), ttl); err != nil {
+			return 0, err
+		}
 	}
 	if strings.HasPrefix(line, "ERROR") {
 		bad = true
@@ -400,19 +393,24 @@ func (s *store) incr(ctx context.Context, key string, delta int64, ttl time.Dura
 
 // Delete removes a key and treats an existing miss as success.
 func (s *store) Delete(ctx context.Context, key string) error {
-	mc, err := s.acquire(ctx)
+	mc, release, err := s.acquireKey(ctx, key)
 	if err != nil {
 		return err
 	}
 	bad := false
-	defer func() { s.release(mc, bad) }()
+	defer func() { release(bad) }()
 	if _, err := fmt.Fprintf(mc.conn, "delete %s\r\n", s.cacheKey(key)); err != nil {
 		bad = true
 		return err
 	}
-	if _, err := mc.reader.ReadString('\n'); err != nil {
+	line, err := mc.reader.ReadString('\n')
+	if err != nil {
 		bad = true
 		return err
+	}
+	if line != "DELETED\r\n" && line != "NOT_FOUND\r\n" {
+		bad = true
+		return fmt.Errorf("memcached delete failed: %s", strings.TrimSpace(line))
 	}
 	return nil
 }
@@ -427,76 +425,127 @@ func (s *store) DeleteMany(ctx context.Context, keys ...string) error {
 	return nil
 }
 
-// Flush removes entries within the store's configured scope.
+// Flush clears all configured peers when they are explicitly dedicated to this cache.
 func (s *store) Flush(ctx context.Context) error {
-	mc, err := s.acquire(ctx)
+	if !s.allowServerFlush {
+		return errors.New("memcached cannot flush one prefix; enable AllowServerFlush only for dedicated servers")
+	}
+	var result error
+	for _, addr := range s.addrs {
+		result = errors.Join(result, s.serverCommand(ctx, addr, "flush_all", "OK\r\n"))
+	}
+	return result
+}
+
+// serverCommand executes a server-wide operation against one specific peer.
+func (s *store) serverCommand(ctx context.Context, addr, command, expected string) error {
+	mc, release, err := s.acquire(ctx, addr)
 	if err != nil {
 		return err
 	}
-	bad := false
-	defer func() { s.release(mc, bad) }()
-	if _, err := fmt.Fprintf(mc.conn, "flush_all\r\n"); err != nil {
-		bad = true
+	bad := true
+	defer func() { release(bad) }()
+	if _, err := fmt.Fprint(mc.conn, command+"\r\n"); err != nil {
 		return err
 	}
 	line, err := mc.reader.ReadString('\n')
 	if err != nil {
-		bad = true
 		return err
 	}
-	if !strings.HasPrefix(line, "OK") {
-		bad = true
-		return fmt.Errorf("memcached flush failed: %s", strings.TrimSpace(line))
+	if !strings.HasPrefix(line, expected) {
+		return fmt.Errorf("memcached %s failed on %s: %s", command, addr, strings.TrimSpace(line))
 	}
+	bad = false
 	return nil
 }
 
-// acquire reuses a healthy Memcached connection or dials a configured peer in round-robin order.
-func (s *store) acquire(ctx context.Context) (*memcachedConn, error) {
-	if len(s.addrs) == 0 {
-		return nil, errors.New("memcached: no addresses configured")
+// acquireKey validates the wire key and routes every operation to the same peer.
+func (s *store) acquireKey(ctx context.Context, key string) (*memcachedConn, func(bool), error) {
+	full := s.cacheKey(key)
+	if len(full) > 250 || strings.IndexFunc(full, func(r rune) bool { return r <= ' ' || r == 0x7f }) >= 0 {
+		return nil, nil, errors.New("memcached key must fit within 250 bytes and contain no whitespace or control characters")
 	}
-	var errs bytes.Buffer
-	start := int(atomic.AddUint32(&s.rr, 1)-1) % len(s.addrs)
-	for i := 0; i < len(s.addrs); i++ {
-		addr := s.addrs[(start+i)%len(s.addrs)]
-		if pool, ok := s.pools[addr]; ok {
-			select {
-			case mc := <-pool:
-				if mc != nil {
-					return mc, nil
-				}
-			default:
-			}
-		}
-		conn, err := dialMemcached(ctx, "tcp", addr)
-		if err == nil {
-			return &memcachedConn{addr: addr, conn: conn, reader: bufio.NewReader(conn)}, nil
-		}
-		fmt.Fprintf(&errs, "%s: %v; ", addr, err)
+	addr := s.addrs[int(uint64(crc32.ChecksumIEEE([]byte(full)))%uint64(len(s.addrs)))]
+	return s.acquire(ctx, addr)
+}
+
+// acquire sets an operation deadline on each socket, including pooled sockets.
+func (s *store) acquire(ctx context.Context, addr string) (*memcachedConn, func(bool), error) {
+	if err := ctx.Err(); err != nil {
+		return nil, nil, err
 	}
-	return nil, fmt.Errorf("memcached dial failed: %s", errs.String())
+	mc, err := s.takeConnection(ctx, addr)
+	if err != nil {
+		return nil, nil, err
+	}
+	deadline := time.Now().Add(ioTimeout)
+	if sooner, ok := ctx.Deadline(); ok && sooner.Before(deadline) {
+		deadline = sooner
+	}
+	if err := mc.conn.SetDeadline(deadline); err != nil {
+		s.release(mc, true)
+		return nil, nil, err
+	}
+	done := make(chan struct{})
+	stop := context.AfterFunc(ctx, func() {
+		_ = mc.conn.SetDeadline(time.Now())
+		close(done)
+	})
+	return mc, func(bad bool) {
+		if !stop() {
+			<-done
+			bad = true
+		}
+		s.release(mc, bad)
+	}, nil
+}
+
+// takeConnection takes a socket from the selected peer or dials only that peer.
+func (s *store) takeConnection(ctx context.Context, addr string) (*memcachedConn, error) {
+	s.mu.Lock()
+	if s.closed {
+		s.mu.Unlock()
+		return nil, net.ErrClosed
+	}
+	select {
+	case mc := <-s.pools[addr]:
+		s.mu.Unlock()
+		return mc, nil
+	default:
+		s.mu.Unlock()
+	}
+	conn, err := dialMemcached(ctx, "tcp", addr)
+	if err != nil {
+		return nil, fmt.Errorf("memcached dial %s: %w", addr, err)
+	}
+	return &memcachedConn{addr: addr, conn: conn, reader: bufio.NewReader(conn)}, nil
 }
 
 // release returns a healthy Memcached connection to its pool and closes unusable connections.
 func (s *store) release(mc *memcachedConn, bad bool) {
-	if mc == nil || mc.conn == nil {
-		return
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !bad && !s.closed {
+		select {
+		case s.pools[mc.addr] <- mc:
+			return
+		default:
+		}
 	}
-	if bad {
-		_ = mc.conn.Close()
-		return
+	_ = mc.conn.Close()
+}
+
+// Close drains idle connections. In-flight operations close their sockets when they return.
+func (s *store) Close() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.closed = true
+	for _, pool := range s.pools {
+		for len(pool) > 0 {
+			_ = (<-pool).conn.Close()
+		}
 	}
-	pool, ok := s.pools[mc.addr]
-	if !ok {
-		_ = mc.conn.Close()
-		return
-	}
-	select {
-	case pool <- mc:
-	default:
-		_ = mc.conn.Close()
-	}
+	return nil
 }
 
 // cacheKey applies the configured namespace before a key reaches the backend.
@@ -507,12 +556,20 @@ func (s *store) cacheKey(key string) string {
 	return s.prefix + ":" + key
 }
 
-// cloneBytes protects store ownership by returning an independent byte slice.
-func cloneBytes(value []byte) []byte {
-	if value == nil {
-		return nil
+// readValue verifies the whole response before a connection can return to the pool.
+func readValue(reader *bufio.Reader, size int) ([]byte, error) {
+	value := bytes.NewBuffer([]byte{})
+	if _, err := io.CopyN(value, reader, int64(size)); err != nil {
+		return nil, err
 	}
-	out := make([]byte, len(value))
-	copy(out, value)
-	return out
+	for _, expected := range []string{"\r\n", "END\r\n"} {
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			return nil, err
+		}
+		if line != expected {
+			return nil, errors.New("invalid memcached value terminator")
+		}
+	}
+	return value.Bytes(), nil
 }

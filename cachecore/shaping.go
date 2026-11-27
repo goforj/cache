@@ -43,6 +43,7 @@ var encryptionMagic = []byte("ENC1")
 
 // WrapStore applies BaseConfig value shaping to store while preserving atomic counter operations.
 //
+// Wrapped stores forward Close to an underlying io.Closer when present.
 // Existing unmarked values remain readable. When both encryption and compression are enabled,
 // the persisted format preserves the original cache package order: an ENC1 encryption envelope
 // wrapped by a CMP1 compression envelope. A configuration error returns both an error and a
@@ -74,6 +75,14 @@ func WrapStore(store Store, cfg BaseConfig) (Store, error) {
 	return wrapped, nil
 }
 
+// closeStore lets optional store lifecycle travel through value decorators.
+func closeStore(store Store) error {
+	if closer, ok := store.(io.Closer); ok {
+		return closer.Close()
+	}
+	return nil
+}
+
 // ValidateBaseConfig checks shaping settings without constructing or contacting a backend.
 func ValidateBaseConfig(cfg BaseConfig) error {
 	if cfg.MaxValueBytes < 0 {
@@ -101,6 +110,9 @@ func (s *shapingStore) Driver() Driver { return s.inner.Driver() }
 
 // Ready delegates readiness to the wrapped backend.
 func (s *shapingStore) Ready(ctx context.Context) error { return s.inner.Ready(ctx) }
+
+// Close forwards shutdown to stores that own resources.
+func (s *shapingStore) Close() error { return closeStore(s.inner) }
 
 // Get decodes a marked compression envelope while allowing legacy raw values through.
 func (s *shapingStore) Get(ctx context.Context, key string) ([]byte, bool, error) {
@@ -219,6 +231,9 @@ func (s *encryptingStore) Driver() Driver { return s.inner.Driver() }
 
 // Ready delegates readiness to the wrapped backend.
 func (s *encryptingStore) Ready(ctx context.Context) error { return s.inner.Ready(ctx) }
+
+// Close forwards shutdown to stores that own resources.
+func (s *encryptingStore) Close() error { return closeStore(s.inner) }
 
 // Get decrypts a marked encryption envelope while allowing legacy raw values through.
 func (s *encryptingStore) Get(ctx context.Context, key string) ([]byte, bool, error) {

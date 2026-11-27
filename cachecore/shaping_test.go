@@ -702,3 +702,31 @@ func TestEncryptPropagatesRandomnessFailure(t *testing.T) {
 		t.Fatalf("encrypt error = %v, want io.ErrUnexpectedEOF", err)
 	}
 }
+
+type closingShapingStore struct {
+	*shapingTestStore
+	err error
+}
+
+// Close reports the backend's shutdown error to the decorator.
+func (s *closingShapingStore) Close() error { return s.err }
+
+// TestWrapStoreForwardsClose verifies ownership survives both value decorators.
+func TestWrapStoreForwardsClose(t *testing.T) {
+	closeErr := errors.New("test close failed")
+	config := BaseConfig{Compression: CompressionGzip, EncryptionKey: []byte("1234567890123456")}
+	wrapped, err := WrapStore(&closingShapingStore{shapingTestStore: &shapingTestStore{}, err: closeErr}, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := wrapped.(io.Closer).Close(); !errors.Is(err, closeErr) {
+		t.Fatalf("Close error = %v, want %v", err, closeErr)
+	}
+	wrapped, err = WrapStore(&shapingTestStore{}, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := wrapped.(io.Closer).Close(); err != nil {
+		t.Fatalf("Close of wrapper with a non-closable backend = %v", err)
+	}
+}

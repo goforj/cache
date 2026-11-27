@@ -134,7 +134,7 @@ func (s *store) Get(_ context.Context, key string) ([]byte, bool, error) {
 	}
 	if wrapped {
 		if env.ExpiresAt > 0 && time.Now().UnixMilli() > env.ExpiresAt {
-			_ = s.kv.Purge(cacheKey)
+			_ = s.kv.Purge(cacheKey, nats.LastRevision(entry.Revision()))
 			return nil, false, nil
 		}
 		return cloneBytes(env.Value), true, nil
@@ -291,6 +291,7 @@ func (s *store) Increment(_ context.Context, key string, delta int64, ttl time.D
 			if entry.Operation() == nats.KeyValueDelete || entry.Operation() == nats.KeyValuePurge {
 				revision = 0
 			} else {
+				revision = entry.Revision()
 				raw := entry.Value()
 				if !s.bucketTTL {
 					env, wrapped, decodeErr := decodeEnvelope(raw)
@@ -298,19 +299,12 @@ func (s *store) Increment(_ context.Context, key string, delta int64, ttl time.D
 						return 0, decodeErr
 					}
 					if wrapped {
+						raw = env.Value
 						if env.ExpiresAt > 0 && time.Now().UnixMilli() > env.ExpiresAt {
-							_ = s.kv.Purge(cacheKey)
-							revision = 0
+							// Update the expired revision directly so a concurrent write wins the CAS.
 							raw = nil
-						} else {
-							raw = env.Value
-							revision = entry.Revision()
 						}
-					} else {
-						revision = entry.Revision()
 					}
-				} else {
-					revision = entry.Revision()
 				}
 				if len(raw) > 0 {
 					parsed, parseErr := strconv.ParseInt(string(raw), 10, 64)

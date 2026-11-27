@@ -3,6 +3,7 @@ package cache
 import (
 	"context"
 	"errors"
+	"strconv"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -329,5 +330,41 @@ func TestMemoStoreInvalidationIsLocalAcrossMemoStoresSharingBase(t *testing.T) {
 	}
 	if body, ok, err := storeB.Get(ctx, "k"); err != nil || !ok || string(body) != "v2" {
 		t.Fatalf("storeB should remain stale after storeA write: ok=%v err=%v body=%q", ok, err, string(body))
+	}
+}
+
+// TestMemoStoreRechecksExpiredSnapshots verifies backing expiration becomes visible after the memo lifetime.
+func TestMemoStoreRechecksExpiredSnapshots(t *testing.T) {
+	ctx := context.Background()
+	base := newMemoryStore(0, 0)
+	memo := NewMemoStore(base).(*memoStore)
+	if err := base.Set(ctx, "key", []byte("old"), time.Minute); err != nil {
+		t.Fatal(err)
+	}
+	if _, hit, err := memo.Get(ctx, "key"); err != nil || !hit {
+		t.Fatalf("prime memo: hit=%v err=%v", hit, err)
+	}
+	if err := base.Delete(ctx, "key"); err != nil {
+		t.Fatal(err)
+	}
+	entry := memo.items["key"]
+	entry.expiresAt = time.Now().Add(-time.Second)
+	memo.items["key"] = entry
+	if _, hit, err := memo.Get(ctx, "key"); err != nil || hit {
+		t.Fatalf("expired snapshot: hit=%v err=%v", hit, err)
+	}
+}
+
+// TestMemoStoreBoundsMisses verifies unbounded key cardinality cannot grow the snapshot.
+func TestMemoStoreBoundsMisses(t *testing.T) {
+	ctx := context.Background()
+	memo := NewMemoStore(newMemoryStore(0, 0)).(*memoStore)
+	for i := 0; i <= memoMaxEntries; i++ {
+		if _, hit, err := memo.Get(ctx, strconv.Itoa(i)); err != nil || hit {
+			t.Fatalf("Get(%d): hit=%v err=%v", i, hit, err)
+		}
+	}
+	if len(memo.items) != 1 {
+		t.Fatalf("memo holds %d entries after resetting capacity", len(memo.items))
 	}
 }

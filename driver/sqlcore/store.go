@@ -43,7 +43,8 @@ type sqlStore struct {
 
 var sqlIdentPartRE = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
-// New builds a SQL-backed cachecore.Store (postgres, mysql, sqlite).
+// New opens a SQL-backed cache store and initializes its schema. The caller owns
+// the store and can release its database pool through io.Closer.
 //
 // Defaults:
 // - Table: "cache_entries" when empty
@@ -74,18 +75,27 @@ func New(cfg Config) (cachecore.Store, error) {
 	if cfg.DriverName == "" || cfg.DSN == "" {
 		return nil, errors.New("sql driver requires driver name and dsn")
 	}
-	db, err := sql.Open(cfg.DriverName, cfg.DSN)
-	if err != nil {
-		return nil, err
-	}
-	if err := db.Ping(); err != nil {
-		return nil, err
-	}
 	table := cfg.Table
 	if table == "" {
 		table = defaultTable
 	}
 	if err := validateSQLTableName(table); err != nil {
+		return nil, err
+	}
+	db, err := sql.Open(cfg.DriverName, cfg.DSN)
+	if err != nil {
+		return nil, err
+	}
+	wrapped, err := openStore(db, table, cfg)
+	if err != nil {
+		_ = db.Close()
+	}
+	return wrapped, err
+}
+
+// openStore initializes a pool owned by the caller until construction succeeds.
+func openStore(db *sql.DB, table string, cfg Config) (cachecore.Store, error) {
+	if err := db.Ping(); err != nil {
 		return nil, err
 	}
 	ttl := cfg.DefaultTTL
@@ -111,6 +121,9 @@ func New(cfg Config) (cachecore.Store, error) {
 	}
 	return cachecore.WrapStore(s, cfg.BaseConfig)
 }
+
+// Close releases the database pool and its prepared statements.
+func (s *sqlStore) Close() error { return s.db.Close() }
 
 // Driver identifies the backend for diagnostics and capability-specific behavior.
 func (s *sqlStore) Driver() cachecore.Driver { return cachecore.DriverSQL }
@@ -159,7 +172,8 @@ func (s *sqlStore) Get(ctx context.Context, key string) ([]byte, bool, error) {
 		return nil, false, err
 	}
 	if time.Now().UnixMilli() > exp {
-		_ = s.Delete(ctx, key)
+		query := fmt.Sprintf("DELETE FROM %s WHERE k = %s AND ea = %s", s.table, s.ph(1), s.ph(2))
+		_, _ = s.db.ExecContext(ctx, query, s.cacheKey(key), exp)
 		return nil, false, nil
 	}
 	return cloneBytes(v), true, nil
@@ -233,6 +247,11 @@ func (s *sqlStore) Increment(ctx context.Context, key string, delta int64, ttl t
 	}
 	defer tx.Rollback()
 
+	// Materialize the row before reading so concurrent first increments contend on the same row.
+	if _, err := tx.ExecContext(ctx, s.seedCounterSQL(), s.cacheKey(key), []byte("0"), int64(0)); err != nil {
+		return 0, err
+	}
+
 	var v []byte
 	var exp int64
 	selectSQL := fmt.Sprintf("SELECT v, ea FROM %s WHERE k = %s", s.table, s.ph(1))
@@ -242,25 +261,20 @@ func (s *sqlStore) Increment(ctx context.Context, key string, delta int64, ttl t
 	err = tx.QueryRowContext(ctx, selectSQL, s.cacheKey(key)).Scan(&v, &exp)
 
 	current := int64(0)
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+	if err != nil {
 		return 0, err
 	}
-	if err == nil {
-		if time.Now().UnixMilli() > exp {
-			current = 0
-		} else {
-			current, err = strconv.ParseInt(string(v), 10, 64)
-			if err != nil {
-				return 0, fmt.Errorf("cache key %q does not contain a numeric value", key)
-			}
+	if time.Now().UnixMilli() <= exp {
+		current, err = strconv.ParseInt(string(v), 10, 64)
+		if err != nil {
+			return 0, fmt.Errorf("cache key %q does not contain a numeric value", key)
 		}
 	}
 
 	next := current + delta
 	exp = time.Now().Add(ttl).UnixMilli()
-	upsertStmt := tx.StmtContext(ctx, s.upsertStmt)
-	defer upsertStmt.Close()
-	_, err = upsertStmt.ExecContext(ctx, s.cacheKey(key), []byte(strconv.FormatInt(next, 10)), exp, []byte(strconv.FormatInt(next, 10)), exp)
+	query := fmt.Sprintf("UPDATE %s SET v = %s, ea = %s WHERE k = %s", s.table, s.ph(1), s.ph(2), s.ph(3))
+	_, err = tx.ExecContext(ctx, query, []byte(strconv.FormatInt(next, 10)), exp, s.cacheKey(key))
 	if err != nil {
 		return 0, err
 	}
@@ -300,7 +314,7 @@ func (s *sqlStore) DeleteMany(ctx context.Context, keys ...string) error {
 
 // Flush removes entries within the store's configured scope.
 func (s *sqlStore) Flush(ctx context.Context) error {
-	_, err := s.flushStmt.ExecContext(ctx)
+	_, err := s.flushStmt.ExecContext(ctx, s.cacheKey(""))
 	return err
 }
 
@@ -348,7 +362,28 @@ func (s *sqlStore) deleteSQL() string {
 
 // flushSQL builds the statement that clears only the configured cache namespace.
 func (s *sqlStore) flushSQL() string {
-	return fmt.Sprintf("DELETE FROM %s", s.table)
+	return fmt.Sprintf("DELETE FROM %s WHERE %s", s.table, s.namespacePredicate())
+}
+
+// namespacePredicate matches a literal, case-sensitive key prefix on each supported engine.
+func (s *sqlStore) namespacePredicate() string {
+	switch s.driverName {
+	case "postgres", "pgx":
+		return "strpos(k COLLATE \"C\", $1) = 1"
+	case "mysql":
+		return "LOCATE(CAST(? AS BINARY), k) = 1"
+	default:
+		return "instr(CAST(k AS BLOB), CAST(? AS BLOB)) = 1"
+	}
+}
+
+// seedCounterSQL ensures a row exists without replacing an existing counter.
+func (s *sqlStore) seedCounterSQL() string {
+	insert := s.addInsertSQL()
+	if s.driverName == "mysql" {
+		return insert + " ON DUPLICATE KEY UPDATE k = k"
+	}
+	return insert + " ON CONFLICT (k) DO NOTHING"
 }
 
 // prepareStatements prepares the store's fixed query set once schema setup succeeds.
@@ -437,15 +472,13 @@ func (s *sqlStore) ListPage(ctx context.Context, opts cachecore.ListPageOptions)
 		return cachecore.ListPageResult{}, err
 	}
 	filter := cachecore.ListFilterTerm(opts)
-	where := ""
-	args := make([]any, 0, 3)
+	where := " WHERE " + s.namespacePredicate()
+	args := []any{s.cacheKey("")}
 	if filter != "" {
-		where = fmt.Sprintf(" WHERE k LIKE %s", s.ph(1))
-		if s.prefix == "" {
-			args = append(args, "%"+filter+"%")
-		} else {
-			args = append(args, s.prefix+":%"+filter+"%")
-		}
+		where += fmt.Sprintf(" AND k LIKE %s ESCAPE '!'", s.ph(2))
+		// Match against the logical key, keeping prefix and filter metacharacters literal.
+		escape := strings.NewReplacer("!", "!!", "%", "!%", "_", "!_")
+		args = append(args, escape.Replace(s.cacheKey(""))+"%"+escape.Replace(filter)+"%")
 	}
 	q := fmt.Sprintf("SELECT k, v, ea FROM %s%s ORDER BY k ASC LIMIT %s OFFSET %s", s.table, where, s.ph(len(args)+1), s.ph(len(args)+2))
 	args = append(args, limit+1, offset)
