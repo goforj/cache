@@ -225,21 +225,19 @@ See the [API Index](#api-index) `Driver Configs` section for per-driver defaults
 
 ## Value Shaping And Rollout
 
-Every root and optional driver honors the shared value-shaping fields:
+Built-in and optional drivers share the same settings for compression, encryption, and value limits.
 
-- `CompressionGzip` writes a versioned `CMP1` envelope.
-- `EncryptionKey` writes an AES-GCM `ENC1` envelope and requires a 16, 24, or 32 byte key.
-- `MaxValueBytes` bounds both writes and reads, including decompressed output; zero disables it and negative values are invalid.
-- Backend-native counters remain raw so `Increment` and `Decrement` stay atomic.
+| Capability | What it does |
+| ---: | :--- |
+| **Gzip compression** | Set `Compression` to `CompressionGzip` to write values in a versioned `CMP1` envelope. |
+| **AES-GCM encryption** | Set `EncryptionKey` to a 16-, 24-, or 32-byte key to protect values in an `ENC1` envelope. |
+| **Payload limits** | Set `MaxValueBytes` to bound writes and reads, including decompressed output. Use `0` to disable the limit. Negative values are invalid. |
+| **Atomic counters** | `Increment` and `Decrement` bypass shaping so drivers can update raw counters atomically. |
 
-When compression and encryption are both enabled, the preserved on-disk/wire format is
-`CMP1(ENC1(plaintext))`: encryption happens first and gzip is the outer envelope. Readers pass
-unmarked legacy values through unchanged, so upgraded applications can read existing raw entries.
+When both are enabled, encryption runs first and gzip wraps the result as `CMP1(ENC1(plaintext))`. Upgraded readers also accept existing raw values.
 
-Optional drivers before this quality pass accepted these fields but did not apply them. Once an
-upgraded process writes a shaped value, an older process cannot decode it. Upgrade all readers
-together (or stop writes during a rolling upgrade) before enabling shaped writes. See
-[Migration to v0.4](docs/migration-v0.4.md) for the full compatibility checklist.
+> [!IMPORTANT]
+> **Upgrade all cache readers before enabling shaped writes.** Optional drivers from before v0.4 cannot decode compressed or encrypted values. During a rolling upgrade, pause writes until every reader is upgraded. [Migration checklist](docs/migration-v0.4.md)
 
 ## Behavior Semantics
 
