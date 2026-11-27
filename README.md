@@ -1389,46 +1389,14 @@ fmt.Println(c.SetString("user:42:name", "Ada", time.Minute) == nil) // true
 
 ## Development
 
-Use `make test` for root-module tests, `make vet` for static checks, `make generate` to refresh generated documentation, and `make test-integration` for the separate integration module. Pass a driver such as `make test-integration sqlitecache` to narrow the matrix. Integration tests may require local services. Driver, docs, examples, and integration directories are independent Go modules; test each changed module from its directory.
-
-### README updates
-
-README content is a mix of generated sections and manual sections.
-
-- API reference (`<!-- api:embed:start --> ... <!-- api:embed:end -->`) is generated.
-- Test badges are updated separately.
-- Driver notes are maintained in the README.
-
-### Update generated API docs
-
-```bash
-go run ./docs/readme/main.go
+```sh
+make test                          # Test the root module
+make vet                           # Vet the root module
+make test-integration              # Test all drivers with Docker
+make test-integration sqlitecache  # Test SQLite without Docker
+make generate                      # Regenerate the README and runnable examples
+make docs-watch                    # Refresh docs and test badges as source changes
 ```
 
-### Update test badges
-
-Static counts (fast, watcher-friendly; counts top-level `Test*` funcs):
-
-```bash
-go run ./docs/readme/main.go
-```
-
-Executed counts (runs tests and counts real `go test -json` test/subtest starts):
-
-```bash
-CACHE_LOCAL_SIBLINGS=1 go run ./docs/readme/testcounts/main.go
-```
-
-The local-sibling mode uses `go.work` while a coordinated release is still
-untagged. Omit it to verify the published module boundary after all sibling tags
-are available.
-
-### Watch mode
-
-```bash
-make docs-watch
-```
-
-Notes:
-
-- The badge watcher runs real tests, so it is slower than API/example regeneration.
+Use `make help` to see the available targets. To refresh test badges once, run
+`CACHE_LOCAL_SIBLINGS=1 go -C docs run ./readme/testcounts`.
