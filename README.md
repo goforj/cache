@@ -29,8 +29,6 @@
 
 <a id="installation"></a>
 
-In a Go 1.27+ module, install cache, save either example as `main.go`, and run `go run .`.
-
 ```sh
 go get github.com/goforj/cache@latest
 ```
