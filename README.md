@@ -208,10 +208,13 @@ For precise runtime semantics, see [Behavior Semantics](docs/behavior-semantics.
 
 ## Production Guidance
 
+<a id="payload-size-caps-effective-bytes-written"></a>
+
 For deployment defaults and operational patterns, see [Production Guide](docs/production-guide.md):
 
 - recommended defaults and tuning
 - key naming/versioning conventions
+- [payload size limits by backend](docs/production-guide.md#payload-size-limits)
 - TTL jitter and miss-storm mitigation
 - observability instrumentation patterns
 
@@ -230,9 +233,11 @@ Memoization holds up to 256 hits or misses for up to one second. Use the backing
 
 ## Testing
 
+<a id="integration-coverage"></a>
+
 For contributors, the [module manifest](scripts/module-manifest.txt) lists the published drivers and repository tooling.
 
-Unit tests cover the public helpers. Shared cross-driver integration coverage runs from the `integration` module (with `testcontainers-go` for container-backed backends):
+Unit tests cover the public helpers. See [Integration coverage](docs/integration-coverage.md) for the shared store contract, driver-specific checks, and suite scope. Run the cross-driver suite from the `integration` module:
 
 ```bash
 cd integration
@@ -1341,45 +1346,6 @@ fmt.Println(c.SetString("user:42:name", "Ada", time.Minute) == nil) // true
 ```
 <!-- api:embed:end -->
 
-### Payload size caps (effective bytes written)
-
-| Driver | Hard / default cap | Configurable | Notes |
-| ---: | :--- | :---: | :--- |
-| **Null** | N/A | N/A | No persistence. |
-| **Memory** | Process memory | - | No backend hard cap. |
-| **File** | Disk / filesystem | - | No backend hard cap. |
-| **Redis** | Backend practical (memory/SLO) | Server-side | No commonly hit low per-value hard cap in app use. |
-| **NATS** | Server/bucket payload limits | Server-side | Depends on NATS/JetStream config. |
-| **Memcached** | ~1 MiB per item (default) | ✓ (server `-I`) | Backend-enforced item limit. |
-| **DynamoDB** | 400 KB item hard cap | No | Includes key/metadata overhead, so usable value bytes are lower. |
-| **SQL** | DB/engine config dependent | Server-side | Blob/row/packet limits vary by engine and deployment. |
-
-`StoreConfig.MaxValueBytes` (root-backed stores) is the uniform application-level cap, and it applies to post-shaping bytes (after compression/encryption overhead).
-
-## Integration Coverage
-
-| **Area** | What is validated | Scope |
-| ---: | :--- | :--- |
-| Core store contract | `Set/Get`, TTL expiry, `Add`, counters, `Delete/DeleteMany`, `Flush`, typed `Remember` | All drivers |
-| Option contracts | `prefix`, `compression`, `encryption`, `prefix+compression+encryption`, `max_value_bytes`, `default_ttl` | All drivers (per option case) |
-| Locking | single-winner contention, timeout/cancel, TTL expiry reacquire, unlock safety | All drivers |
-| Rate limiting | monotonic counts, `remaining >= 0`, window rollover reset | All drivers |
-| Refresh-ahead | miss/hit behavior, async refresh success/error, malformed metadata handling | All drivers |
-| Remember stale | stale fallback semantics, TTL interactions, stale/fresh independent expiry, joined errors | All drivers |
-| Batch ops | partial misses, empty input behavior, default TTL application | All drivers |
-| Counter semantics | signed deltas, zero delta, TTL refresh extension | All drivers |
-| Context cancellation | `GetContext/SetContext/LockContext/RefreshAheadContext/Remember*Ctx` prompt return + driver-aware cancel semantics | All drivers (driver-aware assertions) |
-| Latency / transient faults | injected slow `Get/Add/Increment`, timeout propagation, no hidden retries for `RefreshAhead/Remember*/LockContext/RateLimit*` | All drivers (integration wrappers over real stores) |
-| Prefix isolation | `Delete/Flush` isolation + helper-generated keys (`__lock:`, `:__refresh_exp`, `:__stale`, rate-limit buckets) | Shared/prefixed backends |
-| Payload shaping / corruption | compression+encryption round-trips, corrupted compressed/encrypted payload errors | Shared/persistent backends |
-| Payload size limits | large binary payload round-trips; backend-specific near/over-limit checks (Memcached, DynamoDB) | Driver-specific where meaningful |
-| Cross-store scope | shared vs local semantics across store instances (e.g. rate-limit counters) | Driver-specific expectations |
-| Backend fault / recovery | backend restart mid-suite, outage errors, post-recovery round-trip/lock/refresh/stale flows | Container-backed drivers (runs automatically when container-backed fixtures are selected) |
-| Observer metadata | op names, hit/miss flags, propagated errors, driver labels | Unit contract tests (integration helper paths exercise emissions indirectly) |
-| Memo store caveats | per-process memoization, local-only invalidation, cross-process staleness behavior | Unit tests |
-
-Default integration runs cover the contract suite above. Fault/recovery restart tests run automatically when the selected integration suite includes container-backed fixtures.
-
 ## Development
 
 Use `make test` for root-module tests, `make vet` for static checks, `make generate` to refresh generated documentation, and `make test-integration` for the separate integration module. Pass a driver such as `make test-integration sqlitecache` to narrow the matrix. Integration tests may require local services. Driver, docs, examples, and integration directories are independent Go modules; test each changed module from its directory.
@@ -1390,7 +1356,7 @@ README content is a mix of generated sections and manual sections.
 
 - API reference (`<!-- api:embed:start --> ... <!-- api:embed:end -->`) is generated.
 - Test badges are updated separately.
-- Sections like driver notes and the integration coverage table are manual.
+- Driver notes are maintained in the README.
 
 ### Update generated API docs
 
@@ -1425,4 +1391,3 @@ make docs-watch
 Notes:
 
 - The badge watcher runs real tests, so it is slower than API/example regeneration.
-- Fault/recovery integration tests run with the integration suite when container-backed fixtures are selected.
