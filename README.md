@@ -52,8 +52,10 @@ import (
 
 // main loads and caches a price in cents.
 func main() {
+	// Create an in-memory cache store.
 	c := cache.NewCache(cache.NewMemoryStore(context.Background()))
 
+	// Load the price on a cache miss and keep it for one minute.
 	price, err := c.Remember("product:42:price", time.Minute, func() (int, error) {
 		return strconv.Atoi("4900")
 	})
@@ -86,13 +88,16 @@ import (
 
 // main shows direct cache operations for a piece of product inventory.
 func main() {
+	// Create an in-memory cache store.
 	c := cache.NewCache(cache.NewMemoryStore(context.Background()))
 	const key = "stock:desk-lamp"
 
+	// Cache the stock count for one minute.
 	if err := c.Set(key, 12, time.Minute); err != nil {
 		log.Fatal(err)
 	}
 
+	// Read the count as an int. A cache miss sets found to false.
 	stock, found, err := c.Get[int](key)
 	if err != nil || !found {
 		log.Fatalf("read stock: found=%t, error=%v", found, err)
@@ -100,6 +105,7 @@ func main() {
 	fmt.Printf("Cached stock: %d\n", stock)
 	// Output: Cached stock: 12
 
+	// Delete the entry and verify the next read misses.
 	if err := c.Delete(key); err != nil {
 		log.Fatal(err)
 	}
