@@ -177,9 +177,19 @@ func stripBuildTags(src []byte) []byte {
 	return []byte(strings.Join(lines[i:], "\n"))
 }
 
-// TestQuickStartOutput runs the same standalone program shown in the README.
+// TestQuickStartOutput verifies both README examples run independently.
 func TestQuickStartOutput(t *testing.T) {
-	cmd := exec.Command("go", "run", "./quickstart")
+	for _, directory := range []string{"quickstart", "quickstart_operations"} {
+		t.Run(directory, func(t *testing.T) {
+			runQuickStart(t, directory)
+		})
+	}
+}
+
+// runQuickStart checks the output documented next to each call in the example.
+func runQuickStart(t *testing.T, directory string) {
+	t.Helper()
+	cmd := exec.Command("go", "run", "./"+directory)
 	cmd.Env = append(os.Environ(), "GOWORK=off")
 	output, err := cmd.Output()
 	if err != nil {
@@ -189,7 +199,7 @@ func TestQuickStartOutput(t *testing.T) {
 		}
 		t.Fatal(err)
 	}
-	source, err := os.ReadFile("quickstart/main.go")
+	source, err := os.ReadFile(filepath.Join(directory, "main.go"))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -29,7 +29,7 @@
 
 <a id="installation"></a>
 
-In a Go 1.27+ module, install cache, save the example as `main.go`, and run `go run .`.
+In a Go 1.27+ module, install cache, save either example as `main.go`, and run `go run .`.
 
 ```sh
 go get github.com/goforj/cache@latest
@@ -59,42 +59,58 @@ type Product struct {
 func main() {
 	ctx := context.Background()
 	c := cache.NewCache(cache.NewMemoryStore(ctx))
-	const key = "product:42"
 
 	loadProduct := func() (Product, error) {
 		return Product{Name: "Desk lamp", PriceCents: 4900}, nil
 	}
-	product, err := c.Remember(key, time.Minute, loadProduct)
+	product, err := c.Remember("product:42", time.Minute, loadProduct)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	fmt.Printf("%s costs %d cents\n", product.Name, product.PriceCents)
 	// Output: Desk lamp costs 4900 cents
+}
+```
 
-	// Read, replace, and invalidate the same cached product directly.
-	cached, found, err := c.Get[Product](key)
-	if err != nil || !found {
-		log.Fatalf("read cached product: found=%t, error=%v", found, err)
-	}
-	fmt.Printf("Cache hit: %s\n", cached.Name)
-	// Output: Cache hit: Desk lamp
+<!-- quick-start:embed:end -->
 
-	cached.PriceCents = 4500
-	if err := c.Set(key, cached, time.Minute); err != nil {
+### Get, Set, and Delete
+
+<!-- quick-start-operations:embed:start -->
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"log"
+	"time"
+
+	"github.com/goforj/cache"
+)
+
+// main shows direct cache operations for a piece of product inventory.
+func main() {
+	c := cache.NewCache(cache.NewMemoryStore(context.Background()))
+	const key = "stock:desk-lamp"
+
+	if err := c.Set(key, 12, time.Minute); err != nil {
 		log.Fatal(err)
 	}
-	updated, found, err := c.Get[Product](key)
+
+	stock, found, err := c.Get[int](key)
 	if err != nil || !found {
-		log.Fatalf("read updated product: found=%t, error=%v", found, err)
+		log.Fatalf("read stock: found=%t, error=%v", found, err)
 	}
-	fmt.Printf("Updated price: %d cents\n", updated.PriceCents)
-	// Output: Updated price: 4500 cents
+	fmt.Printf("Cached stock: %d\n", stock)
+	// Output: Cached stock: 12
 
 	if err := c.Delete(key); err != nil {
 		log.Fatal(err)
 	}
-	_, found, err = c.Get[Product](key)
+	_, found, err = c.Get[int](key)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -103,7 +119,7 @@ func main() {
 }
 ```
 
-<!-- quick-start:embed:end -->
+<!-- quick-start-operations:embed:end -->
 
 ## Drivers
 

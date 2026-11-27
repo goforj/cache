@@ -16,8 +16,6 @@ import (
 const (
 	apiStart       = "<!-- api:embed:start -->"
 	apiEnd         = "<!-- api:embed:end -->"
-	quickStart     = "<!-- quick-start:embed:start -->"
-	quickEnd       = "<!-- quick-start:embed:end -->"
 	testCountStart = "<!-- test-count:embed:start -->"
 	testCountEnd   = "<!-- test-count:embed:end -->"
 )
@@ -56,17 +54,32 @@ func run() error {
 		return err
 	}
 
-	example, err := os.ReadFile(filepath.Join(root, "examples", "quickstart", "main.go"))
-	if err != nil {
-		return err
+	for _, example := range []struct{ directory, marker string }{
+		{"quickstart", "quick-start"},
+		{"quickstart_operations", "quick-start-operations"},
+	} {
+		source, err := os.ReadFile(filepath.Join(root, "examples", example.directory, "main.go"))
+		if err != nil {
+			return err
+		}
+		out, err = embedQuickStart(out, example.marker, string(source))
+		if err != nil {
+			return err
+		}
 	}
-	before, remaining, ok := strings.Cut(out, quickStart)
-	_, after, closed := strings.Cut(remaining, quickEnd)
-	if !ok || !closed {
-		return fmt.Errorf("quick start markers are missing or out of order")
-	}
-	out = before + quickStart + "\n\n```go\n" + strings.TrimSpace(string(example)) + "\n```\n\n" + quickEnd + after
 	return os.WriteFile(readmePath, []byte(out), 0o644)
+}
+
+// embedQuickStart keeps each README code block identical to its runnable program.
+func embedQuickStart(readme, marker, source string) (string, error) {
+	start := "<!-- " + marker + ":embed:start -->"
+	end := "<!-- " + marker + ":embed:end -->"
+	before, remaining, ok := strings.Cut(readme, start)
+	_, after, closed := strings.Cut(remaining, end)
+	if !ok || !closed {
+		return "", fmt.Errorf("%s markers are missing or out of order", marker)
+	}
+	return before + start + "\n\n```go\n" + strings.TrimSpace(source) + "\n```\n\n" + end + after, nil
 }
 
 //
