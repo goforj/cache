@@ -9,7 +9,8 @@ import (
 
 // main keeps this generated example executable so API drift fails during compilation.
 func main() {
-	// BatchSetBytes writes many key/value pairs using a shared ttl.
+	// BatchSetBytes writes each key individually using a shared TTL.
+	// A write failure can leave an arbitrary subset of keys updated.
 
 	// Example: batch set keys
 	ctx := context.Background()

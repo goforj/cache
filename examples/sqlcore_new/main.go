@@ -10,7 +10,8 @@ import (
 
 // main keeps this generated example executable so API drift fails during compilation.
 func main() {
-	// New builds a SQL-backed cachecore.Store (postgres, mysql, sqlite).
+	// New opens a SQL-backed cache store and initializes its schema. The caller owns
+	// the store and can release its database pool through io.Closer.
 	//
 	// Defaults:
 	// - Table: "cache_entries" when empty

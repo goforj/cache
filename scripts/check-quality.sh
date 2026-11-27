@@ -73,16 +73,16 @@ while IFS= read -r module_file; do
     cd "$module_dir"
     temp_mod=""
     trap 'if [[ -n "$temp_mod" ]]; then rm -f "$temp_mod" "${temp_mod%.mod}.sum"; fi' EXIT
-    modfile_args=()
+    set --
     if [[ "$LOCAL_SIBLINGS" == "1" ]] && is_published_module "$module_manifest_dir"; then
       create_local_modfile "$module_dir" "$module_manifest_dir"
-      modfile_args=("-modfile=$temp_mod")
+      set -- "-modfile=$temp_mod"
     fi
-    GOWORK=off GOCACHE="$GOCACHE_DIR" GOMODCACHE="$GOMODCACHE_DIR" go mod tidy -diff -go="$go_version" "${modfile_args[@]}"
-    packages="$(GOWORK=off GOCACHE="$GOCACHE_DIR" GOMODCACHE="$GOMODCACHE_DIR" go list "${modfile_args[@]}" ./...)"
+    GOWORK=off GOCACHE="$GOCACHE_DIR" GOMODCACHE="$GOMODCACHE_DIR" go mod tidy -diff -go="$go_version" "$@"
+    packages="$(GOWORK=off GOCACHE="$GOCACHE_DIR" GOMODCACHE="$GOMODCACHE_DIR" go list "$@" ./...)"
     if [[ -n "$packages" ]]; then
-      GOWORK=off GOCACHE="$GOCACHE_DIR" GOMODCACHE="$GOMODCACHE_DIR" go vet "${modfile_args[@]}" ./...
-      GOWORK=off GOCACHE="$GOCACHE_DIR" GOMODCACHE="$GOMODCACHE_DIR" go test "${modfile_args[@]}" ./...
+      GOWORK=off GOCACHE="$GOCACHE_DIR" GOMODCACHE="$GOMODCACHE_DIR" go vet "$@" ./...
+      GOWORK=off GOCACHE="$GOCACHE_DIR" GOMODCACHE="$GOMODCACHE_DIR" go test "$@" ./...
     else
       echo "No default-build packages; tagged suites run in integration CI."
     fi

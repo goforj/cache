@@ -176,3 +176,29 @@ func stripBuildTags(src []byte) []byte {
 
 	return []byte(strings.Join(lines[i:], "\n"))
 }
+
+// TestQuickStartOutput runs the same standalone program shown in the README.
+func TestQuickStartOutput(t *testing.T) {
+	cmd := exec.Command("go", "run", "./quickstart")
+	cmd.Env = append(os.Environ(), "GOWORK=off")
+	output, err := cmd.Output()
+	if err != nil {
+		var exit *exec.ExitError
+		if errors.As(err, &exit) {
+			t.Fatalf("run quick start: %v\n%s", err, exit.Stderr)
+		}
+		t.Fatal(err)
+	}
+	source, err := os.ReadFile("quickstart/main.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, expectation, ok := strings.Cut(string(source), "// Output: ")
+	if !ok {
+		t.Fatal("quick start is missing its expected output")
+	}
+	want, _, _ := strings.Cut(expectation, "\n")
+	if string(output) != want+"\n" {
+		t.Fatalf("quick start output = %q, want %q", output, want+"\n")
+	}
+}

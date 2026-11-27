@@ -148,7 +148,7 @@ func countRunEvents(root string, integrationPrefixes map[string]struct{}) (int, 
 
 	var total int
 	for _, event := range parseJSONEvents(out.Bytes()) {
-		if event.Action != "run" || event.Test == "" {
+		if event.Action != "pass" || event.Test == "" {
 			continue
 		}
 
@@ -196,7 +196,7 @@ func countIntegrationRunEvents(integrationDir string, integrationPrefixes map[st
 
 	var total int
 	for _, event := range parseJSONEvents(out.Bytes()) {
-		if event.Action != "run" || event.Test == "" {
+		if event.Action != "pass" || event.Test == "" {
 			continue
 		}
 		top := event.Test
@@ -345,8 +345,8 @@ func updateTestsSection(readme string, counts Counts) (string, error) {
 	}
 
 	lines := []string{
-		fmt.Sprintf("    <img src=\"https://img.shields.io/badge/unit_tests-%d-brightgreen\" alt=\"Unit tests (executed count)\">", counts.Unit),
-		fmt.Sprintf("    <img src=\"https://img.shields.io/badge/integration_tests-%d-blue\" alt=\"Integration tests (executed count)\">", counts.Integration),
+		fmt.Sprintf("    <img src=\"https://img.shields.io/badge/unit_tests-%d-brightgreen\" alt=\"Unit tests (passing count)\">", counts.Unit),
+		fmt.Sprintf("    <img src=\"https://img.shields.io/badge/local_integration_tests-%d-blue\" alt=\"Local integration tests (passing count)\">", counts.Integration),
 	}
 	return before + leading + strings.Join(lines, "\n") + "\n" + after, nil
 }

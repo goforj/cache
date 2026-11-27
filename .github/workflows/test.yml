@@ -33,6 +33,11 @@ jobs:
           CACHE_LOCAL_SIBLINGS: "1"
         run: scripts/check-quality.sh
 
+      - name: Verify generated README and examples
+        run: |
+          make generate
+          git diff --exit-code -- README.md examples
+
   published-minimum-go:
     name: Published minimum Go (${{ matrix.go-version }})
     runs-on: ubuntu-latest
@@ -97,12 +102,12 @@ jobs:
           COVERAGE_MIN: "97.0"
         run: scripts/check-coverage.sh
 
-      - name: Verify generated examples compile
+      - name: Verify examples build and the quick start runs
         run: |
           cd examples
-          GOWORK=off go test ./... -run TestExamplesBuild -count=1 -v
+          GOWORK=off go test ./... -run 'TestExamplesBuild|TestQuickStartOutput' -count=1 -v
 
-      - name: Run unit tests with coverage
+      - name: Collect unit and integration coverage
         env:
           INTEGRATION_MODULE_DRIVERS: all
         run: scripts/coverage-codecov.sh

@@ -16,6 +16,8 @@ import (
 const (
 	apiStart       = "<!-- api:embed:start -->"
 	apiEnd         = "<!-- api:embed:end -->"
+	quickStart     = "<!-- quick-start:embed:start -->"
+	quickEnd       = "<!-- quick-start:embed:end -->"
 	testCountStart = "<!-- test-count:embed:start -->"
 	testCountEnd   = "<!-- test-count:embed:end -->"
 )
@@ -54,6 +56,16 @@ func run() error {
 		return err
 	}
 
+	example, err := os.ReadFile(filepath.Join(root, "examples", "quickstart", "main.go"))
+	if err != nil {
+		return err
+	}
+	before, remaining, ok := strings.Cut(out, quickStart)
+	_, after, closed := strings.Cut(remaining, quickEnd)
+	if !ok || !closed {
+		return fmt.Errorf("quick start markers are missing or out of order")
+	}
+	out = before + quickStart + "\n\n```go\n" + strings.TrimSpace(string(example)) + "\n```\n\n" + quickEnd + after
 	return os.WriteFile(readmePath, []byte(out), 0o644)
 }
 
@@ -456,7 +468,9 @@ func renderAPI(root string, funcs []*FuncDoc) string {
 
 		var links []string
 		for _, fn := range byGroup[group] {
-			links = append(links, fmt.Sprintf("[%s](#%s)", renderName(fn, nameCounts), fn.Anchor))
+			if strings.HasPrefix(fn.Key, "Cache.") || byKey["Cache."+fn.Name] == nil {
+				links = append(links, fmt.Sprintf("[%s](#%s)", renderName(fn, nameCounts), fn.Anchor))
+			}
 		}
 
 		buf.WriteString(fmt.Sprintf("| **%s** | %s |\n",
